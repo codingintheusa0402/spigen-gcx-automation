@@ -101,7 +101,13 @@ function pollApifyRunAndWrite() {
     }
 
     // Review scraper: fetch all fields (no field filter)
-    const items = _fetchAllDatasetItems(datasetId, token);
+    const rawItems = _fetchAllDatasetItems(datasetId, token);
+    // Filter out NOT_FOUND rows and NO_REVIEWS_PENALTY rows — only keep
+    // records where statusCode=200 and statusMessage="FOUND" with real review data.
+    const items = rawItems.filter(it =>
+      Number(it.statusCode) === 200 && String(it.statusMessage || '').trim() === 'FOUND'
+    );
+    Logger.log(`Filtered: ${rawItems.length} raw items → ${items.length} valid reviews (statusCode=200 FOUND)`);
     const { sheet, name: finalSheetName } = _createNewDatedSheet(CONFIG.timezone);
     _overwriteSheet(items, getSpreadsheetId_(), finalSheetName);
 
