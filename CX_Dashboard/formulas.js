@@ -405,3 +405,43 @@ function SPINVENTORY_ASIN(marketplaceId, asins, includeZero) {
     return rows;
   } catch(e) { return [['ERR: ' + (e.message || e)]]; }
 }
+
+/***** ========= FBA INVENTORY DEBUG ========= *****/
+
+/**
+ * Returns first-page raw FBA inventory from the API for diagnostic purposes.
+ * Use this to confirm the API is returning data and inspect actual field shapes.
+ * @customfunction
+ * @param {string} marketplaceId Marketplace ID
+ * @return {Array} Raw first-page inventory + pagination info
+ */
+function SPINVENTORY_DEBUG(marketplaceId) {
+  if (!marketplaceId) return [['marketplaceId is required']];
+  try {
+    var qs = 'granularityType=Marketplace' +
+             '&granularityId='  + encodeURIComponent(marketplaceId) +
+             '&marketplaceIds=' + encodeURIComponent(marketplaceId) +
+             '&details=true';
+    var res   = spapiFetchWithRetry('GET', '/fba/inventory/v1/summaries', { queryString: qs, endpoint: marketplaceId }, 3, 5000);
+    var pl    = res.payload || res;
+    var items = pl.inventorySummaries || [];
+    var hasNext = !!((pl.pagination || {}).nextToken);
+
+    var rows = [['#', 'ASIN', 'SellerSKU', 'FnSKU', 'Condition', 'TotalQty', 'fulfillableQty_raw', 'inboundWorking_raw']];
+    items.slice(0, 50).forEach(function(s, i) {
+      var det = s.inventoryDetails || {};
+      rows.push([
+        i + 1,
+        s.asin || '',
+        s.sellerSku || '',
+        s.fnSku || '',
+        s.condition || '',
+        s.totalQuantity != null ? s.totalQuantity : '',
+        JSON.stringify(det.fulfillableQuantity != null ? det.fulfillableQuantity : null),
+        JSON.stringify(det.inboundWorkingQuantity != null ? det.inboundWorkingQuantity : null)
+      ]);
+    });
+    rows.push(['---', 'Items on page: ' + items.length, 'More pages: ' + (hasNext ? 'YES' : 'NO'), '', '', '', '', '']);
+    return rows;
+  } catch(e) { return [['ERR: ' + (e.message || e)]]; }
+}
