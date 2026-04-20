@@ -317,6 +317,12 @@ function _isNoOrderInfoError(err) {
          (msg.indexOf('Unable to get order info') >= 0 || msg.indexOf('GetOrderByMerchantOrderIdRequest') >= 0);
 }
 
+// Returns true for error strings written back to cells ("EU ERR: ...", "JP ERR: ...", "ERR: ...")
+// Used by backfillTrackingNumbers to detect cells that need a retry.
+function _isErrorValue(v) {
+  return /^(EU |JP )?ERR:/i.test(String(v || '').trim());
+}
+
 /***** ========= SHEET FUNCTIONS ========= *****/
 function AMZTK(orderId) {
   if (!orderId) return '';
@@ -325,7 +331,7 @@ function AMZTK(orderId) {
   var key = 'AMZTK_' + orderId;
   var cached = cache.get(key);
 
-  if (cached !== null) return cached;  // return cached value immediately
+  if (cached !== null) return cached;
 
   try {
     var tracks = _tracksWithFallbacks(String(orderId), ['EU', 'FE']);
@@ -333,11 +339,13 @@ function AMZTK(orderId) {
       ? tracks[0].trackingNumber
       : '';
 
-    cache.put(key, tn, 600); // cache 10 minutes
+    // Found tracking number → stable, cache 6h. Still searching → retry in 10min.
+    cache.put(key, tn, tn ? 21600 : 600);
     return tn;
 
   } catch (err) {
     if (_isUnauthorizedError(err) || _isNoOrderInfoError(err)) return '';
+    // 429 / transient errors: do NOT cache — let the next recalculation retry.
     return 'EU ERR: ' + (err && err.message ? err.message : err);
   }
 }
@@ -357,11 +365,13 @@ function AMZTK_JP(orderId) {
       ? tracks[0].trackingNumber
       : '';
 
-    cache.put(key, tn, 600); // 10 minutes
+    // Found tracking number → stable, cache 6h. Still searching → retry in 10min.
+    cache.put(key, tn, tn ? 21600 : 600);
     return tn;
 
   } catch (err) {
     if (_isUnauthorizedError(err) || _isNoOrderInfoError(err)) return '';
+    // 429 / transient errors: do NOT cache — let the next recalculation retry.
     return 'JP ERR: ' + (err && err.message ? err.message : err);
   }
 }
@@ -427,21 +437,21 @@ function FBAFee(orderId) {
   for (var i = 0; i < endpoints.length; i++) {
     try {
       var fee = _fetchMcfFee(String(orderId), endpoints[i]);
-      cache.put(key, fee === '' ? '__EMPTY__' : String(fee), 600);
+      // Fee found → stable, cache 6h. No preview yet → retry in 10min.
+      cache.put(key, fee === '' ? '__EMPTY__' : String(fee), fee === '' ? 600 : 21600);
       return fee;
     } catch (err) {
       lastErr = err;
       if (_isRetryableRegionMismatchError(err) || _isNoOrderInfoError(err)) continue;
-      if (_isUnauthorizedError(err)) { cache.put(key, '__EMPTY__', 600); return ''; }
+      // 403 → permanent, cache 6h. 429 / transient → do NOT cache, retry later.
+      if (_isUnauthorizedError(err)) { cache.put(key, '__EMPTY__', 21600); return ''; }
       throw err;
     }
   }
 
   if (lastErr) {
-    if (_isNoOrderInfoError(lastErr) || _isUnauthorizedError(lastErr)) {
-      cache.put(key, '__EMPTY__', 600);
-      return '';
-    }
+    if (_isUnauthorizedError(lastErr)) { cache.put(key, '__EMPTY__', 21600); return ''; }
+    if (_isNoOrderInfoError(lastErr))  { cache.put(key, '__EMPTY__', 21600); return ''; }
     return 'ERR: ' + (lastErr.message || lastErr);
   }
   return '';
@@ -465,21 +475,21 @@ function FBAFee_JP(orderId) {
   for (var i = 0; i < endpoints.length; i++) {
     try {
       var fee = _fetchMcfFee(String(orderId), endpoints[i]);
-      cache.put(key, fee === '' ? '__EMPTY__' : String(fee), 600);
+      // Fee found → stable, cache 6h. No preview yet → retry in 10min.
+      cache.put(key, fee === '' ? '__EMPTY__' : String(fee), fee === '' ? 600 : 21600);
       return fee;
     } catch (err) {
       lastErr = err;
       if (_isRetryableRegionMismatchError(err) || _isNoOrderInfoError(err)) continue;
-      if (_isUnauthorizedError(err)) { cache.put(key, '__EMPTY__', 600); return ''; }
+      // 403 → permanent, cache 6h. 429 / transient → do NOT cache, retry later.
+      if (_isUnauthorizedError(err)) { cache.put(key, '__EMPTY__', 21600); return ''; }
       throw err;
     }
   }
 
   if (lastErr) {
-    if (_isNoOrderInfoError(lastErr) || _isUnauthorizedError(lastErr)) {
-      cache.put(key, '__EMPTY__', 600);
-      return '';
-    }
+    if (_isUnauthorizedError(lastErr)) { cache.put(key, '__EMPTY__', 21600); return ''; }
+    if (_isNoOrderInfoError(lastErr))  { cache.put(key, '__EMPTY__', 21600); return ''; }
     return 'ERR: ' + (lastErr.message || lastErr);
   }
   return '';

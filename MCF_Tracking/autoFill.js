@@ -1,3 +1,65 @@
+/***** ========= BACKFILL CONFIG ========= *****/
+// Adjust these if your sheet layout changes.
+var BF_SHEET_NAME  = 'MCF 발송 로그';
+var BF_START_ROW   = 4;    // first data row (skip headers)
+var BF_COL_REGION  = 2;    // B — "JP" triggers FE-first, anything else EU-first
+var BF_COL_ORDER   = 17;   // Q — sellerFulfillmentOrderId passed to AMZTK
+var BF_COL_RESULT  = 26;   // Z — write static tracking number here
+                            //     replace =AMZTK(Q…) formula with =IF(Z…="","",HYPERLINK(…Z…,Z…))
+
+/**
+ * Writes tracking numbers as static values into BF_COL_RESULT.
+ * - Skips rows that already have a valid (non-error) tracking number.
+ * - Retries rows whose result cell contains an error string ("EU ERR:…", "ERR:…", etc.).
+ * - On 429 / transient error, writes the error back to the cell so the next run retries it.
+ *
+ * Run manually or set a daily time-based trigger on this function.
+ */
+function backfillTrackingNumbers() {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(BF_SHEET_NAME);
+  if (!sheet) throw new Error('Sheet not found: ' + BF_SHEET_NAME);
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < BF_START_ROW) return;
+
+  var numRows  = lastRow - BF_START_ROW + 1;
+  var orderIds = sheet.getRange(BF_START_ROW, BF_COL_ORDER,  numRows, 1).getValues();
+  var regions  = sheet.getRange(BF_START_ROW, BF_COL_REGION, numRows, 1).getValues();
+  var existing = sheet.getRange(BF_START_ROW, BF_COL_RESULT, numRows, 1).getValues();
+
+  for (var i = 0; i < numRows; i++) {
+    var orderId = String(orderIds[i][0] || '').trim();
+    if (!orderId) continue;
+
+    var current = existing[i][0];
+    // Already has a valid tracking number — never overwrite.
+    if (current && !_isErrorValue(current)) continue;
+
+    var isJP      = String(regions[i][0] || '').trim().toUpperCase() === 'JP';
+    var endpoints = isJP ? ['FE', 'EU'] : ['EU', 'FE'];
+
+    try {
+      var tracks = _tracksWithFallbacks(orderId, endpoints);
+      var tn = (tracks && tracks.length && (tracks[0].trackingNumber || '').trim())
+        ? tracks[0].trackingNumber.trim()
+        : '';
+
+      if (tn) {
+        sheet.getRange(BF_START_ROW + i, BF_COL_RESULT).setValue(tn);
+        Logger.log('Row ' + (BF_START_ROW + i) + ': wrote ' + tn);
+      }
+    } catch (e) {
+      var errMsg = (isJP ? 'JP' : 'EU') + ' ERR: ' + (e.message || e);
+      // Write error back so the next backfill run retries this row.
+      sheet.getRange(BF_START_ROW + i, BF_COL_RESULT).setValue(errMsg);
+      Logger.log('Row ' + (BF_START_ROW + i) + ': ' + errMsg);
+    }
+
+    Utilities.sleep(400); // stay under SP-API rate limit
+  }
+}
+
 function onEdit_mcf(e) {
   if (!e) return;
 
