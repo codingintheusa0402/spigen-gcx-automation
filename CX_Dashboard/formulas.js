@@ -299,16 +299,41 @@ function SPINVENTORY(marketplaceId) {
 
 /**
  * Returns FBA inventory aggregated by ASIN (sums across all SKUs per ASIN).
- * Only shows ASINs with stock > 0 by default.
  * @customfunction
- * @param {string} marketplaceId Marketplace ID
+ * @param {string} marketplaceId Marketplace ID (e.g. A1PA6795UKMFR9)
+ * @param {string|Array} [asins] Optional: single ASIN, comma-separated string, or a vertical/horizontal cell range of ASINs. Omit to return all.
  * @param {boolean} [includeZero] Pass TRUE to include ASINs with zero stock (default: FALSE)
  * @return {Array} ASIN | Available | Reserved | Unfulfillable | InboundWorking | Total | SKUs
  */
-function SPINVENTORY_ASIN(marketplaceId, includeZero) {
+function SPINVENTORY_ASIN(marketplaceId, asins, includeZero) {
   if (!marketplaceId) return [['marketplaceId is required']];
 
-  var cKey = 'SPINV_ASIN_v3_' + marketplaceId + (includeZero ? '_all' : '');
+  // Normalise asins → a Set-like object (keys = uppercase ASIN), or null for "all"
+  var asinSet = null;
+  if (asins) {
+    var flat = [];
+    if (Array.isArray(asins)) {
+      var arr2d = Array.isArray(asins[0]) ? asins : asins.map(function(v) { return [v]; });
+      arr2d.forEach(function(row) {
+        row.forEach(function(v) { if (v) flat.push(String(v).trim().toUpperCase()); });
+      });
+    } else if (String(asins).trim()) {
+      flat = String(asins).split(/[\s,]+/).filter(Boolean).map(function(v) { return v.toUpperCase(); });
+    }
+    if (flat.length) {
+      asinSet = {};
+      flat.forEach(function(a) { asinSet[a] = true; });
+    }
+  }
+
+  // Build a short cache fingerprint that won't exceed CacheService key limits
+  var asinFp = asinSet
+    ? (function() {
+        var k = Object.keys(asinSet).sort();
+        return k.length + '_' + k[0] + '_' + k[k.length - 1];
+      })()
+    : 'ALL';
+  var cKey = 'SPINV_v4_' + marketplaceId + '_' + (includeZero ? '1' : '0') + '_' + asinFp;
   var cached = _cacheGet(cKey);
   if (cached) return cached;
 
@@ -333,12 +358,14 @@ function SPINVENTORY_ASIN(marketplaceId, includeZero) {
     // Aggregate per ASIN
     var map = {};
     all.forEach(function(s) {
-      var asin = s.asin || '(no ASIN)';
+      var asin = (s.asin || '').toUpperCase();
+      if (!asin) return;
+      if (asinSet && !asinSet[asin]) return; // skip if not in requested list
+
       var det  = s.inventoryDetails        || {};
       var rsv  = det.reservedQuantity      || {};
       var unf  = det.unfulfillableQuantity || {};
 
-      // fulfillableQuantity can be a number directly or nested object
       var avail = (typeof det.fulfillableQuantity === 'object')
         ? (det.fulfillableQuantity || {}).quantity || 0
         : det.fulfillableQuantity || 0;
@@ -358,13 +385,21 @@ function SPINVENTORY_ASIN(marketplaceId, includeZero) {
     });
 
     var rows = [['ASIN', 'Available', 'Reserved', 'Unfulfillable', 'InboundWorking', 'Total', 'SKUs']];
-    Object.keys(map).sort().forEach(function(asin) {
+
+    // Preserve input order when specific ASINs were requested; sort otherwise
+    var outputKeys = asinSet ? Object.keys(asinSet).sort() : Object.keys(map).sort();
+    outputKeys.forEach(function(asin) {
       var a = map[asin];
-      if (!includeZero && a.total === 0) return; // skip zero-stock ASINs by default
+      if (!a) {
+        // ASIN was requested but not found in inventory at all
+        if (asinSet) rows.push([asin, 'NOT FOUND', '', '', '', '', '']);
+        return;
+      }
+      if (!includeZero && a.total === 0) return;
       rows.push([asin, a.available, a.reserved, a.unfulfillable, a.inbound, a.total, a.skus]);
     });
 
-    if (rows.length === 1) rows.push(['No active inventory found for this marketplace', '', '', '', '', '', '']);
+    if (rows.length === 1) rows.push(['No inventory found', '', '', '', '', '', '']);
 
     _cacheSet(cKey, rows, 1800);
     return rows;
