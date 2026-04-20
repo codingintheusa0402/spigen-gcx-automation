@@ -419,16 +419,22 @@ function getMcfStockByAsin(asin, marketplaceId) {
 /***** ========= MCF FEE LOOKUP ========= *****/
 
 /**
- * Custom formula: =MCFFee(method, orderId)
- * method: "FinancesAPI"           — actual settled fee; available a few days after shipment.
- *                                   Returns '' until the order settles (retry later).
- *         "getFulfillmentPreview" — estimated fee; instant but may differ from actual.
- *                                   Currency depends on marketplace: GBP for UK, EUR for EU.
- * Tries EU endpoint first, then FE (Japan/AU/SG).
+ * Returns the MCF fulfillment fee for an existing order.
  *
- * Required SP-API roles:
- *   - getFulfillmentPreview method → Amazon Fulfillment
- *   - FinancesAPI method           → Finance and Accounting  (+ Amazon Fulfillment for order lookup)
+ * method "FinancesAPI": queries the Finances API for the actual settled fee.
+ * Returns blank until the order settles (usually a few days after shipment) — retries automatically.
+ * Currency matches the marketplace: GBP for UK orders, EUR for other EU orders.
+ *
+ * method "getFulfillmentPreview": calls getFulfillmentPreview for an instant estimate.
+ * Available immediately but may differ from the actual charged amount.
+ *
+ * Tries EU endpoint first, then FE (Japan/AU/SG) as fallback.
+ * Required roles: Amazon Fulfillment (both methods) + Finance and Accounting (FinancesAPI only).
+ *
+ * @customfunction
+ * @param {"FinancesAPI"|"getFulfillmentPreview"} method "FinancesAPI" = actual settled fee (GBP/EUR, available days after shipment). "getFulfillmentPreview" = instant estimate (may differ from actual).
+ * @param {string} orderId The sellerFulfillmentOrderId of the MCF order (e.g. value in col Q).
+ * @return {number} Fee amount in the order's marketplace currency (GBP for UK, EUR for EU).
  */
 function MCFFee(method, orderId) {
   if (!orderId) return '';
@@ -467,8 +473,13 @@ function MCFFee(method, orderId) {
 }
 
 /**
- * Custom formula: =MCFFee_JP(method, orderId)
- * Same as MCFFee but tries FE first (Japan/AU/SG orders).
+ * Returns the MCF fulfillment fee for a Japan / AU / SG order.
+ * Same as MCFFee but tries the FE (Far East) endpoint first.
+ *
+ * @customfunction
+ * @param {"FinancesAPI"|"getFulfillmentPreview"} method "FinancesAPI" = actual settled fee (available days after shipment). "getFulfillmentPreview" = instant estimate (may differ from actual).
+ * @param {string} orderId The sellerFulfillmentOrderId of the MCF order.
+ * @return {number} Fee amount in the order's marketplace currency.
  */
 function MCFFee_JP(method, orderId) {
   if (!orderId) return '';
