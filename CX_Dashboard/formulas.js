@@ -294,3 +294,56 @@ function SPINVENTORY(marketplaceId) {
     return rows;
   } catch(e) { return [['ERR: ' + (e.message || e)]]; }
 }
+
+/***** ========= FBA INVENTORY BY ASIN ========= *****/
+
+/**
+ * Returns FBA inventory aggregated by ASIN (sums across all SKUs per ASIN).
+ * @customfunction
+ * @param {string} marketplaceId Marketplace ID
+ * @return {Array} ASIN | Available | Reserved | Unfulfillable | InboundWorking | Total | SKUs
+ */
+function SPINVENTORY_ASIN(marketplaceId) {
+  if (!marketplaceId) return [['marketplaceId is required']];
+
+  var cKey = 'SPINV_ASIN_' + marketplaceId;
+  var cached = _cacheGet(cKey);
+  if (cached) return cached;
+
+  try {
+    var qs = 'granularityType=Marketplace' +
+             '&granularityId='  + encodeURIComponent(marketplaceId) +
+             '&marketplaceIds=' + encodeURIComponent(marketplaceId) +
+             '&details=true';
+
+    var res       = spapiFetchWithRetry('GET', '/fba/inventory/v1/summaries', { queryString: qs, endpoint: marketplaceId }, 3, 5000);
+    var summaries = (res.payload || res).inventorySummaries || [];
+
+    // Aggregate per ASIN
+    var map = {};
+    summaries.forEach(function(s) {
+      var asin = s.asin || '(no ASIN)';
+      var det  = s.inventoryDetails        || {};
+      var rsv  = det.reservedQuantity      || {};
+      var unf  = det.unfulfillableQuantity || {};
+
+      if (!map[asin]) map[asin] = { available: 0, reserved: 0, unfulfillable: 0, inbound: 0, total: 0, skus: 0 };
+      var a = map[asin];
+      a.available     += det.fulfillableQuantity        || 0;
+      a.reserved      += rsv.totalReservedQuantity      || 0;
+      a.unfulfillable += unf.totalUnfulfillableQuantity || 0;
+      a.inbound       += det.inboundWorkingQuantity     || 0;
+      a.total         += s.totalQuantity                || 0;
+      a.skus          += 1;
+    });
+
+    var rows = [['ASIN', 'Available', 'Reserved', 'Unfulfillable', 'InboundWorking', 'Total', 'SKUs']];
+    Object.keys(map).sort().forEach(function(asin) {
+      var a = map[asin];
+      rows.push([asin, a.available, a.reserved, a.unfulfillable, a.inbound, a.total, a.skus]);
+    });
+
+    _cacheSet(cKey, rows, 600);
+    return rows;
+  } catch(e) { return [['ERR: ' + (e.message || e)]]; }
+}
