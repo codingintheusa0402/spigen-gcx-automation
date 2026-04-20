@@ -308,9 +308,9 @@ function SPINVENTORY(marketplaceId) {
 function SPINVENTORY_ASIN(marketplaceId, includeZero) {
   if (!marketplaceId) return [['marketplaceId is required']];
 
-  var cKey = 'SPINV_ASIN_' + marketplaceId;
+  var cKey = 'SPINV_ASIN_v3_' + marketplaceId + (includeZero ? '_all' : '');
   var cached = _cacheGet(cKey);
-  if (cached && !includeZero) return cached;
+  if (cached) return cached;
 
   try {
     // Paginate through all inventory summaries
@@ -366,7 +366,7 @@ function SPINVENTORY_ASIN(marketplaceId, includeZero) {
 
     if (rows.length === 1) rows.push(['No active inventory found for this marketplace', '', '', '', '', '', '']);
 
-    _cacheSet(cKey, rows, 600);
+    _cacheSet(cKey, rows, 1800);
     return rows;
   } catch(e) { return [['ERR: ' + (e.message || e)]]; }
 }
