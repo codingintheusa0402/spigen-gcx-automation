@@ -12,6 +12,7 @@ const TRIGGER_PROJECTS = [
   { name: '오전보고',      endDate: '2026-04-26', time: '09:00 KST (Mon–Fri)' },
   { name: 'TCT시트 보고',  endDate: '2026-04-26', time: '17:30 KST (Mon–Fri, Thu 15:30)' },
   { name: 'MCF Tracker',   endDate: null,          time: '09:00 KST (Mon–Fri, permanent)' },
+  { name: 'ASIN Master',   endDate: null,          time: 'on-demand (permanent)' },
 ];
 
 // ── Korean public holiday check via Google Calendar ───────────────────────────
@@ -54,6 +55,25 @@ function _countRemainingWeekdays_(endDateStr) {
   return count;
 }
 
+// ── Display width: CJK/Korean chars count as 2, ASCII as 1 ──────────────────
+function _displayWidth_(str) {
+  var w = 0;
+  for (var i = 0; i < str.length; i++) {
+    var c = str.charCodeAt(i);
+    var wide = (c >= 0xAC00 && c <= 0xD7AF) || // Korean syllables
+               (c >= 0x4E00 && c <= 0x9FFF) || // CJK unified ideographs
+               (c >= 0x3000 && c <= 0x303F) || // CJK symbols
+               (c >= 0x3040 && c <= 0x30FF) || // Hiragana / Katakana
+               (c >= 0xFF00 && c <= 0xFFEF);   // Fullwidth forms
+    w += wide ? 2 : 1;
+  }
+  return w;
+}
+
+function _padToWidth_(str, targetWidth) {
+  return str + ' '.repeat(Math.max(0, targetWidth - _displayWidth_(str)));
+}
+
 // ── ASCII bar: filled = remaining / maxDays scaled to barWidth chars ──────────
 function _makeBar_(remaining, maxDays, barWidth) {
   const filled = Math.round(Math.min(remaining, maxDays) / maxDays * barWidth);
@@ -79,9 +99,9 @@ function sendAllTriggerStatus(webhookOverride) {
     return { name: p.name, rem, bar, icon, endDate: p.endDate, permanent: false };
   });
 
-  const padLen     = Math.max(...rows.map(r => r.name.length));
+  const padLen     = Math.max(...rows.map(r => _displayWidth_(r.name)));
   const chartLines = rows.map(r => {
-    const name = r.name.padEnd(padLen);
+    const name = _padToWidth_(r.name, padLen);
     if (r.permanent) return `${r.icon} ${name}  ${r.bar}  permanent`;
     const cnt = String(r.rem).padStart(2);
     return `${r.icon} ${name}  ${r.bar}  ${cnt}d  (~ ${r.endDate})`;
