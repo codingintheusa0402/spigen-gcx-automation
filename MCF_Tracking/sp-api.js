@@ -419,15 +419,23 @@ function getMcfStockByAsin(asin, marketplaceId) {
 /***** ========= MCF FEE LOOKUP ========= *****/
 
 /**
- * Custom formula: =FBAFee(orderId)
- * Returns total Expedited MCF fulfillment fee for an existing order.
- * Tries EU first, then FE — same fallback pattern as AMZTK.
+ * Custom formula: =MCFFee(method, orderId)
+ * method: "FinancesAPI"           — actual settled fee; available a few days after shipment.
+ *                                   Returns '' until the order settles (retry later).
+ *         "getFulfillmentPreview" — estimated fee; instant but may differ from actual.
+ *                                   Currency depends on marketplace: GBP for UK, EUR for EU.
+ * Tries EU endpoint first, then FE (Japan/AU/SG).
+ *
+ * Required SP-API roles:
+ *   - getFulfillmentPreview method → Amazon Fulfillment
+ *   - FinancesAPI method           → Finance and Accounting  (+ Amazon Fulfillment for order lookup)
  */
-function FBAFee(orderId) {
+function MCFFee(method, orderId) {
   if (!orderId) return '';
+  method = String(method || 'getFulfillmentPreview').trim();
 
   var cache = CacheService.getScriptCache();
-  var key = 'FBAFEE_' + String(orderId);
+  var key = 'MCFFEE_' + method + '_' + String(orderId);
   var cached = cache.get(key);
   if (cached !== null) return cached === '__EMPTY__' ? '' : parseFloat(cached);
 
@@ -436,14 +444,15 @@ function FBAFee(orderId) {
 
   for (var i = 0; i < endpoints.length; i++) {
     try {
-      var fee = _fetchMcfFee(String(orderId), endpoints[i]);
-      // Fee found → stable, cache 6h. No preview yet → retry in 10min.
+      var fee = (method === 'FinancesAPI')
+        ? _fetchMcfFeeFinancesApi(String(orderId), endpoints[i])
+        : _fetchMcfFeePreview(String(orderId), endpoints[i]);
+      // Fee found → stable, cache 6h.  Not yet settled / no preview → retry in 10min.
       cache.put(key, fee === '' ? '__EMPTY__' : String(fee), fee === '' ? 600 : 21600);
       return fee;
     } catch (err) {
       lastErr = err;
       if (_isRetryableRegionMismatchError(err) || _isNoOrderInfoError(err)) continue;
-      // 403 → permanent, cache 6h. 429 / transient → do NOT cache, retry later.
       if (_isUnauthorizedError(err)) { cache.put(key, '__EMPTY__', 21600); return ''; }
       throw err;
     }
@@ -458,14 +467,15 @@ function FBAFee(orderId) {
 }
 
 /**
- * Custom formula: =FBAFee_JP(orderId)
- * Same as FBAFee but tries FE first (Japan/AU/SG orders).
+ * Custom formula: =MCFFee_JP(method, orderId)
+ * Same as MCFFee but tries FE first (Japan/AU/SG orders).
  */
-function FBAFee_JP(orderId) {
+function MCFFee_JP(method, orderId) {
   if (!orderId) return '';
+  method = String(method || 'getFulfillmentPreview').trim();
 
   var cache = CacheService.getScriptCache();
-  var key = 'FBAFEE_JP_' + String(orderId);
+  var key = 'MCFFEE_JP_' + method + '_' + String(orderId);
   var cached = cache.get(key);
   if (cached !== null) return cached === '__EMPTY__' ? '' : parseFloat(cached);
 
@@ -474,14 +484,14 @@ function FBAFee_JP(orderId) {
 
   for (var i = 0; i < endpoints.length; i++) {
     try {
-      var fee = _fetchMcfFee(String(orderId), endpoints[i]);
-      // Fee found → stable, cache 6h. No preview yet → retry in 10min.
+      var fee = (method === 'FinancesAPI')
+        ? _fetchMcfFeeFinancesApi(String(orderId), endpoints[i])
+        : _fetchMcfFeePreview(String(orderId), endpoints[i]);
       cache.put(key, fee === '' ? '__EMPTY__' : String(fee), fee === '' ? 600 : 21600);
       return fee;
     } catch (err) {
       lastErr = err;
       if (_isRetryableRegionMismatchError(err) || _isNoOrderInfoError(err)) continue;
-      // 403 → permanent, cache 6h. 429 / transient → do NOT cache, retry later.
       if (_isUnauthorizedError(err)) { cache.put(key, '__EMPTY__', 21600); return ''; }
       throw err;
     }
@@ -495,14 +505,93 @@ function FBAFee_JP(orderId) {
   return '';
 }
 
-function _fetchMcfFee(orderId, ep) {
-  // Step 1: pull existing order for address + items
+/**
+ * Finances API method — actual settled MCF fee.
+ * Searches ShipmentEventList for SellerOrderId === orderId and sums FBA/fulfillment fees.
+ * Fees are stored as negative values in the Finances API; returns Math.abs(total).
+ * Returns '' if the order has not yet settled.
+ */
+function _fetchMcfFeeFinancesApi(orderId, ep) {
+  // Step 1: get order to determine the financial events date window
+  var result = getFulfillmentOrderRaw(orderId, ep);
+  var fo = result.fulfillmentOrder || {};
+  if (!fo.receivedDate) return '';
+
+  var postedAfter  = new Date(fo.receivedDate);
+  var postedBefore = new Date(fo.receivedDate);
+  postedBefore.setDate(postedBefore.getDate() + 60); // 60-day settlement window
+
+  // Step 2: page through financial events looking for this order
+  var nextToken = null;
+  var maxPages  = 5;
+  var page      = 0;
+
+  do {
+    var qs = 'PostedAfter='   + encodeURIComponent(postedAfter.toISOString()) +
+             '&PostedBefore=' + encodeURIComponent(postedBefore.toISOString()) +
+             '&MaxResultsPerPage=100';
+    if (nextToken) qs += '&NextToken=' + encodeURIComponent(nextToken);
+
+    var res = spapiFetchWithRetry('GET', '/finances/v0/financialEvents', {
+      queryString: qs,
+      endpoint: ep
+    }, 3, 5000);
+
+    var payload   = res.payload || res;
+    nextToken     = payload.NextToken || null;
+    var shipments = (payload.FinancialEvents || {}).ShipmentEventList || [];
+
+    for (var i = 0; i < shipments.length; i++) {
+      var ev = shipments[i];
+      if (String(ev.SellerOrderId || '').trim() !== orderId) continue;
+
+      var total = 0;
+
+      // Order-level FBA fees
+      var shipFees = ev.ShipmentFeeList || [];
+      for (var f = 0; f < shipFees.length; f++) {
+        if (_isMcfFeeType(shipFees[f].FeeType)) {
+          total += parseFloat((shipFees[f].FeeAmount || {}).CurrencyAmount || 0);
+        }
+      }
+
+      // Item-level FBA fees
+      var items = ev.ShipmentItemList || [];
+      for (var j = 0; j < items.length; j++) {
+        var itemFees = items[j].ItemFeeList || [];
+        for (var k = 0; k < itemFees.length; k++) {
+          if (_isMcfFeeType(itemFees[k].FeeType)) {
+            total += parseFloat((itemFees[k].FeeAmount || {}).CurrencyAmount || 0);
+          }
+        }
+      }
+
+      return Math.abs(total); // Finances API stores fees as negative numbers
+    }
+
+    page++;
+  } while (nextToken && page < maxPages);
+
+  return ''; // order not yet settled — caller caches as __EMPTY__ for 10min and retries
+}
+
+// Matches FBA / fulfillment fee type names used in Finances API ShipmentEvent
+function _isMcfFeeType(feeType) {
+  if (!feeType) return false;
+  var t = String(feeType).toUpperCase();
+  return t.indexOf('FBA') >= 0 || t.indexOf('FULFILLMENT') >= 0;
+}
+
+/**
+ * getFulfillmentPreview method — estimated MCF fee (instant, may differ from actual).
+ * Currency: GBP for UK orders, EUR for other EU orders.
+ */
+function _fetchMcfFeePreview(orderId, ep) {
   var result = getFulfillmentOrderRaw(orderId, ep);
   var fo     = result.fulfillmentOrder || {};
   var items  = result.fulfillmentOrderItems || [];
   if (!items.length || !fo.destinationAddress) return '';
 
-  // Step 2: build getFulfillmentPreview request
   var previewItems = items.map(function(item, idx) {
     return {
       sellerSku: item.sellerSku,
@@ -518,7 +607,6 @@ function _fetchMcfFee(orderId, ep) {
     shippingSpeedCategories: ['Expedited']
   });
 
-  // Step 3: call getFulfillmentPreview
   var res = spapiFetchWithRetry(
     'POST',
     '/fba/outbound/2020-07-01/fulfillmentOrders/preview',
@@ -533,7 +621,6 @@ function _fetchMcfFee(orderId, ep) {
   }
   if (!preview || !preview.estimatedFees || !preview.estimatedFees.length) return '';
 
-  // Step 4: sum all fee components (value is a string in SP-API response)
   var total = 0;
   for (var j = 0; j < preview.estimatedFees.length; j++) {
     total += parseFloat(preview.estimatedFees[j].amount.value || 0);

@@ -11,7 +11,7 @@ Google Apps Script project for Spigen GCX — Multi-Channel Fulfillment (MCF) or
 
 | File | Purpose |
 |------|---------|
-| `sp-api.js` | SP-API auth (LWA + AWS SigV4), core fetch, retry logic, and all custom sheet formulas (`AMZTK`, `AMZTK_JP`, `FBAFee`, `FBAFee_JP`, `getMcfStockByAsin`) |
+| `sp-api.js` | SP-API auth (LWA + AWS SigV4), core fetch, retry logic, and all custom sheet formulas (`AMZTK`, `AMZTK_JP`, `MCFFee`, `MCFFee_JP`, `getMcfStockByAsin`) |
 | `autoFill.js` | `onEdit` trigger — auto-fills dates and status columns on the `MCF 발송 로그` sheet based on cell edits |
 | `main.js` | `MCFReporter` — daily Google Chat card alert listing rows missing a tracking number |
 | `MCFGen.js` | (Archived / commented out) MCF order creation and stock-check helpers via SP-API |
@@ -29,18 +29,31 @@ Returns the tracking number for an EU MCF order. Tries EU endpoint first, falls 
 ### `=AMZTK_JP(orderId)`
 Same as `AMZTK` but tries FE (Japan/AU/SG) first.
 
-### `=FBAFee(orderId)`
-Returns the total estimated Expedited MCF fulfillment fee for an existing EU order.  
-Internally calls `getFulfillmentOrder` to get the destination address + items, then calls `getFulfillmentPreview` with `shippingSpeedCategories: ["Expedited"]` and sums all fee components.  
-Tries EU first, falls back to FE.
+### `=MCFFee(method, orderId)`
+Returns the MCF fulfillment fee for an existing order. Accepts two methods:
 
-### `=FBAFee_JP(orderId)`
-Same as `FBAFee` but tries FE first.
+| method | Source | Timing | Accuracy |
+|--------|--------|--------|----------|
+| `"getFulfillmentPreview"` | `getFulfillmentPreview` SP-API | Instant | Estimate only — may differ from actual. **Currency depends on marketplace: GBP for UK, EUR for other EU.** |
+| `"FinancesAPI"` | `listFinancialEvents` SP-API | Available ~days after shipment settles | Actual charged amount |
+
+```
+=IF(Q2<>"", MCFFee("FinancesAPI", Q2), "")
+=IF(Q2<>"", MCFFee("getFulfillmentPreview", Q2), "")
+```
+
+- `FinancesAPI`: searches `ShipmentEventList` for `SellerOrderId` matching the order, sums all FBA/fulfillment fee components. Returns `''` until the order settles (retries automatically on next recalculation).
+- `getFulfillmentPreview`: calls `getFulfillmentOrder` to get destination address + items, then calls `getFulfillmentPreview` with `shippingSpeedCategories: ["Expedited"]` and sums all fee components.
+- Tries EU endpoint first, falls back to FE.
+- Required SP-API roles: **Amazon Fulfillment** (both methods) + **Finance and Accounting** (`FinancesAPI` method).
+
+### `=MCFFee_JP(method, orderId)`
+Same as `MCFFee` but tries FE (Japan/AU/SG) first.
 
 ### `getMcfStockByAsin(asin, marketplaceId)`
 Returns available FBA inventory count for a given ASIN and marketplace ID. Used internally by `autoFill.js`.
 
-> All formulas cache results for 10 minutes via `CacheService` to avoid SP-API rate limits.
+> **Cache TTL:** Found values (tracking number or fee) → 6 hours. Empty/not-yet-settled → 10 minutes (retried). Errors (429, transient) → not cached, retried on next recalculation. Permanent errors (403) → 6 hours.
 
 ---
 
@@ -64,7 +77,9 @@ Set these in **Extensions → Apps Script → Project Settings → Script Proper
 | `SPAPI_REGION_EU` | Defaults to `eu-west-1` |
 | `SPAPI_REGION_FE` | Defaults to `us-west-2` |
 
-**Required SP-API role:** `Amazon Fulfillment`
+**Required SP-API roles:**
+- `Amazon Fulfillment` — tracking lookup (`AMZTK`), stock lookup, `MCFFee` (both methods)
+- `Finance and Accounting` — `MCFFee("FinancesAPI", ...)` only
 
 ---
 
