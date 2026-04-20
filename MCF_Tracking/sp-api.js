@@ -594,6 +594,60 @@ function _isMcfFeeType(feeType) {
 }
 
 /**
+ * Debug: shows SellerOrderIds found in Finances API around this order's receivedDate.
+ * Use this to diagnose why MCFFee("FinancesAPI", orderId) returns blank.
+ * @customfunction
+ * @param {string} orderId The sellerFulfillmentOrderId to debug
+ * @return {Array} SellerOrderId | FeeTypes | Total found in the financial events window
+ */
+function MCFFeeDebug(orderId) {
+  if (!orderId) return [['orderId is required']];
+  try {
+    var result = getFulfillmentOrderRaw(String(orderId), 'EU');
+    var fo = result.fulfillmentOrder || {};
+    if (!fo.receivedDate) return [['Order found but no receivedDate — check order ID']];
+
+    var postedAfter  = new Date(fo.receivedDate);
+    var postedBefore = new Date(fo.receivedDate);
+    postedBefore.setDate(postedBefore.getDate() + 90);
+
+    var rows = [['SellerOrderId_in_API', 'Input_orderId', 'Exact_match', 'FeeTypes', 'Total']];
+    var qs = 'PostedAfter='   + encodeURIComponent(postedAfter.toISOString()) +
+             '&PostedBefore=' + encodeURIComponent(postedBefore.toISOString()) +
+             '&MaxResultsPerPage=100';
+    var res      = spapiFetchWithRetry('GET', '/finances/v0/financialEvents', { queryString: qs, endpoint: 'EU' }, 3, 5000);
+    var payload  = res.payload || res;
+    var shipments = (payload.FinancialEvents || {}).ShipmentEventList || [];
+
+    if (!shipments.length) {
+      rows.push(['(no ShipmentEvents in window)', orderId, '', '', '']);
+      rows.push(['receivedDate: ' + fo.receivedDate, 'window end: ' + postedBefore.toISOString(), '', '', '']);
+      return rows;
+    }
+
+    shipments.forEach(function(ev) {
+      var sid   = String(ev.SellerOrderId || '');
+      var match = sid.trim() === String(orderId).trim() ? 'YES' : 'no';
+      var feeTypes = [], total = 0;
+      (ev.ShipmentFeeList || []).forEach(function(f) {
+        feeTypes.push(f.FeeType);
+        total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0);
+      });
+      (ev.ShipmentItemList || []).forEach(function(item) {
+        (item.ItemFeeList || []).forEach(function(f) {
+          feeTypes.push(f.FeeType);
+          total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0);
+        });
+      });
+      rows.push([sid, orderId, match, feeTypes.join(', '), Math.abs(total)]);
+    });
+
+    rows.push(['receivedDate: ' + fo.receivedDate, 'window end: ' + postedBefore.toISOString(), 'Total events: ' + shipments.length, '', '']);
+    return rows;
+  } catch(e) { return [['ERR: ' + (e.message || e)]]; }
+}
+
+/**
  * getFulfillmentPreview method — estimated MCF fee (instant, may differ from actual).
  * Currency: GBP for UK orders, EUR for other EU orders.
  */
