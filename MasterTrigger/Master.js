@@ -382,6 +382,20 @@ function _processFilterSheet_(srcSS, cfg) {
     const before = filtered.length;
     filtered = filtered.filter(r => !existingIds.has(cell(r, srcRidColIdx)));
     Logger.log(`  [${filterSheet}] Skipped ${before - filtered.length} existing row(s) → ${filtered.length} new`);
+
+    // Intra-batch dedup: same Review ID can appear multiple times in the filter
+    // sheet when Apify scrapes the same review across multiple runs on different days.
+    const seenInBatch = new Set();
+    const beforeBatch = filtered.length;
+    filtered = filtered.filter(r => {
+      const rid = cell(r, srcRidColIdx);
+      if (!rid || seenInBatch.has(rid)) return false;
+      seenInBatch.add(rid);
+      return true;
+    });
+    if (beforeBatch - filtered.length > 0) {
+      Logger.log(`  [${filterSheet}] Intra-batch dedup: removed ${beforeBatch - filtered.length} duplicate(s), ${filtered.length} remain`);
+    }
   } else {
     Logger.log(`  [${filterSheet}] WARNING: srcRidColIdx not found — dedup skipped, all ${filtered.length} rows will paste`);
   }
@@ -581,6 +595,20 @@ function _processTo13_(srcSS, cfg) {
     const before = filtered.length;
     filtered = filtered.filter(r => !existingIds.has(cell(r, srcRidColIdx)));
     Logger.log(`  [${filterSheet}] Skipped ${before - filtered.length} existing row(s) → ${filtered.length} new`);
+
+    // Intra-batch dedup: same Review ID can appear multiple times in the filter
+    // sheet when Apify scrapes the same review across multiple runs on different days.
+    const seenInBatch = new Set();
+    const beforeBatch = filtered.length;
+    filtered = filtered.filter(r => {
+      const rid = cell(r, srcRidColIdx);
+      if (!rid || seenInBatch.has(rid)) return false;
+      seenInBatch.add(rid);
+      return true;
+    });
+    if (beforeBatch - filtered.length > 0) {
+      Logger.log(`  [${filterSheet}] Intra-batch dedup: removed ${beforeBatch - filtered.length} duplicate(s), ${filtered.length} remain`);
+    }
   } else {
     Logger.log(`  [${filterSheet}] WARNING: srcRidColIdx not found — dedup skipped, all ${filtered.length} rows will paste`);
   }
