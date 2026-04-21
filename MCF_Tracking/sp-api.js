@@ -434,14 +434,16 @@ function getMcfStockByAsin(asin, marketplaceId) {
  * @customfunction
  * @param {"FinancesAPI"|"getFulfillmentPreview"} method "FinancesAPI" = actual settled fee (GBP/EUR, available days after shipment). "getFulfillmentPreview" = instant estimate (may differ from actual).
  * @param {string} orderId The sellerFulfillmentOrderId of the MCF order (e.g. value in col Q).
+ * @param {string} [sentDate] Optional yyyy-mm-dd sent date from col P. Skips the fulfillment order lookup when provided.
  * @return {number} Fee amount in the order's marketplace currency (GBP for UK, EUR for EU).
  */
-function MCFFee(method, orderId) {
+function MCFFee(method, orderId, sentDate) {
   if (!orderId) return '';
   method = String(method || 'getFulfillmentPreview').trim();
+  var dateKey = sentDate ? '_' + String(sentDate).trim() : '';
 
   var cache = CacheService.getScriptCache();
-  var key = 'MCFFEE_' + method + '_' + String(orderId);
+  var key = 'MCFFEE_' + method + '_' + String(orderId) + dateKey;
   var cached = cache.get(key);
   if (cached !== null) return cached === '__EMPTY__' ? '' : parseFloat(cached);
 
@@ -451,7 +453,7 @@ function MCFFee(method, orderId) {
   for (var i = 0; i < endpoints.length; i++) {
     try {
       var fee = (method === 'FinancesAPI')
-        ? _fetchMcfFeeFinancesApi(String(orderId), endpoints[i])
+        ? _fetchMcfFeeFinancesApi(String(orderId), endpoints[i], sentDate)
         : _fetchMcfFeePreview(String(orderId), endpoints[i]);
       // Fee found → stable, cache 6h.  Not yet settled / no preview → retry in 10min.
       cache.put(key, fee === '' ? '__EMPTY__' : String(fee), fee === '' ? 600 : 21600);
@@ -479,14 +481,16 @@ function MCFFee(method, orderId) {
  * @customfunction
  * @param {"FinancesAPI"|"getFulfillmentPreview"} method "FinancesAPI" = actual settled fee (available days after shipment). "getFulfillmentPreview" = instant estimate (may differ from actual).
  * @param {string} orderId The sellerFulfillmentOrderId of the MCF order.
+ * @param {string} [sentDate] Optional yyyy-mm-dd sent date from col P. Skips the fulfillment order lookup when provided.
  * @return {number} Fee amount in the order's marketplace currency.
  */
-function MCFFee_JP(method, orderId) {
+function MCFFee_JP(method, orderId, sentDate) {
   if (!orderId) return '';
   method = String(method || 'getFulfillmentPreview').trim();
+  var dateKey = sentDate ? '_' + String(sentDate).trim() : '';
 
   var cache = CacheService.getScriptCache();
-  var key = 'MCFFEE_JP_' + method + '_' + String(orderId);
+  var key = 'MCFFEE_JP_' + method + '_' + String(orderId) + dateKey;
   var cached = cache.get(key);
   if (cached !== null) return cached === '__EMPTY__' ? '' : parseFloat(cached);
 
@@ -496,7 +500,7 @@ function MCFFee_JP(method, orderId) {
   for (var i = 0; i < endpoints.length; i++) {
     try {
       var fee = (method === 'FinancesAPI')
-        ? _fetchMcfFeeFinancesApi(String(orderId), endpoints[i])
+        ? _fetchMcfFeeFinancesApi(String(orderId), endpoints[i], sentDate)
         : _fetchMcfFeePreview(String(orderId), endpoints[i]);
       cache.put(key, fee === '' ? '__EMPTY__' : String(fee), fee === '' ? 600 : 21600);
       return fee;
@@ -522,15 +526,24 @@ function MCFFee_JP(method, orderId) {
  * Fees are stored as negative values in the Finances API; returns Math.abs(total).
  * Returns '' if the order has not yet settled.
  */
-function _fetchMcfFeeFinancesApi(orderId, ep) {
-  // Step 1: get order to determine the financial events date window
-  var result = getFulfillmentOrderRaw(orderId, ep);
-  var fo = result.fulfillmentOrder || {};
-  if (!fo.receivedDate) return '';
+function _fetchMcfFeeFinancesApi(orderId, ep, sentDate) {
+  var postedAfter, postedBefore;
 
-  var postedAfter  = new Date(fo.receivedDate);
-  var postedBefore = new Date(fo.receivedDate);
-  postedBefore.setDate(postedBefore.getDate() + 60); // 60-day settlement window
+  if (sentDate) {
+    // Use the caller-supplied sent date (P col) — skip getFulfillmentOrderRaw entirely
+    postedAfter  = new Date(String(sentDate).trim());
+    postedBefore = new Date(postedAfter);
+    postedBefore.setDate(postedBefore.getDate() + 60);
+  } else {
+    // Fallback: derive date from fulfillment order
+    var result = getFulfillmentOrderRaw(orderId, ep);
+    var fo = result.fulfillmentOrder || {};
+    if (!fo.receivedDate) return '';
+    postedAfter  = new Date(fo.receivedDate);
+    postedBefore = new Date(fo.receivedDate);
+    postedBefore.setDate(postedBefore.getDate() + 60);
+  }
+
   var _now = new Date();
   if (postedBefore > _now) postedBefore = _now; // cap to now — API rejects future dates
 
@@ -600,18 +613,29 @@ function _isMcfFeeType(feeType) {
  * Use this to diagnose why MCFFee("FinancesAPI", orderId) returns blank.
  * @customfunction
  * @param {string} orderId The sellerFulfillmentOrderId to debug
+ * @param {string} [sentDate] Optional yyyy-mm-dd sent date from col P. Skips the fulfillment order lookup when provided.
  * @return {Array} SellerOrderId | FeeTypes | Total found in the financial events window
  */
-function MCFFeeDebug(orderId) {
+function MCFFeeDebug(orderId, sentDate) {
   if (!orderId) return [['orderId is required']];
   try {
-    var result = getFulfillmentOrderRaw(String(orderId), 'EU');
-    var fo = result.fulfillmentOrder || {};
-    if (!fo.receivedDate) return [['Order found but no receivedDate — check order ID']];
+    var postedAfter, postedBefore, dateSource;
 
-    var postedAfter  = new Date(fo.receivedDate);
-    var postedBefore = new Date(fo.receivedDate);
-    postedBefore.setDate(postedBefore.getDate() + 90);
+    if (sentDate) {
+      postedAfter  = new Date(String(sentDate).trim());
+      postedBefore = new Date(postedAfter);
+      postedBefore.setDate(postedBefore.getDate() + 90);
+      dateSource = 'sentDate (P col): ' + String(sentDate).trim();
+    } else {
+      var result = getFulfillmentOrderRaw(String(orderId), 'EU');
+      var fo = result.fulfillmentOrder || {};
+      if (!fo.receivedDate) return [['Order found but no receivedDate — check order ID']];
+      postedAfter  = new Date(fo.receivedDate);
+      postedBefore = new Date(fo.receivedDate);
+      postedBefore.setDate(postedBefore.getDate() + 90);
+      dateSource = 'receivedDate (API): ' + fo.receivedDate;
+    }
+
     var now = new Date();
     if (postedBefore > now) postedBefore = now; // cap to now — API rejects future dates
 
@@ -625,7 +649,7 @@ function MCFFeeDebug(orderId) {
 
     if (!shipments.length) {
       rows.push(['(no ShipmentEvents in window)', orderId, '', '', '']);
-      rows.push(['receivedDate: ' + fo.receivedDate, 'window end: ' + postedBefore.toISOString(), '', '', '']);
+      rows.push([dateSource, 'window end: ' + postedBefore.toISOString(), '', '', '']);
       return rows;
     }
 
@@ -646,7 +670,7 @@ function MCFFeeDebug(orderId) {
       rows.push([sid, orderId, match, feeTypes.join(', '), Math.abs(total)]);
     });
 
-    rows.push(['receivedDate: ' + fo.receivedDate, 'window end: ' + postedBefore.toISOString(), 'Total events: ' + shipments.length, '', '']);
+    rows.push([dateSource, 'window end: ' + postedBefore.toISOString(), 'Total events: ' + shipments.length, '', '']);
     return rows;
   } catch(e) { return [['ERR: ' + (e.message || e)]]; }
 }
