@@ -531,6 +531,8 @@ function _fetchMcfFeeFinancesApi(orderId, ep) {
   var postedAfter  = new Date(fo.receivedDate);
   var postedBefore = new Date(fo.receivedDate);
   postedBefore.setDate(postedBefore.getDate() + 60); // 60-day settlement window
+  var _now = new Date();
+  if (postedBefore > _now) postedBefore = _now; // cap to now — API rejects future dates
 
   // Step 2: page through financial events looking for this order
   var nextToken = null;
@@ -610,6 +612,8 @@ function MCFFeeDebug(orderId) {
     var postedAfter  = new Date(fo.receivedDate);
     var postedBefore = new Date(fo.receivedDate);
     postedBefore.setDate(postedBefore.getDate() + 90);
+    var now = new Date();
+    if (postedBefore > now) postedBefore = now; // cap to now — API rejects future dates
 
     var rows = [['SellerOrderId_in_API', 'Input_orderId', 'Exact_match', 'FeeTypes', 'Total']];
     var qs = 'PostedAfter='   + encodeURIComponent(postedAfter.toISOString()) +
