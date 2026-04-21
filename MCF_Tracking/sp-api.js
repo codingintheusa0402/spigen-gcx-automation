@@ -462,6 +462,7 @@ function MCFFee(method, orderId, sentDate) {
       lastErr = err;
       if (_isRetryableRegionMismatchError(err) || _isNoOrderInfoError(err)) continue;
       if (_isUnauthorizedError(err)) { cache.put(key, '__EMPTY__', 21600); return ''; }
+      if (_isRateLimit429(err))      { cache.put(key, '__EMPTY__', 90);    return ''; } // retry after 90s
       throw err;
     }
   }
@@ -469,6 +470,7 @@ function MCFFee(method, orderId, sentDate) {
   if (lastErr) {
     if (_isUnauthorizedError(lastErr)) { cache.put(key, '__EMPTY__', 21600); return ''; }
     if (_isNoOrderInfoError(lastErr))  { cache.put(key, '__EMPTY__', 21600); return ''; }
+    if (_isRateLimit429(lastErr))      { cache.put(key, '__EMPTY__', 90);    return ''; } // retry after 90s
     return 'ERR: ' + (lastErr.message || lastErr);
   }
   return '';
@@ -508,6 +510,7 @@ function MCFFee_JP(method, orderId, sentDate) {
       lastErr = err;
       if (_isRetryableRegionMismatchError(err) || _isNoOrderInfoError(err)) continue;
       if (_isUnauthorizedError(err)) { cache.put(key, '__EMPTY__', 21600); return ''; }
+      if (_isRateLimit429(err))      { cache.put(key, '__EMPTY__', 90);    return ''; } // retry after 90s
       throw err;
     }
   }
@@ -515,6 +518,7 @@ function MCFFee_JP(method, orderId, sentDate) {
   if (lastErr) {
     if (_isUnauthorizedError(lastErr)) { cache.put(key, '__EMPTY__', 21600); return ''; }
     if (_isNoOrderInfoError(lastErr))  { cache.put(key, '__EMPTY__', 21600); return ''; }
+    if (_isRateLimit429(lastErr))      { cache.put(key, '__EMPTY__', 90);    return ''; } // retry after 90s
     return 'ERR: ' + (lastErr.message || lastErr);
   }
   return '';
