@@ -532,6 +532,7 @@ function MCFFee_JP(method, orderId, sentDate) {
  */
 function _fetchMcfFeeFinancesApi(orderId, ep, sentDate) {
   var postedAfter, postedBefore;
+  var foCache = null; // cache getFulfillmentOrderRaw result to avoid a double call in fallback
 
   if (sentDate) {
     // Use the caller-supplied sent date (P col) — skip getFulfillmentOrderRaw entirely
@@ -541,66 +542,36 @@ function _fetchMcfFeeFinancesApi(orderId, ep, sentDate) {
   } else {
     // Fallback: derive date from fulfillment order
     var result = getFulfillmentOrderRaw(orderId, ep);
-    var fo = result.fulfillmentOrder || {};
-    if (!fo.receivedDate) return '';
-    postedAfter  = new Date(fo.receivedDate);
-    postedBefore = new Date(fo.receivedDate);
+    foCache = result.fulfillmentOrder || {};
+    if (!foCache.receivedDate) return '';
+    postedAfter  = new Date(foCache.receivedDate);
+    postedBefore = new Date(foCache.receivedDate);
     postedBefore.setDate(postedBefore.getDate() + 60);
   }
 
   var _now = new Date(Date.now() - 5 * 60 * 1000); // 5-min buffer for GAS-Amazon clock drift
   if (postedBefore > _now) postedBefore = _now; // cap — API rejects dates in the future
 
-  // Step 2: page through financial events looking for this order
-  var nextToken = null;
-  var maxPages  = 5;
-  var page      = 0;
+  // Collect all shipment events once — reused for primary search and displayableOrderId fallback
+  var shipments = _collectShipmentEvents(ep, postedAfter, postedBefore, 5);
 
-  do {
-    var qs = 'PostedAfter='   + encodeURIComponent(postedAfter.toISOString()) +
-             '&PostedBefore=' + encodeURIComponent(postedBefore.toISOString()) +
-             '&MaxResultsPerPage=100';
-    if (nextToken) qs += '&NextToken=' + encodeURIComponent(nextToken);
+  // Primary: match by sellerFulfillmentOrderId
+  var fee = _sumMcfFeeFromShipments(shipments, orderId);
+  if (fee !== '') return fee;
 
-    var res = spapiFetchWithRetry('GET', '/finances/v0/financialEvents', {
-      queryString: qs,
-      endpoint: ep
-    }, 3, 5000);
-
-    var payload   = res.payload || res;
-    nextToken     = payload.NextToken || null;
-    var shipments = (payload.FinancialEvents || {}).ShipmentEventList || [];
-
-    for (var i = 0; i < shipments.length; i++) {
-      var ev = shipments[i];
-      if (String(ev.SellerOrderId || '').trim() !== orderId) continue;
-
-      var total = 0;
-
-      // Order-level FBA fees
-      var shipFees = ev.ShipmentFeeList || [];
-      for (var f = 0; f < shipFees.length; f++) {
-        if (_isMcfFeeType(shipFees[f].FeeType)) {
-          total += parseFloat((shipFees[f].FeeAmount || {}).CurrencyAmount || 0);
-        }
-      }
-
-      // Item-level FBA fees
-      var items = ev.ShipmentItemList || [];
-      for (var j = 0; j < items.length; j++) {
-        var itemFees = items[j].ItemFeeList || [];
-        for (var k = 0; k < itemFees.length; k++) {
-          if (_isMcfFeeType(itemFees[k].FeeType)) {
-            total += parseFloat((itemFees[k].FeeAmount || {}).CurrencyAmount || 0);
-          }
-        }
-      }
-
-      return Math.abs(total); // Finances API stores fees as negative numbers
+  // Fallback: some MCF orders settle in the Finances API under displayableOrderId
+  // (e.g. when fulfilling a linked Amazon marketplace order)
+  try {
+    if (!foCache) {
+      var foResult = getFulfillmentOrderRaw(orderId, ep);
+      foCache = foResult.fulfillmentOrder || {};
     }
-
-    page++;
-  } while (nextToken && page < maxPages);
+    var displayableId = (foCache.displayableOrderId || '').trim();
+    if (displayableId && displayableId !== orderId) {
+      var fee2 = _sumMcfFeeFromShipments(shipments, displayableId);
+      if (fee2 !== '') return fee2;
+    }
+  } catch (e) { /* fallback failed — order not yet settled */ }
 
   return ''; // order not yet settled — caller caches as __EMPTY__ for 10min and retries
 }
@@ -659,12 +630,57 @@ function _buildFeeMapForWindow(ep, postedAfter, postedBefore) {
 }
 
 /**
- * Debug: shows SellerOrderIds found in Finances API around this order's receivedDate.
- * Use this to diagnose why MCFFee("FinancesAPI", orderId) returns blank.
+ * Paginates ShipmentEventList for one endpoint + date window.
+ * Returns a flat array of all ShipmentEvent objects (up to maxPages × 100).
+ */
+function _collectShipmentEvents(ep, postedAfter, postedBefore, maxPages) {
+  var all = [], nextToken = null, page = 0;
+  maxPages = maxPages || 5;
+  do {
+    var qs = 'PostedAfter='   + encodeURIComponent(postedAfter.toISOString()) +
+             '&PostedBefore=' + encodeURIComponent(postedBefore.toISOString()) +
+             '&MaxResultsPerPage=100';
+    if (nextToken) qs += '&NextToken=' + encodeURIComponent(nextToken);
+    var res      = spapiFetchWithRetry('GET', '/finances/v0/financialEvents', { queryString: qs, endpoint: ep }, 3, 5000);
+    var payload  = res.payload || res;
+    nextToken    = payload.NextToken || null;
+    var batch    = (payload.FinancialEvents || {}).ShipmentEventList || [];
+    all          = all.concat(batch);
+    page++;
+  } while (nextToken && page < maxPages);
+  return all;
+}
+
+/**
+ * Finds the first ShipmentEvent matching targetOrderId and sums its MCF fee lines.
+ * Returns Math.abs(total) on match, '' if not found.
+ */
+function _sumMcfFeeFromShipments(shipments, targetOrderId) {
+  var target = String(targetOrderId).trim();
+  for (var i = 0; i < shipments.length; i++) {
+    var ev = shipments[i];
+    if (String(ev.SellerOrderId || '').trim() !== target) continue;
+    var total = 0;
+    (ev.ShipmentFeeList || []).forEach(function(f) {
+      if (_isMcfFeeType(f.FeeType)) total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0);
+    });
+    (ev.ShipmentItemList || []).forEach(function(item) {
+      (item.ItemFeeList || []).forEach(function(f) {
+        if (_isMcfFeeType(f.FeeType)) total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0);
+      });
+    });
+    return Math.abs(total);
+  }
+  return '';
+}
+
+/**
+ * Debug: shows SellerOrderIds found in Finances API around this order's date window.
+ * Also resolves displayableOrderId so you can see if the fee settled under a different ID.
  * @customfunction
  * @param {string} orderId The sellerFulfillmentOrderId to debug
- * @param {string} [sentDate] Optional yyyy-mm-dd sent date from col P. Skips the fulfillment order lookup when provided.
- * @return {Array} SellerOrderId | FeeTypes | Total found in the financial events window
+ * @param {string} [sentDate] Optional yyyy-mm-dd sent date from col P.
+ * @return {Array} SellerOrderId_in_API | Input_orderId | Exact_match | FeeTypes | Total
  */
 function MCFFeeDebug(orderId, sentDate) {
   if (!orderId) return [['orderId is required']];
@@ -686,16 +702,20 @@ function MCFFeeDebug(orderId, sentDate) {
       dateSource = 'receivedDate (API): ' + fo.receivedDate;
     }
 
-    var now = new Date(Date.now() - 5 * 60 * 1000); // 5-min buffer for GAS-Amazon clock drift
-    if (postedBefore > now) postedBefore = now; // cap — API rejects dates in the future
+    var now = new Date(Date.now() - 5 * 60 * 1000);
+    if (postedBefore > now) postedBefore = now;
+
+    var shipments = _collectShipmentEvents('EU', postedAfter, postedBefore, 5);
+
+    // Resolve displayableOrderId for fallback matching info
+    var displayableId = '';
+    try {
+      var foResult  = getFulfillmentOrderRaw(String(orderId), 'EU');
+      var candidate = ((foResult.fulfillmentOrder || {}).displayableOrderId || '').trim();
+      if (candidate && candidate !== String(orderId).trim()) displayableId = candidate;
+    } catch (e) { /* ignore */ }
 
     var rows = [['SellerOrderId_in_API', 'Input_orderId', 'Exact_match', 'FeeTypes', 'Total']];
-    var qs = 'PostedAfter='   + encodeURIComponent(postedAfter.toISOString()) +
-             '&PostedBefore=' + encodeURIComponent(postedBefore.toISOString()) +
-             '&MaxResultsPerPage=100';
-    var res      = spapiFetchWithRetry('GET', '/finances/v0/financialEvents', { queryString: qs, endpoint: 'EU' }, 3, 5000);
-    var payload  = res.payload || res;
-    var shipments = (payload.FinancialEvents || {}).ShipmentEventList || [];
 
     if (!shipments.length) {
       rows.push(['(no ShipmentEvents in window)', orderId, '', '', '']);
@@ -704,8 +724,10 @@ function MCFFeeDebug(orderId, sentDate) {
     }
 
     shipments.forEach(function(ev) {
-      var sid   = String(ev.SellerOrderId || '');
-      var match = sid.trim() === String(orderId).trim() ? 'YES' : 'no';
+      var sid = String(ev.SellerOrderId || '');
+      var match = sid.trim() === String(orderId).trim()         ? 'YES'
+                : (displayableId && sid.trim() === displayableId) ? 'YES (displayableOrderId)'
+                : 'no';
       var feeTypes = [], total = 0;
       (ev.ShipmentFeeList || []).forEach(function(f) {
         feeTypes.push(f.FeeType);
@@ -721,6 +743,7 @@ function MCFFeeDebug(orderId, sentDate) {
     });
 
     rows.push([dateSource, 'window end: ' + postedBefore.toISOString(), 'Total events: ' + shipments.length, '', '']);
+    if (displayableId) rows.push(['displayableOrderId fallback', displayableId, '', '', '']);
     return rows;
   } catch(e) { return [['ERR: ' + (e.message || e)]]; }
 }

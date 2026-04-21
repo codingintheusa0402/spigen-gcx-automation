@@ -165,8 +165,9 @@ function backfillMCFFees() {
   var euMap = fetchFeeMap('EU');
   var feMap = hasJP ? fetchFeeMap('FE') : {};
 
-  // Write fees
+  // Write fees — track unmatched rows for displayableOrderId fallback
   var written = 0, notSettled = 0;
+  var unfilledRows = [];
 
   pending.forEach(function(r) {
     var primaryMap   = r.isJP ? feMap : euMap;
@@ -175,16 +176,49 @@ function backfillMCFFees() {
             : secondaryMap[r.orderId] !== undefined ? secondaryMap[r.orderId]
             : null;
 
-    var cell = sheet.getRange(BF_START_ROW + r.i, BF_COL_FEE);
     if (fee !== null) {
-      cell.setValue(fee);
+      sheet.getRange(BF_START_ROW + r.i, BF_COL_FEE).setValue(fee);
       Logger.log('Row %s (%s): fee = %s', BF_START_ROW + r.i, r.orderId, fee);
       written++;
     } else {
-      Logger.log('Row %s (%s): not yet settled', BF_START_ROW + r.i, r.orderId);
-      notSettled++;
+      unfilledRows.push(r);
     }
   });
+
+  // Fallback: some MCF orders settle in Finances API under displayableOrderId
+  // (e.g. when the MCF order is linked to an Amazon marketplace order).
+  // Call getFulfillmentOrderRaw per unmatched row to resolve the alternate ID.
+  if (unfilledRows.length) {
+    Logger.log('backfillMCFFees: %s rows unmatched — trying displayableOrderId fallback', unfilledRows.length);
+    unfilledRows.forEach(function(r) {
+      var resolved = false;
+      try {
+        var ep       = r.isJP ? 'FE' : 'EU';
+        var foResult = getFulfillmentOrderRaw(r.orderId, ep);
+        var dispId   = ((foResult.fulfillmentOrder || {}).displayableOrderId || '').trim();
+        if (dispId && dispId !== r.orderId) {
+          var primaryMap   = r.isJP ? feMap : euMap;
+          var secondaryMap = r.isJP ? euMap : feMap;
+          var fee2 = primaryMap[dispId]   !== undefined ? primaryMap[dispId]
+                   : secondaryMap[dispId] !== undefined ? secondaryMap[dispId]
+                   : null;
+          if (fee2 !== null) {
+            sheet.getRange(BF_START_ROW + r.i, BF_COL_FEE).setValue(fee2);
+            Logger.log('Row %s (%s → %s): fee = %s via displayableOrderId', BF_START_ROW + r.i, r.orderId, dispId, fee2);
+            written++;
+            resolved = true;
+          }
+        }
+      } catch (e) {
+        Logger.log('Row %s (%s): fallback error: %s', BF_START_ROW + r.i, r.orderId, e.message || e);
+      }
+      if (!resolved) {
+        Logger.log('Row %s (%s): not yet settled', BF_START_ROW + r.i, r.orderId);
+        notSettled++;
+      }
+      Utilities.sleep(400);
+    });
+  }
 
   Logger.log('backfillMCFFees done — written: %s, not settled: %s', written, notSettled);
 }
