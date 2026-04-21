@@ -64,9 +64,13 @@ function backfillTrackingNumbers() {
 
 /**
  * Writes MCF fulfillment fees as static values into BF_COL_FEE (col Y).
+ *
+ * Batch approach: fetches all financial events in 60-day windows (EU + FE endpoints)
+ * then matches every pending order ID against the result map — far fewer API calls
+ * than the previous per-order approach.
+ *
  * - Skips rows where fee is already filled (never overwrites a value).
- * - Uses P col (sent date) as PostedAfter to skip the fulfillment order lookup.
- * - On 429, writes a retry marker so the next run picks it up again.
+ * - Rows marked RETRY or ERR are retried on the next run.
  * Run manually or set a daily time-based trigger.
  */
 function backfillMCFFees() {
@@ -77,69 +81,112 @@ function backfillMCFFees() {
   var lastRow = sheet.getLastRow();
   if (lastRow < BF_START_ROW) return;
 
-  var numRows  = lastRow - BF_START_ROW + 1;
+  var numRows   = lastRow - BF_START_ROW + 1;
   var orderIds  = sheet.getRange(BF_START_ROW, BF_COL_ORDER,  numRows, 1).getValues();
   var sentDates = sheet.getRange(BF_START_ROW, BF_COL_SENT,   numRows, 1).getValues();
   var regions   = sheet.getRange(BF_START_ROW, BF_COL_REGION, numRows, 1).getValues();
   var existing  = sheet.getRange(BF_START_ROW, BF_COL_FEE,    numRows, 1).getValues();
 
-  var written = 0, skipped = 0, pending = 0;
+  // Collect rows that still need a fee
+  var pending = [];
+  var hasJP   = false;
+  var minDate = null;
 
   for (var i = 0; i < numRows; i++) {
-    var orderId  = String(orderIds[i][0]  || '').trim();
-    var sentDate = String(sentDates[i][0] || '').trim();
+    var orderId = String(orderIds[i][0] || '').trim();
     if (!orderId) continue;
 
-    var current = existing[i][0];
-    // Already has a numeric fee — never overwrite.
-    if (current !== '' && current !== null && !_isErrorValue(String(current))) {
-      skipped++;
-      continue;
+    var curStr = String(existing[i][0] === null || existing[i][0] === undefined ? '' : existing[i][0]).trim();
+    // Skip rows that already have a valid numeric fee
+    if (curStr !== '' && curStr !== 'RETRY' && !_isErrorValue(curStr)) continue;
+
+    var sentDate = String(sentDates[i][0] || '').trim();
+    var isJP     = String(regions[i][0]   || '').trim().toUpperCase() === 'JP';
+    if (isJP) hasJP = true;
+
+    if (sentDate) {
+      var d = new Date(sentDate);
+      if (!minDate || d < minDate) minDate = d;
     }
 
-    var isJP      = String(regions[i][0] || '').trim().toUpperCase() === 'JP';
-    var endpoints = isJP ? ['FE', 'EU'] : ['EU', 'FE'];
-    var fee = null;
-    var lastErr = null;
-
-    for (var e = 0; e < endpoints.length; e++) {
-      try {
-        fee = _fetchMcfFeeFinancesApi(orderId, endpoints[e], sentDate || null);
-        lastErr = null;
-        break;
-      } catch (err) {
-        lastErr = err;
-        if (_isRetryableRegionMismatchError(err) || _isNoOrderInfoError(err)) continue;
-        break;
-      }
-    }
-
-    var cell = sheet.getRange(BF_START_ROW + i, BF_COL_FEE);
-
-    if (lastErr) {
-      if (_isRateLimit429(lastErr)) {
-        // Write retry marker — next run will retry this row.
-        cell.setValue('RETRY');
-        Logger.log('Row ' + (BF_START_ROW + i) + ': 429 — marked RETRY');
-      } else {
-        cell.setValue('ERR: ' + (lastErr.message || lastErr));
-        Logger.log('Row ' + (BF_START_ROW + i) + ': ERR — ' + (lastErr.message || lastErr));
-      }
-      pending++;
-    } else if (fee !== '' && fee !== null) {
-      cell.setValue(fee);
-      Logger.log('Row ' + (BF_START_ROW + i) + ': fee = ' + fee);
-      written++;
-    } else {
-      // Not yet settled — leave blank, next run retries.
-      Logger.log('Row ' + (BF_START_ROW + i) + ': not yet settled, skipping');
-      pending++;
-    }
-
-    Utilities.sleep(400); // stay under SP-API rate limit
+    pending.push({ i: i, orderId: orderId, sentDate: sentDate, isJP: isJP });
   }
 
-  Logger.log('backfillMCFFees done — written: ' + written + ', pending/unsettled: ' + pending + ', already filled: ' + skipped);
+  if (!pending.length) {
+    Logger.log('backfillMCFFees: nothing to process');
+    return;
+  }
+
+  var now = new Date(Date.now() - 5 * 60 * 1000); // 5-min buffer for clock drift
+  if (!minDate) minDate = new Date(now.getTime() - 180 * 24 * 3600 * 1000); // fallback: 180 days
+
+  Logger.log('backfillMCFFees: %s rows pending, window %s → now', pending.length, minDate.toISOString().slice(0, 10));
+
+  // Fetch all financial events in 60-day windows for one endpoint
+  function fetchFeeMap(ep) {
+    var feeMap      = {};
+    var windowStart = new Date(minDate);
+
+    while (windowStart < now) {
+      var windowEnd = new Date(windowStart);
+      windowEnd.setDate(windowEnd.getDate() + 60);
+      if (windowEnd > now) windowEnd = now;
+      if (windowStart >= windowEnd) break;
+
+      try {
+        var chunk = _buildFeeMapForWindow(ep, windowStart, windowEnd);
+        var keys  = Object.keys(chunk);
+        keys.forEach(function(k) { feeMap[k] = chunk[k]; });
+        Logger.log('  [%s] %s – %s: %s orders found', ep,
+          windowStart.toISOString().slice(0, 10), windowEnd.toISOString().slice(0, 10), keys.length);
+      } catch (e) {
+        if (_isRateLimit429(e)) {
+          Logger.log('  [%s] 429 — sleeping 15 s, retrying window', ep);
+          Utilities.sleep(15000);
+          try {
+            var chunk2 = _buildFeeMapForWindow(ep, windowStart, windowEnd);
+            Object.keys(chunk2).forEach(function(k) { feeMap[k] = chunk2[k]; });
+          } catch (e2) {
+            Logger.log('  [%s] retry also failed: %s', ep, e2.message);
+          }
+        } else {
+          Logger.log('  [%s] window error (%s): %s', ep, windowStart.toISOString().slice(0, 10), e.message);
+        }
+      }
+
+      windowStart = new Date(windowEnd);
+      windowStart.setDate(windowStart.getDate() + 1);
+      Utilities.sleep(500); // stay under SP-API rate limit between windows
+    }
+
+    return feeMap;
+  }
+
+  var euMap = fetchFeeMap('EU');
+  var feMap = hasJP ? fetchFeeMap('FE') : {};
+
+  // Write fees
+  var written = 0, notSettled = 0;
+
+  pending.forEach(function(r) {
+    var primaryMap   = r.isJP ? feMap : euMap;
+    var secondaryMap = r.isJP ? euMap : feMap;
+    var fee = primaryMap[r.orderId]   !== undefined ? primaryMap[r.orderId]
+            : secondaryMap[r.orderId] !== undefined ? secondaryMap[r.orderId]
+            : null;
+
+    var cell = sheet.getRange(BF_START_ROW + r.i, BF_COL_FEE);
+    if (fee !== null) {
+      cell.setValue(fee);
+      Logger.log('Row %s (%s): fee = %s', BF_START_ROW + r.i, r.orderId, fee);
+      written++;
+    } else {
+      Logger.log('Row %s (%s): not yet settled', BF_START_ROW + r.i, r.orderId);
+      notSettled++;
+    }
+  });
+
+  Logger.log('backfillMCFFees done — written: %s, not settled: %s', written, notSettled);
 }
 
 function onEdit_mcf(e) {

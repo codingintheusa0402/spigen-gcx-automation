@@ -88,11 +88,13 @@ Set these in **Extensions → Apps Script → Project Settings → Script Proper
 ### `backfillMCFFees()`
 Writes MCF fulfillment fees as **static values** into col Y (`Transportation Fee`). Use this instead of `=MCFFee(...)` formulas — bulk formula calls queue indefinitely and ARRAYFORMULA is not supported for API-calling functions.
 
-- Reads col Q (order ID) and col P (sent date) from row 4 down
-- Skips rows that already have a fee value (never overwrites)
-- On 429: writes `RETRY` marker — next run picks it up again
+**Batch fetch approach** (fast): finds the earliest sent date across all pending rows, then fetches all Finances API events in 60-day windows for EU and FE endpoints — typically 2–3 API calls total regardless of how many pending rows there are.
+
+- Reads col Q (order ID), col P (sent date), col B (region) from row 4 down
+- Skips rows that already have a valid fee value (never overwrites)
+- Rows marked `RETRY` or `ERR:` are retried on the next run
+- On 429 during a window fetch: sleeps 15s and retries once
 - On unsettled orders: leaves blank — next run retries
-- 400ms sleep between rows to stay under SP-API rate limits
 
 ```javascript
 // Run once manually in GAS editor, or set a daily time-based trigger:

@@ -613,6 +613,52 @@ function _isMcfFeeType(feeType) {
 }
 
 /**
+ * Fetches ALL ShipmentEvent financial events for a single date window on one endpoint.
+ * Returns a plain object mapping SellerOrderId → fee (absolute value).
+ * Used by backfillMCFFees() to build a bulk fee map instead of one call per order.
+ */
+function _buildFeeMapForWindow(ep, postedAfter, postedBefore) {
+  var feeMap    = {};
+  var nextToken = null;
+  var maxPages  = 20;
+  var page      = 0;
+
+  do {
+    var qs = 'PostedAfter='   + encodeURIComponent(postedAfter.toISOString()) +
+             '&PostedBefore=' + encodeURIComponent(postedBefore.toISOString()) +
+             '&MaxResultsPerPage=100';
+    if (nextToken) qs += '&NextToken=' + encodeURIComponent(nextToken);
+
+    var res      = spapiFetchWithRetry('GET', '/finances/v0/financialEvents', { queryString: qs, endpoint: ep }, 3, 5000);
+    var payload  = res.payload || res;
+    nextToken    = payload.NextToken || null;
+    var shipments = (payload.FinancialEvents || {}).ShipmentEventList || [];
+
+    for (var i = 0; i < shipments.length; i++) {
+      var ev  = shipments[i];
+      var sid = String(ev.SellerOrderId || '').trim();
+      if (!sid) continue;
+
+      var total = 0;
+      (ev.ShipmentFeeList || []).forEach(function(f) {
+        if (_isMcfFeeType(f.FeeType)) total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0);
+      });
+      (ev.ShipmentItemList || []).forEach(function(item) {
+        (item.ItemFeeList || []).forEach(function(f) {
+          if (_isMcfFeeType(f.FeeType)) total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0);
+        });
+      });
+
+      if (total !== 0) feeMap[sid] = Math.abs(total);
+    }
+
+    page++;
+  } while (nextToken && page < maxPages);
+
+  return feeMap;
+}
+
+/**
  * Debug: shows SellerOrderIds found in Finances API around this order's receivedDate.
  * Use this to diagnose why MCFFee("FinancesAPI", orderId) returns blank.
  * @customfunction
