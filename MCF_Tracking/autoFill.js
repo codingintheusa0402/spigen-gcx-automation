@@ -3,9 +3,11 @@
 var BF_SHEET_NAME  = 'MCF 발송 로그';
 var BF_START_ROW   = 4;    // first data row (skip headers)
 var BF_COL_REGION  = 2;    // B — "JP" triggers FE-first, anything else EU-first
-var BF_COL_ORDER   = 17;   // Q — sellerFulfillmentOrderId passed to AMZTK
-var BF_COL_RESULT  = 26;   // Z — write static tracking number here
+var BF_COL_ORDER   = 17;   // Q — sellerFulfillmentOrderId
+var BF_COL_SENT    = 16;   // P — MCF sent date (yyyy-mm-dd)
+var BF_COL_RESULT  = 26;   // Z — static tracking number
                             //     replace =AMZTK(Q…) formula with =IF(Z…="","",HYPERLINK(…Z…,Z…))
+var BF_COL_FEE     = 25;   // Y — Transportation Fee (€, ¥, £) written by backfillMCFFees()
 
 /**
  * Writes tracking numbers as static values into BF_COL_RESULT.
@@ -58,6 +60,86 @@ function backfillTrackingNumbers() {
 
     Utilities.sleep(400); // stay under SP-API rate limit
   }
+}
+
+/**
+ * Writes MCF fulfillment fees as static values into BF_COL_FEE (col Y).
+ * - Skips rows where fee is already filled (never overwrites a value).
+ * - Uses P col (sent date) as PostedAfter to skip the fulfillment order lookup.
+ * - On 429, writes a retry marker so the next run picks it up again.
+ * Run manually or set a daily time-based trigger.
+ */
+function backfillMCFFees() {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(BF_SHEET_NAME);
+  if (!sheet) throw new Error('Sheet not found: ' + BF_SHEET_NAME);
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < BF_START_ROW) return;
+
+  var numRows  = lastRow - BF_START_ROW + 1;
+  var orderIds  = sheet.getRange(BF_START_ROW, BF_COL_ORDER,  numRows, 1).getValues();
+  var sentDates = sheet.getRange(BF_START_ROW, BF_COL_SENT,   numRows, 1).getValues();
+  var regions   = sheet.getRange(BF_START_ROW, BF_COL_REGION, numRows, 1).getValues();
+  var existing  = sheet.getRange(BF_START_ROW, BF_COL_FEE,    numRows, 1).getValues();
+
+  var written = 0, skipped = 0, pending = 0;
+
+  for (var i = 0; i < numRows; i++) {
+    var orderId  = String(orderIds[i][0]  || '').trim();
+    var sentDate = String(sentDates[i][0] || '').trim();
+    if (!orderId) continue;
+
+    var current = existing[i][0];
+    // Already has a numeric fee — never overwrite.
+    if (current !== '' && current !== null && !_isErrorValue(String(current))) {
+      skipped++;
+      continue;
+    }
+
+    var isJP      = String(regions[i][0] || '').trim().toUpperCase() === 'JP';
+    var endpoints = isJP ? ['FE', 'EU'] : ['EU', 'FE'];
+    var fee = null;
+    var lastErr = null;
+
+    for (var e = 0; e < endpoints.length; e++) {
+      try {
+        fee = _fetchMcfFeeFinancesApi(orderId, endpoints[e], sentDate || null);
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (_isRetryableRegionMismatchError(err) || _isNoOrderInfoError(err)) continue;
+        break;
+      }
+    }
+
+    var cell = sheet.getRange(BF_START_ROW + i, BF_COL_FEE);
+
+    if (lastErr) {
+      if (_isRateLimit429(lastErr)) {
+        // Write retry marker — next run will retry this row.
+        cell.setValue('RETRY');
+        Logger.log('Row ' + (BF_START_ROW + i) + ': 429 — marked RETRY');
+      } else {
+        cell.setValue('ERR: ' + (lastErr.message || lastErr));
+        Logger.log('Row ' + (BF_START_ROW + i) + ': ERR — ' + (lastErr.message || lastErr));
+      }
+      pending++;
+    } else if (fee !== '' && fee !== null) {
+      cell.setValue(fee);
+      Logger.log('Row ' + (BF_START_ROW + i) + ': fee = ' + fee);
+      written++;
+    } else {
+      // Not yet settled — leave blank, next run retries.
+      Logger.log('Row ' + (BF_START_ROW + i) + ': not yet settled, skipping');
+      pending++;
+    }
+
+    Utilities.sleep(400); // stay under SP-API rate limit
+  }
+
+  Logger.log('backfillMCFFees done — written: ' + written + ', pending/unsettled: ' + pending + ', already filled: ' + skipped);
 }
 
 function onEdit_mcf(e) {

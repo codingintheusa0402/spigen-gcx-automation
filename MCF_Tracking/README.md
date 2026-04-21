@@ -11,8 +11,8 @@ Google Apps Script project for Spigen GCX — Multi-Channel Fulfillment (MCF) or
 
 | File | Purpose |
 |------|---------|
-| `sp-api.js` | SP-API auth (LWA + AWS SigV4), core fetch, retry logic, and all custom sheet formulas (`AMZTK`, `AMZTK_JP`, `MCFFee`, `MCFFee_JP`, `getMcfStockByAsin`) |
-| `autoFill.js` | `onEdit` trigger — auto-fills dates and status columns on the `MCF 발송 로그` sheet based on cell edits |
+| `sp-api.js` | SP-API auth (LWA + AWS SigV4), core fetch, retry logic, and all custom sheet formulas (`AMZTK`, `AMZTK_JP`, `MCFFee`, `MCFFee_JP`, `getMcfStockByAsin`, `MCFFeeDebug`) |
+| `autoFill.js` | `onEdit` trigger, `backfillTrackingNumbers()`, and `backfillMCFFees()` — batch server-side fee/tracking writes to col Y/Z |
 | `main.js` | `MCFReporter` — daily Google Chat card alert listing rows missing a tracking number |
 | `MCFGen.js` | (Archived / commented out) MCF order creation and stock-check helpers via SP-API |
 | `triggerGen.js` | `triggerGen()` — sets weekday 9 AM KST time-based triggers for `MCFReporter`; `triggerTester()` schedules a test run 1 minute out |
@@ -29,8 +29,8 @@ Returns the tracking number for an EU MCF order. Tries EU endpoint first, falls 
 ### `=AMZTK_JP(orderId)`
 Same as `AMZTK` but tries FE (Japan/AU/SG) first.
 
-### `=MCFFee(method, orderId)`
-Returns the MCF fulfillment fee for an existing order. Accepts two methods:
+### `=MCFFee(method, orderId, sentDate)`
+Returns the MCF fulfillment fee for an existing order. **For bulk use, prefer `backfillMCFFees()` over this formula** — ARRAYFORMULA is not supported and many simultaneous formula calls will queue indefinitely.
 
 | method | Source | Timing | Accuracy |
 |--------|--------|--------|----------|
@@ -38,22 +38,22 @@ Returns the MCF fulfillment fee for an existing order. Accepts two methods:
 | `"FinancesAPI"` | `listFinancialEvents` SP-API | Available ~days after shipment settles | Actual charged amount |
 
 ```
-=IF(Q2<>"", MCFFee("FinancesAPI", Q2), "")
-=IF(Q2<>"", MCFFee("getFulfillmentPreview", Q2), "")
+=IF(Q2<>"", MCFFee("FinancesAPI", Q2, P2), "")
 ```
 
+- `sentDate` (optional, col P): pass the yyyy-mm-dd sent date to skip the fulfillment order lookup and use it directly as `PostedAfter`. Faster and more reliable for recent orders.
 - `FinancesAPI`: searches `ShipmentEventList` for `SellerOrderId` matching the order, sums all FBA/fulfillment fee components. Returns `''` until the order settles (retries automatically on next recalculation).
-- `getFulfillmentPreview`: calls `getFulfillmentOrder` to get destination address + items, then calls `getFulfillmentPreview` with `shippingSpeedCategories: ["Expedited"]` and sums all fee components.
+- On 429 QuotaExceeded: returns blank and retries after 90 seconds automatically.
 - Tries EU endpoint first, falls back to FE.
 - Required SP-API roles: **Amazon Fulfillment** (both methods) + **Finance and Accounting** (`FinancesAPI` method).
 
-### `=MCFFee_JP(method, orderId)`
+### `=MCFFee_JP(method, orderId, sentDate)`
 Same as `MCFFee` but tries FE (Japan/AU/SG) first.
 
 ### `getMcfStockByAsin(asin, marketplaceId)`
 Returns available FBA inventory count for a given ASIN and marketplace ID. Used internally by `autoFill.js`.
 
-> **Cache TTL:** Found values (tracking number or fee) → 6 hours. Empty/not-yet-settled → 10 minutes (retried). Errors (429, transient) → not cached, retried on next recalculation. Permanent errors (403) → 6 hours.
+> **Cache TTL:** Found values (tracking number or fee) → 6 hours. Empty/not-yet-settled → 10 minutes (retried). 429 QuotaExceeded → 90 seconds (auto-retry). Permanent errors (403) → 6 hours.
 
 ---
 
@@ -80,6 +80,27 @@ Set these in **Extensions → Apps Script → Project Settings → Script Proper
 **Required SP-API roles:**
 - `Amazon Fulfillment` — tracking lookup (`AMZTK`), stock lookup, `MCFFee` (both methods)
 - `Finance and Accounting` — `MCFFee("FinancesAPI", ...)` only
+
+---
+
+## Backfill Functions (`autoFill.js`)
+
+### `backfillMCFFees()`
+Writes MCF fulfillment fees as **static values** into col Y (`Transportation Fee`). Use this instead of `=MCFFee(...)` formulas — bulk formula calls queue indefinitely and ARRAYFORMULA is not supported for API-calling functions.
+
+- Reads col Q (order ID) and col P (sent date) from row 4 down
+- Skips rows that already have a fee value (never overwrites)
+- On 429: writes `RETRY` marker — next run picks it up again
+- On unsettled orders: leaves blank — next run retries
+- 400ms sleep between rows to stay under SP-API rate limits
+
+```javascript
+// Run once manually in GAS editor, or set a daily time-based trigger:
+backfillMCFFees()
+```
+
+### `backfillTrackingNumbers()`
+Same pattern for tracking numbers → writes static values into col Z.
 
 ---
 
