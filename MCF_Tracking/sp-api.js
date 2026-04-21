@@ -548,8 +548,8 @@ function _fetchMcfFeeFinancesApi(orderId, ep, sentDate) {
     postedBefore.setDate(postedBefore.getDate() + 60);
   }
 
-  var _now = new Date();
-  if (postedBefore > _now) postedBefore = _now; // cap to now — API rejects future dates
+  var _now = new Date(Date.now() - 5 * 60 * 1000); // 5-min buffer for GAS-Amazon clock drift
+  if (postedBefore > _now) postedBefore = _now; // cap — API rejects dates in the future
 
   // Step 2: page through financial events looking for this order
   var nextToken = null;
@@ -640,8 +640,8 @@ function MCFFeeDebug(orderId, sentDate) {
       dateSource = 'receivedDate (API): ' + fo.receivedDate;
     }
 
-    var now = new Date();
-    if (postedBefore > now) postedBefore = now; // cap to now — API rejects future dates
+    var now = new Date(Date.now() - 5 * 60 * 1000); // 5-min buffer for GAS-Amazon clock drift
+    if (postedBefore > now) postedBefore = now; // cap — API rejects dates in the future
 
     var rows = [['SellerOrderId_in_API', 'Input_orderId', 'Exact_match', 'FeeTypes', 'Total']];
     var qs = 'PostedAfter='   + encodeURIComponent(postedAfter.toISOString()) +
