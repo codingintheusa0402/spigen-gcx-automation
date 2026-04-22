@@ -11,15 +11,19 @@ function _writeTimestampToUsSheet_() {
     if (!sheet) { Logger.log('_writeTimestampToUsSheet_: US sheet not found'); return; }
 
     const lastCol = sheet.getLastColumn();
-    if (lastCol < 1) return;
-    const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-    const colIdx = headers.indexOf('Timestamp'); // 0-based
-    if (colIdx === -1) { Logger.log('_writeTimestampToUsSheet_: Timestamp header not found'); return; }
-
     const tz = (typeof CONFIG !== 'undefined' && CONFIG.timezone) ? CONFIG.timezone : 'Asia/Seoul';
     const now = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm:ss');
-    sheet.getRange(2, colIdx + 1).setValue(now);
-    Logger.log('_writeTimestampToUsSheet_: wrote "%s" to US col %s (row 2)', now, colIdx + 1);
+
+    // Find Timestamp col by header (case-insensitive, trimmed); fall back to col J (10)
+    let col = 10;
+    if (lastCol >= 1) {
+      const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+      const idx = headers.findIndex(h => String(h).trim().toLowerCase() === 'timestamp');
+      if (idx !== -1) col = idx + 1;
+    }
+
+    sheet.getRange(2, col).setValue(now);
+    Logger.log('_writeTimestampToUsSheet_: wrote "%s" to US col %s (row 2)', now, col);
   } catch (e) {
     Logger.log('_writeTimestampToUsSheet_ failed: ' + (e && e.message ? e.message : e));
   }

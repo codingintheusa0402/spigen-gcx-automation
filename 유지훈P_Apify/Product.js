@@ -194,6 +194,8 @@ function pollProductRunAndWrite() {
       Logger.log('Chat notify failed: ' + e);
     }
 
+    _writeTimestampToUsSheet_();
+
     _cleanupProductState_();
     _deleteTriggersByHandler_('pollProductRunAndWrite');
     return;
