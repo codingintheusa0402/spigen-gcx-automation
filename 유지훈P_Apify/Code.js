@@ -115,6 +115,8 @@ function pollApifyRunAndWrite() {
     ss.toast(msg, 'Done', 5);
     Logger.log(msg);
 
+    _writeTimestampToUsSheet_();
+
     try {
       const tz = CONFIG.timezone || Session.getScriptTimeZone() || 'Asia/Seoul';
       const when = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm:ss Z');
