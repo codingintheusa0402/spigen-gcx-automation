@@ -450,42 +450,12 @@ function MCFFee(method, orderId, sentDate) {
   method = String(method || 'getFulfillmentPreview').trim();
   var dateKey = sentDate ? '_' + String(sentDate).trim() : '';
 
+  // Cache-read-only: 280+ simultaneous custom-function calls overwhelm the GAS execution
+  // queue. Run backfillMCFFees() from the Apps Script editor to populate fees in bulk.
   var cache = CacheService.getScriptCache();
   var key = 'MCFFEE_' + method + '_' + String(orderId) + dateKey;
   var cached = cache.get(key);
   if (cached !== null) return cached === '__EMPTY__' ? '' : parseFloat(cached);
-
-  // GAS custom functions have a 30-second limit. Abort if we're past 25 seconds to avoid
-  // hanging cells. Cache '' for 10 min so the cell retries on next recalculation.
-  var deadline = Date.now() + 25000;
-
-  var endpoints = ['EU', 'FE'];
-  var lastErr = null;
-
-  for (var i = 0; i < endpoints.length; i++) {
-    if (Date.now() > deadline) { cache.put(key, '__EMPTY__', 600); return ''; }
-    try {
-      var fee = (method === 'FinancesAPI')
-        ? _fetchMcfFeeFinancesApi(String(orderId), endpoints[i], sentDate, 3)
-        : _fetchMcfFeePreview(String(orderId), endpoints[i]);
-      // Fee found → stable, cache 6h.  Not yet settled / no preview → retry in 1h.
-      cache.put(key, fee === '' ? '__EMPTY__' : String(fee), fee === '' ? 3600 : 21600);
-      return fee;
-    } catch (err) {
-      lastErr = err;
-      if (_isRetryableRegionMismatchError(err) || _isNoOrderInfoError(err)) continue;
-      if (_isUnauthorizedError(err)) { cache.put(key, '__EMPTY__', 21600); return ''; }
-      if (_isRateLimit429(err))      { cache.put(key, '__EMPTY__', 90);    return ''; } // retry after 90s
-      throw err;
-    }
-  }
-
-  if (lastErr) {
-    if (_isUnauthorizedError(lastErr)) { cache.put(key, '__EMPTY__', 21600); return ''; }
-    if (_isNoOrderInfoError(lastErr))  { cache.put(key, '__EMPTY__', 21600); return ''; }
-    if (_isRateLimit429(lastErr))      { cache.put(key, '__EMPTY__', 90);    return ''; } // retry after 90s
-    return 'ERR: ' + (lastErr.message || lastErr);
-  }
   return '';
 }
 
@@ -508,34 +478,6 @@ function MCFFee_JP(method, orderId, sentDate) {
   var key = 'MCFFEE_JP_' + method + '_' + String(orderId) + dateKey;
   var cached = cache.get(key);
   if (cached !== null) return cached === '__EMPTY__' ? '' : parseFloat(cached);
-
-  var deadline = Date.now() + 25000;
-  var endpoints = ['FE', 'EU'];
-  var lastErr = null;
-
-  for (var i = 0; i < endpoints.length; i++) {
-    if (Date.now() > deadline) { cache.put(key, '__EMPTY__', 600); return ''; }
-    try {
-      var fee = (method === 'FinancesAPI')
-        ? _fetchMcfFeeFinancesApi(String(orderId), endpoints[i], sentDate, 3)
-        : _fetchMcfFeePreview(String(orderId), endpoints[i]);
-      cache.put(key, fee === '' ? '__EMPTY__' : String(fee), fee === '' ? 3600 : 21600);
-      return fee;
-    } catch (err) {
-      lastErr = err;
-      if (_isRetryableRegionMismatchError(err) || _isNoOrderInfoError(err)) continue;
-      if (_isUnauthorizedError(err)) { cache.put(key, '__EMPTY__', 21600); return ''; }
-      if (_isRateLimit429(err))      { cache.put(key, '__EMPTY__', 90);    return ''; } // retry after 90s
-      throw err;
-    }
-  }
-
-  if (lastErr) {
-    if (_isUnauthorizedError(lastErr)) { cache.put(key, '__EMPTY__', 21600); return ''; }
-    if (_isNoOrderInfoError(lastErr))  { cache.put(key, '__EMPTY__', 21600); return ''; }
-    if (_isRateLimit429(lastErr))      { cache.put(key, '__EMPTY__', 90);    return ''; } // retry after 90s
-    return 'ERR: ' + (lastErr.message || lastErr);
-  }
   return '';
 }
 
@@ -619,11 +561,11 @@ function _isMcfFeeType(feeType) {
  * Returns a plain object mapping SellerOrderId → fee (absolute value).
  * Used by backfillMCFFees() to build a bulk fee map instead of one call per order.
  */
-function _buildFeeMapForWindow(ep, postedAfter, postedBefore) {
+function _buildFeeMapForWindow(ep, postedAfter, postedBefore, maxPages) {
   var feeMap    = {};
   var nextToken = null;
-  var maxPages  = 20;
-  var page      = 0;
+  maxPages = maxPages || 20;
+  var page  = 0;
 
   do {
     var qs = 'PostedAfter='   + encodeURIComponent(postedAfter.toISOString()) +
@@ -831,4 +773,125 @@ function _fetchMcfFeePreview(orderId, ep) {
     total += parseFloat(preview.estimatedFees[j].amount.value || 0);
   }
   return total;
+}
+
+/**
+ * Bulk-populates MCFFee() cells on the active sheet.
+ * Run from the Apps Script editor (Run ▶ backfillMCFFees) instead of waiting for
+ * 280+ formula cells to evaluate simultaneously — that floods GAS's execution queue.
+ *
+ * What it does:
+ *   1. Auto-detects the column containing MCFFee() formulas.
+ *   2. Groups unfilled rows by monthly Finances API window (one bulk fetch per month).
+ *   3. Writes static fee values to the cells (replaces the formula — fees never change).
+ *   4. Also stores results in CacheService so any remaining formula cells return instantly.
+ *
+ * After running, the 280 cells will show static values and never recalculate again.
+ * For newly added rows, run backfillMCFFees() again — it skips rows that already have a value.
+ */
+function backfillMCFFees() {
+  var sheet   = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow < 2) { Logger.log('No data rows.'); return; }
+
+  var allFormulas = sheet.getRange(1, 1, lastRow, lastCol).getFormulas();
+  var allValues   = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+
+  // ── Detect fee column (first column with MCFFee( in rows 2–11) ──────────────
+  var feeColIdx = -1;
+  outerLoop:
+  for (var c = 0; c < lastCol; c++) {
+    for (var r = 1; r < Math.min(11, lastRow); r++) {
+      if ((allFormulas[r][c] || '').toUpperCase().indexOf('MCFFEE(') >= 0) {
+        feeColIdx = c; break outerLoop;
+      }
+    }
+  }
+  if (feeColIdx < 0) { Logger.log('MCFFee() formula column not found.'); return; }
+
+  // Columns P=15(idx) and Q=16(idx) are hardcoded to match the sheet layout.
+  var sentDateColIdx = 15; // P
+  var orderIdColIdx  = 16; // Q
+
+  Logger.log('feeCol=' + _bfColLetter(feeColIdx + 1) +
+             '  orderIdCol=Q  sentDateCol=P  sheet=' + sheet.getName());
+
+  // ── Collect rows that still need a fee ──────────────────────────────────────
+  var orders = [];
+  for (var r = 1; r < lastRow; r++) {
+    var orderId  = String(allValues[r][orderIdColIdx] || '').trim();
+    if (!orderId) continue;
+    var existing = allValues[r][feeColIdx];
+    if (typeof existing === 'number' && existing > 0) continue;
+    orders.push({ row: r + 1, orderId: orderId, sentDate: allValues[r][sentDateColIdx] });
+  }
+  Logger.log('Rows to fill: ' + orders.length);
+  if (!orders.length) { Logger.log('Nothing to do.'); return; }
+
+  // ── Group by YYYY-MM of sentDate ─────────────────────────────────────────────
+  var byMonth = {}, noDate = [];
+  orders.forEach(function(o) {
+    var d = _parseCellDate(o.sentDate);
+    if (!d || isNaN(d.getTime())) { noDate.push(o); return; }
+    var mk = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+    if (!byMonth[mk]) byMonth[mk] = [];
+    byMonth[mk].push(o);
+  });
+  if (noDate.length) Logger.log('Skipped (no sentDate): ' + noDate.length);
+
+  // ── Fetch fee map per monthly window, write results ──────────────────────────
+  var cache   = CacheService.getScriptCache();
+  var fetched = 0, notSettled = 0;
+  var monthKeys = Object.keys(byMonth).sort();
+
+  for (var mi = 0; mi < monthKeys.length; mi++) {
+    var mk    = monthKeys[mi];
+    var parts = mk.split('-');
+    var yr    = parseInt(parts[0]), mo = parseInt(parts[1]);
+
+    // Window: month start → month end + 45 days (catches late settlements)
+    var after  = new Date(yr, mo - 1, 1);
+    var before = new Date(yr, mo,     1);
+    before.setDate(before.getDate() + 45);
+    var now = new Date();
+    if (before > now) before = now;
+
+    Logger.log('Month ' + (mi + 1) + '/' + monthKeys.length + ': ' + mk +
+               ' (' + byMonth[mk].length + ' orders)');
+
+    // Build a fee map for this window across both endpoints
+    var feeMap = {};
+    ['EU', 'FE'].forEach(function(ep) {
+      try {
+        var m = _buildFeeMapForWindow(ep, after, before, 5);
+        Object.keys(m).forEach(function(k) { if (!feeMap[k]) feeMap[k] = m[k]; });
+      } catch (e) { Logger.log('  ' + ep + ' error: ' + e.message); }
+    });
+
+    // Write matches back to sheet and cache
+    byMonth[mk].forEach(function(o) {
+      var fee = feeMap[o.orderId];
+      if (fee != null) {
+        sheet.getRange(o.row, feeColIdx + 1).setValue(fee);
+        var ck = 'MCFFEE_FinancesAPI_' + o.orderId +
+                 (o.sentDate ? '_' + String(o.sentDate).trim() : '');
+        cache.put(ck, String(fee), 21600);
+        fetched++;
+      } else {
+        notSettled++;
+      }
+    });
+
+    SpreadsheetApp.flush();
+    if (mi < monthKeys.length - 1) Utilities.sleep(500);
+  }
+
+  Logger.log('backfillMCFFees done — written: ' + fetched + ', not yet settled: ' + notSettled);
+}
+
+function _bfColLetter(n) {
+  var s = '';
+  while (n > 0) { var r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
+  return s;
 }
