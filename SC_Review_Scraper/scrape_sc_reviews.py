@@ -158,6 +158,19 @@ async def main():
         print(f"\n  Total reviews collected: {len(all_rows)}")
 
         # ── Step 2: reviewer image enrichment ────────────────────────────
+        # Deduplicate all_rows by Review ID (keep first occurrence) so that
+        # the image fetch counter and CSV row count always agree.
+        seen_ids, unique_rows = set(), []
+        for row in all_rows:
+            rid = row[IDX['Review ID']]
+            if rid and rid not in seen_ids:
+                seen_ids.add(rid)
+                unique_rows.append(row)
+        dupes = len(all_rows) - len(unique_rows)
+        if dupes:
+            print(f"  Removed {dupes} duplicate review(s) → {len(unique_rows)} unique")
+        all_rows = unique_rows
+
         # Navigate to amazon.com — image fetches must be same-origin to
         # include session cookies without triggering CORS/CAPTCHA.
         print("  Switching to amazon.com for image fetching …")
