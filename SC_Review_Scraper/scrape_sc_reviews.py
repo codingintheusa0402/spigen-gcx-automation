@@ -89,39 +89,39 @@ _DOMAINS = {
         "country":     "US",
     },
     "UK": {
-        "sc_base":        "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
-        "marketplace_id": "A1F83G8C2ARO7P",
-        "amazon_home":    "https://www.amazon.co.uk/",
-        "review_url":     "https://www.amazon.co.uk/gp/customer-reviews/",
-        "country":        "UK",
+        "sc_base":         "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
+        "sc_display_name": "United Kingdom",
+        "amazon_home":     "https://www.amazon.co.uk/",
+        "review_url":      "https://www.amazon.co.uk/gp/customer-reviews/",
+        "country":         "UK",
     },
     "DE": {
-        "sc_base":        "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
-        "marketplace_id": "A1PA6795UKMFR9",
-        "amazon_home":    "https://www.amazon.de/",
-        "review_url":     "https://www.amazon.de/gp/customer-reviews/",
-        "country":        "DE",
+        "sc_base":         "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
+        "sc_display_name": "Germany",
+        "amazon_home":     "https://www.amazon.de/",
+        "review_url":      "https://www.amazon.de/gp/customer-reviews/",
+        "country":         "DE",
     },
     "FR": {
-        "sc_base":        "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
-        "marketplace_id": "A13V1IB3VIYZZH",
-        "amazon_home":    "https://www.amazon.fr/",
-        "review_url":     "https://www.amazon.fr/gp/customer-reviews/",
-        "country":        "FR",
+        "sc_base":         "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
+        "sc_display_name": "France",
+        "amazon_home":     "https://www.amazon.fr/",
+        "review_url":      "https://www.amazon.fr/gp/customer-reviews/",
+        "country":         "FR",
     },
     "IT": {
-        "sc_base":        "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
-        "marketplace_id": "APJ6JRA9NG5V4",
-        "amazon_home":    "https://www.amazon.it/",
-        "review_url":     "https://www.amazon.it/gp/customer-reviews/",
-        "country":        "IT",
+        "sc_base":         "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
+        "sc_display_name": "Italy",
+        "amazon_home":     "https://www.amazon.it/",
+        "review_url":      "https://www.amazon.it/gp/customer-reviews/",
+        "country":         "IT",
     },
     "ES": {
-        "sc_base":        "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
-        "marketplace_id": "A1RKKUPIHCS9HS",
-        "amazon_home":    "https://www.amazon.es/",
-        "review_url":     "https://www.amazon.es/gp/customer-reviews/",
-        "country":        "ES",
+        "sc_base":         "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
+        "sc_display_name": "Spain",
+        "amazon_home":     "https://www.amazon.es/",
+        "review_url":      "https://www.amazon.es/gp/customer-reviews/",
+        "country":         "ES",
     },
     "JP": {
         "sc_base":     "https://sellercentral.amazon.co.jp/brand-customer-reviews/",
@@ -303,6 +303,71 @@ def _csv_rewrite(path, headers, rows):
         w.writerows(rows)
 
 
+async def _switch_sc_marketplace(page, display_name, prof):
+    """Switch SC Europe to a specific marketplace via the account switcher dropdown.
+
+    SC Europe uses a Vue-based account+marketplace switcher. The flow is:
+      1. Click .dropdown-account-switcher-header  →  opens account list
+      2. Click the current account item (non-indented)  →  expands marketplace sub-list
+      3. Click the target country item (..-indented[title=display_name])  →  navigates to /home
+      4. Wait for /home to load (session is now set to the new marketplace)
+    """
+    print(f"  Switching SC marketplace → {display_name} ...", end=" ", flush=True)
+    try:
+        # 1. Open the dropdown
+        await page.click('.dropdown-account-switcher-header')
+        await asyncio.sleep(0.8)
+
+        # 2. Try to find the indented target item (may already be visible)
+        target_js = f"""
+        () => {{
+            const items = [...document.querySelectorAll('.dropdown-account-switcher-list-item-indented')];
+            return items.find(el => (el.title || el.textContent.trim()) === '{display_name}') !== undefined;
+        }}
+        """
+        found = await page.evaluate(target_js)
+
+        if not found:
+            # 3. Expand the current account (the one shown in the header global label)
+            await page.evaluate("""
+            () => {
+                const label = document.querySelector('.dropdown-account-switcher-header-label-global');
+                const acctName = label ? label.textContent.trim() : null;
+                if (!acctName) return;
+                const items = [...document.querySelectorAll(
+                    '.dropdown-account-switcher-list-item:not(.dropdown-account-switcher-list-item-indented)'
+                )];
+                const acct = items.find(el => (el.title || el.textContent.trim()) === acctName);
+                if (acct) acct.click();
+            }
+            """)
+            await asyncio.sleep(0.8)
+
+        # 4. Click the target marketplace item
+        clicked = await page.evaluate(f"""
+        () => {{
+            const items = [...document.querySelectorAll('.dropdown-account-switcher-list-item-indented')];
+            const item = items.find(el => (el.title || el.textContent.trim()) === '{display_name}');
+            if (item) {{ item.click(); return true; }}
+            return false;
+        }}
+        """)
+
+        if not clicked:
+            print(f"WARN: '{display_name}' not found in dropdown — scraping with current marketplace")
+            # Close the dropdown by pressing Escape
+            await page.keyboard.press('Escape')
+            return
+
+        # 5. Wait for /home navigation (SC reloads to home after marketplace switch)
+        await page.wait_for_load_state("domcontentloaded")
+        await asyncio.sleep(random.uniform(*prof["read_delay"]))
+        print("done")
+
+    except Exception as e:
+        print(f"WARN: marketplace switch failed ({e}) — scraping with current marketplace")
+
+
 async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, append=False):
     """Scrape one domain end-to-end. Returns (total_rows, total_with_imgs).
 
@@ -315,8 +380,6 @@ async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, app
     extract_js = _make_extract_js(domain, dc["country"])
     fetch_js   = _make_batch_fetch_js(dc["review_url"])
     params     = f"?pageSize=50&stars={STAR_FILTER}"
-    if "marketplace_id" in dc:
-        params += f"&marketplaceId={dc['marketplace_id']}"
     jitter     = prof["fetch_jitter"]
     batch_min  = prof["batch_min"]
     batch_max  = prof["batch_max"]
@@ -325,6 +388,10 @@ async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, app
     print(f"  Domain : {domain}  ({dc['sc_base']})")
     print(f"  Pages  : {PAGES}  |  Stars: {STAR_FILTER}  |  Output: {out_file}")
     print(f"{'═'*60}")
+
+    # Switch SC marketplace via UI dropdown if this domain has a display name
+    if "sc_display_name" in dc:
+        await _switch_sc_marketplace(page, dc["sc_display_name"], prof)
 
     # ── Step 1: scrape pages — write header once, append after each page ──
     if APPEND_CSV or append:
