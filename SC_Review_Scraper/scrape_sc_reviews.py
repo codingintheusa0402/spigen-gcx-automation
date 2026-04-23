@@ -415,14 +415,8 @@ async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, app
         out_rows    = all_rows
 
     # ── Step 6: final rewrite with image data ─────────────────────────────
-    # In append mode (EU group), merge with enriched rows already in the file
-    # from previous sub-countries before rewriting.
-    if append and os.path.exists(out_file):
-        with open(out_file, encoding='utf-8-sig') as f:
-            reader = csv.reader(f)
-            next(reader, None)  # skip header
-            prev_rows = list(reader)
-        out_rows = prev_rows + out_rows
+    # out_rows already contains all rows (previous countries loaded at start +
+    # newly scraped), so no read-back needed even in append mode.
     _csv_rewrite(out_file, out_headers, out_rows)
     print(f"\n  ✓ {domain} done — {total_with_imgs}/{len(all_rows)} with images → {out_file}")
 
