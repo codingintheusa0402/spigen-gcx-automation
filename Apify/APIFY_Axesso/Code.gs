@@ -94,7 +94,7 @@ function pollApifyRunAndWrite() {
 
   Logger.log(`Run status = ${status}, datasetId=${datasetId || '(unknown yet)'}`);
 
-  if (status === 'SUCCEEDED') {
+  if (status === 'SUCCEEDED' || status === 'ABORTED' || status === 'TIMED-OUT') {
     if (!datasetId) {
       Logger.log('Dataset not yet available, will retry.');
       return;
@@ -102,10 +102,21 @@ function pollApifyRunAndWrite() {
 
     // Review scraper: fetch all fields (no field filter)
     const items = _fetchAllDatasetItems(datasetId, token);
+
+    if (items.length === 0) {
+      _cleanupPollState();
+      _deleteRecurringPollers_();
+      const msg = `Apify run ended with status=${status} but dataset is empty. runId=${runId}`;
+      ss.toast(msg, 'Apify', 8);
+      Logger.log(msg);
+      return;
+    }
+
     const { sheet, name: finalSheetName } = _createNewDatedSheet(CONFIG.timezone);
     _overwriteSheet(items, getSpreadsheetId_(), finalSheetName);
 
-    const msg = `Apify: wrote ${items.length} row(s) to "${finalSheetName}" (runId=${runId})`;
+    const partial = status !== 'SUCCEEDED' ? ` [PARTIAL — run ${status}]` : '';
+    const msg = `Apify: wrote ${items.length} row(s) to "${finalSheetName}"${partial} (runId=${runId})`;
     ss.toast(msg, 'Done', 5);
     Logger.log(msg);
 
@@ -116,7 +127,7 @@ function pollApifyRunAndWrite() {
       const excelUrl = _buildExcelExportUrl_(getSpreadsheetId_(), sheet);
 
       const chatText =
-        'Apify Amazon Scraping Completed.\n' +
+        `Apify Amazon Scraping ${status === 'SUCCEEDED' ? 'Completed' : `Partial (${status})`}.\n` +
         `Time: ${when}\n` +
         `Sheet: ${finalSheetName}\n` +
         `Rows: ${items.length}\n` +
@@ -134,10 +145,10 @@ function pollApifyRunAndWrite() {
     return;
   }
 
-  if (status === 'FAILED' || status === 'ABORTED' || status === 'TIMED-OUT') {
+  if (status === 'FAILED') {
     _cleanupPollState();
     _deleteRecurringPollers_();
-    const msg = `Apify run ended with status=${status}. No data written. runId=${runId}`;
+    const msg = `Apify run FAILED. No data written. runId=${runId}`;
     ss.toast(msg, 'Apify Error', 8);
     Logger.log(msg);
     return;
