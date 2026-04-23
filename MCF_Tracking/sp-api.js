@@ -43,6 +43,13 @@ function _resolveLwaProfileKey(endpointKey) {
 
 function getLwaAccessToken(endpointKey) {
   var prof = _resolveLwaProfileKey(endpointKey);
+
+  // Cache LWA tokens for 50 min (tokens last 60 min) to avoid one HTTP call per spapiFetch.
+  var cache = CacheService.getScriptCache();
+  var cacheKey = 'LWA_TOKEN_' + prof;
+  var cached = cache.get(cacheKey);
+  if (cached) return cached;
+
   var clientId, clientSecret, refreshToken;
   if (prof === 'JP') {
     clientId     = _prop('LWA_CLIENT_ID_JP',     _prop('LWA_CLIENT_ID'));
@@ -73,6 +80,7 @@ function getLwaAccessToken(endpointKey) {
   if (resp.getResponseCode() >= 300 || !body.access_token) {
     throw new Error('LWA token fetch failed: ' + resp.getResponseCode() + ' ' + text);
   }
+  cache.put(cacheKey, body.access_token, 3000); // 50 min
   return body.access_token;
 }
 
@@ -447,16 +455,21 @@ function MCFFee(method, orderId, sentDate) {
   var cached = cache.get(key);
   if (cached !== null) return cached === '__EMPTY__' ? '' : parseFloat(cached);
 
+  // GAS custom functions have a 30-second limit. Abort if we're past 25 seconds to avoid
+  // hanging cells. Cache '' for 10 min so the cell retries on next recalculation.
+  var deadline = Date.now() + 25000;
+
   var endpoints = ['EU', 'FE'];
   var lastErr = null;
 
   for (var i = 0; i < endpoints.length; i++) {
+    if (Date.now() > deadline) { cache.put(key, '__EMPTY__', 600); return ''; }
     try {
       var fee = (method === 'FinancesAPI')
-        ? _fetchMcfFeeFinancesApi(String(orderId), endpoints[i], sentDate, 1)
+        ? _fetchMcfFeeFinancesApi(String(orderId), endpoints[i], sentDate, 3)
         : _fetchMcfFeePreview(String(orderId), endpoints[i]);
-      // Fee found → stable, cache 6h.  Not yet settled / no preview → retry in 10min.
-      cache.put(key, fee === '' ? '__EMPTY__' : String(fee), fee === '' ? 600 : 21600);
+      // Fee found → stable, cache 6h.  Not yet settled / no preview → retry in 1h.
+      cache.put(key, fee === '' ? '__EMPTY__' : String(fee), fee === '' ? 3600 : 21600);
       return fee;
     } catch (err) {
       lastErr = err;
@@ -496,15 +509,17 @@ function MCFFee_JP(method, orderId, sentDate) {
   var cached = cache.get(key);
   if (cached !== null) return cached === '__EMPTY__' ? '' : parseFloat(cached);
 
+  var deadline = Date.now() + 25000;
   var endpoints = ['FE', 'EU'];
   var lastErr = null;
 
   for (var i = 0; i < endpoints.length; i++) {
+    if (Date.now() > deadline) { cache.put(key, '__EMPTY__', 600); return ''; }
     try {
       var fee = (method === 'FinancesAPI')
-        ? _fetchMcfFeeFinancesApi(String(orderId), endpoints[i], sentDate, 1)
+        ? _fetchMcfFeeFinancesApi(String(orderId), endpoints[i], sentDate, 3)
         : _fetchMcfFeePreview(String(orderId), endpoints[i]);
-      cache.put(key, fee === '' ? '__EMPTY__' : String(fee), fee === '' ? 600 : 21600);
+      cache.put(key, fee === '' ? '__EMPTY__' : String(fee), fee === '' ? 3600 : 21600);
       return fee;
     } catch (err) {
       lastErr = err;
@@ -709,7 +724,15 @@ function MCFFeeDebug(orderId, sentDate) {
       postedBefore.setDate(postedBefore.getDate() + 90);
       dateSource = 'sentDate (P col): ' + String(sentDate).trim();
     } else {
-      var result = getFulfillmentOrderRaw(String(orderId), 'EU');
+      // Try FBA Outbound API to get sent date. Old/archived orders return 400 here —
+      // in that case, pass sentDate (col P) as the 2nd arg: =MCFFeeDebug(Q3, P3)
+      var foErr = null;
+      var result;
+      try { result = getFulfillmentOrderRaw(String(orderId), 'EU'); } catch (e) { foErr = e; }
+      if (foErr || !result) {
+        return [['FBA Outbound API cannot find this order — pass sentDate as 2nd arg: =MCFFeeDebug(' + String(orderId) + ', P_col)'],
+                ['Error: ' + (foErr ? (foErr.message || foErr) : 'no result')]];
+      }
       var fo = result.fulfillmentOrder || {};
       if (!fo.receivedDate) return [['Order found but no receivedDate — check order ID']];
       postedAfter  = new Date(fo.receivedDate);
