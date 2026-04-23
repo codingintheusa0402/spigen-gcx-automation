@@ -5,7 +5,7 @@ __pycache__/
 .DS_Store
 
 # apify-amazon-dp-scraper is its own separate repo
-Alify/apify-amazon-dp-scraper/
+Apify/apify-amazon-dp-scraper/
 
 # clasp project links — script IDs are environment-specific
 .clasp.json
