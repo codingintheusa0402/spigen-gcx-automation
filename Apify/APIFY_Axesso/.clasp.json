@@ -1,0 +1,4 @@
+{
+  "scriptId": "STALE_DO_NOT_PUSH — this folder shares scriptId with MasterTrigger; pushing from here overwrites masterDailyJob",
+  "rootDir": "."
+}
