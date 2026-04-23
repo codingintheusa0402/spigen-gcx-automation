@@ -453,7 +453,7 @@ function MCFFee(method, orderId, sentDate) {
   for (var i = 0; i < endpoints.length; i++) {
     try {
       var fee = (method === 'FinancesAPI')
-        ? _fetchMcfFeeFinancesApi(String(orderId), endpoints[i], sentDate)
+        ? _fetchMcfFeeFinancesApi(String(orderId), endpoints[i], sentDate, 1)
         : _fetchMcfFeePreview(String(orderId), endpoints[i]);
       // Fee found → stable, cache 6h.  Not yet settled / no preview → retry in 10min.
       cache.put(key, fee === '' ? '__EMPTY__' : String(fee), fee === '' ? 600 : 21600);
@@ -502,7 +502,7 @@ function MCFFee_JP(method, orderId, sentDate) {
   for (var i = 0; i < endpoints.length; i++) {
     try {
       var fee = (method === 'FinancesAPI')
-        ? _fetchMcfFeeFinancesApi(String(orderId), endpoints[i], sentDate)
+        ? _fetchMcfFeeFinancesApi(String(orderId), endpoints[i], sentDate, 1)
         : _fetchMcfFeePreview(String(orderId), endpoints[i]);
       cache.put(key, fee === '' ? '__EMPTY__' : String(fee), fee === '' ? 600 : 21600);
       return fee;
@@ -546,7 +546,7 @@ function _parseCellDate(val) {
   return new Date(s);
 }
 
-function _fetchMcfFeeFinancesApi(orderId, ep, sentDate) {
+function _fetchMcfFeeFinancesApi(orderId, ep, sentDate, maxPages) {
   var postedAfter, postedBefore;
   var foCache = null; // cache getFulfillmentOrderRaw result to avoid a double call in fallback
 
@@ -569,7 +569,7 @@ function _fetchMcfFeeFinancesApi(orderId, ep, sentDate) {
   if (postedBefore > _now) postedBefore = _now; // cap — API rejects dates in the future
 
   // Collect all shipment events once — reused for primary search and displayableOrderId fallback
-  var shipments = _collectShipmentEvents(ep, postedAfter, postedBefore, 5);
+  var shipments = _collectShipmentEvents(ep, postedAfter, postedBefore, maxPages || 5);
 
   // Primary: match by sellerFulfillmentOrderId
   var fee = _sumMcfFeeFromShipments(shipments, orderId);
