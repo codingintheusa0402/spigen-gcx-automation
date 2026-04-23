@@ -127,6 +127,23 @@ HEADERS_TO_INCLUDE = ['ASIN', 'Created 날짜', 'Reviewer', 'Review Ratings',
 
 Full column list: `ASIN` · `Created 날짜` · `사진 유무` · `Reviewer` · `Review Ratings` · `Review Title` · `본문` · `Product Rating` · `Ratings Count` · `Domain Code` · `국가` · `Review Link` · `Image URL` · `Review ID`
 
+### `HEADLESS` / `CHROME_USER_DATA`
+
+Controls whether the browser is visible.
+
+| Value | Behaviour | Use when |
+|-------|-----------|----------|
+| `False` (default) | Connects to your running Chrome via CDP (port 9222). Browser window is visible. | Debugging — watch the scraper navigate in real time |
+| `True` | Launches a headless Chromium using your saved Chrome profile so existing login cookies are reused. No window appears. | Background / automated runs |
+
+> **Headless requirement:** Chrome must be fully closed before running with `HEADLESS = True` — an open Chrome holds a lock on the profile directory that prevents Playwright from using it.
+
+```python
+HEADLESS = False
+CHROME_USER_DATA = os.path.expanduser("~/Library/Application Support/Google/Chrome")
+# Windows: "%LOCALAPPDATA%/Google/Chrome/User Data"
+```
+
 ### `DETECTION_AVOIDANCE`
 
 Controls timing and behavioral patterns to avoid Amazon bot detection.

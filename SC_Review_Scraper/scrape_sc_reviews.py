@@ -46,6 +46,18 @@ DETECTION_AVOIDANCE = "MEDIUM"
 # MEDIUM — randomized delays + scroll simulation (recommended for daily use)
 # HIGH   — aggressive randomization + long delays (safest for large/frequent scrapes)
 
+HEADLESS = False
+# False (default) — connects to your running Chrome via CDP (port 9222).
+#                   Browser window stays visible; ideal for watching and debugging.
+# True            — launches a headless Chromium using your saved Chrome profile so
+#                   existing login sessions/cookies are reused. Chrome must be fully
+#                   closed before running in headless mode (profile lock conflict).
+
+CHROME_USER_DATA = os.path.expanduser("~/Library/Application Support/Google/Chrome")
+# Path to your Chrome user data directory. Used only when HEADLESS = True.
+# Mac default : ~/Library/Application Support/Google/Chrome
+# Windows     : %LOCALAPPDATA%/Google/Chrome/User Data
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # DOMAIN REGISTRY
 # Add new marketplaces here as they are onboarded.
@@ -264,6 +276,7 @@ async def main():
     print(f"  Pages:      {PAGES} (up to {PAGES * 50} reviews)")
     print(f"  Stars:      {STAR_FILTER}")
     print(f"  Avoidance:  {DETECTION_AVOIDANCE}")
+    print(f"  Headless:   {HEADLESS}")
     print(f"  Output:     {out_file}")
     print()
 
@@ -272,8 +285,20 @@ async def main():
     params         = f"?pageSize=50&stars={STAR_FILTER}"
 
     async with async_playwright() as pw:
-        browser = await pw.chromium.connect_over_cdp("http://localhost:9222")
-        ctx  = browser.contexts[0]
+        if HEADLESS:
+            # Launch Chromium with the saved Chrome profile so existing login
+            # sessions are reused. Chrome must be closed to release the profile lock.
+            ctx  = await pw.chromium.launch_persistent_context(
+                CHROME_USER_DATA,
+                channel="chrome",
+                headless=True,
+            )
+            browser = None
+        else:
+            # Connect to the already-running Chrome via CDP — browser stays visible.
+            browser = await pw.chromium.connect_over_cdp("http://localhost:9222")
+            ctx  = browser.contexts[0]
+
         page = ctx.pages[0] if ctx.pages else await ctx.new_page()
 
         # ── Step 1: scrape Seller Central listing pages ───────────────────
@@ -310,7 +335,7 @@ async def main():
         print(f"  Switching to {dc['amazon_home']} for image fetching …")
         await page.goto(dc["amazon_home"], wait_until="domcontentloaded")
         await asyncio.sleep(random.uniform(1.5, 3.0))
-        page = ctx.pages[0]
+        page = ctx.pages[0] if ctx.pages else page
 
         review_ids      = [row[IDX['Review ID']] for row in all_rows]
         id_to_row       = {row[IDX['Review ID']]: row for row in all_rows}
@@ -366,7 +391,10 @@ async def main():
 
         print(f"\nDone. {total_with_imgs}/{len(all_rows)} reviews have images.")
         print(f"Saved → {out_file}")
-        await browser.close()
+        if HEADLESS:
+            await ctx.close()
+        else:
+            await browser.close()
 
 
 if __name__ == '__main__':
