@@ -530,13 +530,29 @@ function MCFFee_JP(method, orderId, sentDate) {
  * Fees are stored as negative values in the Finances API; returns Math.abs(total).
  * Returns '' if the order has not yet settled.
  */
+/**
+ * Safely parses a date value that may come from a Sheets cell.
+ * Handles: Date objects, ISO strings (yyyy-mm-dd), YYMMDD strings ("250325" → 2025-03-25),
+ * and other date-like strings.  Avoids V8's misparse of 6-digit strings as a year.
+ */
+function _parseCellDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) return new Date(val);
+  var s = String(val).trim();
+  // YYMMDD: exactly 6 digits → prepend "20" to get yyyy-mm-dd
+  if (/^\d{6}$/.test(s)) {
+    return new Date('20' + s.slice(0, 2) + '-' + s.slice(2, 4) + '-' + s.slice(4, 6));
+  }
+  return new Date(s);
+}
+
 function _fetchMcfFeeFinancesApi(orderId, ep, sentDate) {
   var postedAfter, postedBefore;
   var foCache = null; // cache getFulfillmentOrderRaw result to avoid a double call in fallback
 
   if (sentDate) {
     // Use the caller-supplied sent date (P col) — skip getFulfillmentOrderRaw entirely
-    postedAfter  = new Date(String(sentDate).trim());
+    postedAfter  = _parseCellDate(sentDate);
     postedBefore = new Date(postedAfter);
     postedBefore.setDate(postedBefore.getDate() + 60);
   } else {
@@ -688,7 +704,7 @@ function MCFFeeDebug(orderId, sentDate) {
     var postedAfter, postedBefore, dateSource;
 
     if (sentDate) {
-      postedAfter  = new Date(String(sentDate).trim());
+      postedAfter  = _parseCellDate(sentDate);
       postedBefore = new Date(postedAfter);
       postedBefore.setDate(postedBefore.getDate() + 90);
       dateSource = 'sentDate (P col): ' + String(sentDate).trim();
