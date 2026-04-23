@@ -12,21 +12,25 @@ from playwright.async_api import async_playwright
 # USER CONFIG — edit these before each run
 # ═══════════════════════════════════════════════════════════════════════════════
 
-DOMAIN = "US"
-# Marketplace to scrape.
-# Fully verified : "US"
-# Configured, verify SC URL before use: "UK" | "DE" | "FR" | "IT" | "ES" | "JP" | "IN"
+DOMAINS = ["EU", "JP"]
+# List of domains to scrape sequentially. Each gets its own CSV file.
+# Single domain example : DOMAINS = ["US"]
+# Supported             : "US" | "EU" | "UK" | "DE" | "FR" | "IT" | "ES" | "JP" | "IN"
+# Note: "EU" scrapes sellercentral-europe.amazon.com with whatever marketplace
+#       is currently active in your browser session. Use "UK"/"DE"/etc. when you
+#       need per-country runs and have switched the SC marketplace accordingly.
 
-PAGES = 30
-# Max pages to scrape (50 reviews per page).
+PAGES = 10
+# Max pages to scrape per domain (50 reviews per page).
 # US full scrape ≈ 49 pages (~2,449 reviews).
 
 STAR_FILTER = "1,2,3"
 # Comma-separated star ratings to include.
 # Critical reviews only: "1,2,3"   All reviews: "1,2,3,4,5"
 
-OUT_FILE = None
-# Output CSV path. None → auto-named ~/Desktop/<DOMAIN>_seller_central_reviews.csv
+OUT_DIR = os.path.expanduser("~/Desktop")
+# Directory where CSVs are saved.
+# Each domain is saved as <OUT_DIR>/<DOMAIN>_seller_central_reviews.csv
 
 HEADERS_TO_INCLUDE = None
 # Columns to keep in the output CSV. None → all columns (default).
@@ -61,8 +65,8 @@ CHROME_USER_DATA = os.path.expanduser("~/Library/Application Support/Google/Chro
 # ═══════════════════════════════════════════════════════════════════════════════
 # DOMAIN REGISTRY
 # Add new marketplaces here as they are onboarded.
-# NOTE: EU domains share sellercentral-europe.amazon.com — verify that the
-#       active SC session is switched to the correct marketplace before running.
+# EU domains (UK/DE/FR/IT/ES) share sellercentral-europe.amazon.com.
+# "EU" is the generic entry for that portal without assuming a specific country.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _DOMAINS = {
@@ -71,6 +75,12 @@ _DOMAINS = {
         "amazon_home": "https://www.amazon.com/",
         "review_url":  "https://www.amazon.com/gp/customer-reviews/",
         "country":     "US",
+    },
+    "EU": {
+        "sc_base":     "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
+        "amazon_home": "https://www.amazon.co.uk/",
+        "review_url":  "https://www.amazon.co.uk/gp/customer-reviews/",
+        "country":     "EU",
     },
     "UK": {
         "sc_base":     "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
@@ -122,10 +132,10 @@ _DOMAINS = {
 
 _PROFILES = {
     "LOW": {
-        "nav_delay":    (0.5,  1.5),   # pause between SC page navigations (s)
-        "read_delay":   (0.3,  0.8),   # pause after page load before extracting (s)
-        "batch_delay":  (0.5,  1.5),   # pause between image-fetch batches (s)
-        "fetch_jitter": (0,    150),   # per-request stagger within a batch (ms)
+        "nav_delay":    (0.5,  1.5),
+        "read_delay":   (0.3,  0.8),
+        "batch_delay":  (0.5,  1.5),
+        "fetch_jitter": (0,    150),
         "batch_min":    20,
         "batch_max":    30,
         "scroll":       False,
@@ -160,17 +170,6 @@ ALL_HEADERS = [
     'Domain Code', '국가', 'Review Link', 'Image URL', 'Review ID',
 ]
 IDX = {h: i for i, h in enumerate(ALL_HEADERS)}
-
-
-def _resolve_config():
-    if DOMAIN not in _DOMAINS:
-        raise ValueError(f"Unknown DOMAIN '{DOMAIN}'. Choose from: {list(_DOMAINS)}")
-    if DETECTION_AVOIDANCE not in _PROFILES:
-        raise ValueError(f"DETECTION_AVOIDANCE must be LOW, MEDIUM, or HIGH.")
-    dc   = _DOMAINS[DOMAIN]
-    prof = _PROFILES[DETECTION_AVOIDANCE]
-    out  = OUT_FILE or os.path.expanduser(f"~/Desktop/{DOMAIN}_seller_central_reviews.csv")
-    return dc, prof, out
 
 
 def _make_extract_js(domain_code, country):
@@ -269,132 +268,179 @@ async def simulate_reading(page, prof):
     await asyncio.sleep(random.uniform(*prof["read_delay"]))
 
 
+def _out_file(domain):
+    return os.path.join(OUT_DIR, f"{domain}_seller_central_reviews.csv")
+
+
+def _csv_write_header(path, headers):
+    """Create/overwrite CSV with header row only."""
+    with open(path, 'w', newline='', encoding='utf-8-sig') as f:
+        csv.writer(f).writerow(headers)
+
+
+def _csv_append_rows(path, rows):
+    """Append rows to an existing CSV (no header)."""
+    with open(path, 'a', newline='', encoding='utf-8-sig') as f:
+        csv.writer(f).writerows(rows)
+
+
+def _csv_rewrite(path, headers, rows):
+    """Full rewrite — used at end to apply image data to all rows."""
+    with open(path, 'w', newline='', encoding='utf-8-sig') as f:
+        w = csv.writer(f)
+        w.writerow(headers)
+        w.writerows(rows)
+
+
+async def scrape_domain(domain, page, ctx, prof, asin_filter):
+    """Scrape one domain end-to-end. Returns (total_rows, total_with_imgs)."""
+    dc         = _DOMAINS[domain]
+    out_file   = _out_file(domain)
+    extract_js = _make_extract_js(domain, dc["country"])
+    fetch_js   = _make_batch_fetch_js(dc["review_url"])
+    params     = f"?pageSize=50&stars={STAR_FILTER}"
+    jitter     = prof["fetch_jitter"]
+    batch_min  = prof["batch_min"]
+    batch_max  = prof["batch_max"]
+
+    print(f"\n{'═'*60}")
+    print(f"  Domain : {domain}  ({dc['sc_base']})")
+    print(f"  Pages  : {PAGES}  |  Stars: {STAR_FILTER}  |  Output: {out_file}")
+    print(f"{'═'*60}")
+
+    # ── Step 1: scrape pages — write header once, append after each page ──
+    _csv_write_header(out_file, ALL_HEADERS)
+    all_rows = []
+    p = 1
+    while p <= PAGES:
+        url = dc["sc_base"] + params + (f"&pageNumber={p}" if p > 1 else "")
+        print(f"  Page {p}/{PAGES} …", end=" ", flush=True)
+        try:
+            await page.goto(url, wait_until="domcontentloaded")
+            await page.wait_for_selector('.reviewContainer[data-testid]', timeout=15000)
+        except Exception as e:
+            print(f"SKIP (timeout/error: {e})")
+            p += 1
+            continue
+        await simulate_reading(page, prof)
+        rows = await page.evaluate(extract_js)
+        print(f"{len(rows)} reviews  →  flushed to CSV")
+        all_rows.extend(rows)
+        _csv_append_rows(out_file, rows)   # ← incremental write after every page
+        p += 1
+        if p <= PAGES:
+            await asyncio.sleep(random.uniform(*prof["nav_delay"]))
+
+    print(f"\n  Total collected : {len(all_rows)}")
+
+    # ── Step 2: deduplicate ───────────────────────────────────────────────
+    seen, unique = set(), []
+    for row in all_rows:
+        rid = row[IDX['Review ID']]
+        if rid and rid not in seen:
+            seen.add(rid); unique.append(row)
+    if len(all_rows) - len(unique):
+        print(f"  Dedup           : removed {len(all_rows)-len(unique)} duplicates → {len(unique)} unique")
+    all_rows = unique
+
+    # ── Step 3: image enrichment ──────────────────────────────────────────
+    print(f"  Switching to {dc['amazon_home']} for image fetching …")
+    await page.goto(dc["amazon_home"], wait_until="domcontentloaded")
+    await asyncio.sleep(random.uniform(1.5, 3.0))
+    page = ctx.pages[0] if ctx.pages else page
+
+    review_ids      = [row[IDX['Review ID']] for row in all_rows]
+    id_to_row       = {row[IDX['Review ID']]: row for row in all_rows}
+    total_with_imgs = 0
+    i               = 0
+
+    print(f"  Image fetch     : batches {batch_min}–{batch_max}, jitter {jitter[0]}–{jitter[1]}ms")
+    while i < len(review_ids):
+        batch   = review_ids[i:i + random.randint(batch_min, batch_max)]
+        results = await page.evaluate(fetch_js, [batch, jitter[0], jitter[1]])
+        for rid, imgs in results.items():
+            if imgs:
+                id_to_row[rid][IDX['사진 유무']] = 'Y'
+                id_to_row[rid][IDX['Image URL']] = '|'.join(imgs)
+                total_with_imgs += 1
+        i   += len(batch)
+        done = min(i, len(review_ids))
+        print(f"    {done}/{len(review_ids)}  ({total_with_imgs} with images)")
+        if done < len(review_ids):
+            await asyncio.sleep(random.uniform(*prof["batch_delay"]))
+
+    # ── Step 4: ASIN filter ───────────────────────────────────────────────
+    if asin_filter:
+        before   = len(all_rows)
+        all_rows = [r for r in all_rows if r[IDX['ASIN']] in asin_filter]
+        print(f"  ASIN filter     : kept {len(all_rows)}/{before}")
+
+    # ── Step 5: column filter ─────────────────────────────────────────────
+    if HEADERS_TO_INCLUDE:
+        keep_idx    = [IDX[h] for h in HEADERS_TO_INCLUDE if h in IDX]
+        out_headers = [ALL_HEADERS[k] for k in keep_idx]
+        out_rows    = [[row[k] for k in keep_idx] for row in all_rows]
+    else:
+        out_headers = ALL_HEADERS
+        out_rows    = all_rows
+
+    # ── Step 6: final rewrite with image data ─────────────────────────────
+    _csv_rewrite(out_file, out_headers, out_rows)
+    print(f"\n  ✓ {domain} done — {total_with_imgs}/{len(all_rows)} with images → {out_file}")
+
+    return len(all_rows), total_with_imgs
+
+
 async def main():
-    dc, prof, out_file = _resolve_config()
+    if DETECTION_AVOIDANCE not in _PROFILES:
+        raise ValueError("DETECTION_AVOIDANCE must be LOW, MEDIUM, or HIGH.")
+    unknown = [d for d in DOMAINS if d not in _DOMAINS]
+    if unknown:
+        raise ValueError(f"Unknown domain(s): {unknown}. Choose from: {list(_DOMAINS)}")
 
-    print(f"  Domain:     {DOMAIN}")
-    print(f"  Pages:      {PAGES} (up to {PAGES * 50} reviews)")
-    print(f"  Stars:      {STAR_FILTER}")
-    print(f"  Avoidance:  {DETECTION_AVOIDANCE}")
-    print(f"  Headless:   {HEADLESS}")
-    print(f"  Output:     {out_file}")
-    print()
+    prof = _PROFILES[DETECTION_AVOIDANCE]
 
-    extract_js     = _make_extract_js(DOMAIN, dc["country"])
-    batch_fetch_js = _make_batch_fetch_js(dc["review_url"])
-    params         = f"?pageSize=50&stars={STAR_FILTER}"
+    asin_filter = None
+    if ASIN_FILTER_FILE:
+        with open(os.path.expanduser(ASIN_FILTER_FILE), encoding='utf-8') as af:
+            asin_filter = {line.strip() for line in af if line.strip()}
+        print(f"ASIN filter loaded: {len(asin_filter)} ASINs from {ASIN_FILTER_FILE}")
+
+    print(f"Domains     : {DOMAINS}")
+    print(f"Pages/domain: {PAGES}  |  Stars: {STAR_FILTER}  |  Avoidance: {DETECTION_AVOIDANCE}")
+    print(f"Headless    : {HEADLESS}")
 
     async with async_playwright() as pw:
         if HEADLESS:
-            # Launch Chromium with the saved Chrome profile so existing login
-            # sessions are reused. Chrome must be closed to release the profile lock.
-            ctx  = await pw.chromium.launch_persistent_context(
-                CHROME_USER_DATA,
-                channel="chrome",
-                headless=True,
-            )
+            ctx     = await pw.chromium.launch_persistent_context(
+                CHROME_USER_DATA, channel="chrome", headless=True)
             browser = None
         else:
-            # Connect to the already-running Chrome via CDP — browser stays visible.
             browser = await pw.chromium.connect_over_cdp("http://localhost:9222")
-            ctx  = browser.contexts[0]
+            ctx     = browser.contexts[0]
 
         page = ctx.pages[0] if ctx.pages else await ctx.new_page()
 
-        # ── Step 1: scrape Seller Central listing pages ───────────────────
-        all_rows = []
-        p = 1
-        while p <= PAGES:
-            url = dc["sc_base"] + params + (f"&pageNumber={p}" if p > 1 else "")
-            print(f"  Page {p}/{PAGES} …", end=" ", flush=True)
-            await page.goto(url, wait_until="domcontentloaded")
-            await page.wait_for_selector('.reviewContainer[data-testid]', timeout=15000)
-            await simulate_reading(page, prof)
-            rows = await page.evaluate(extract_js)
-            print(f"{len(rows)} reviews")
-            all_rows.extend(rows)
-            p += 1
-            if p <= PAGES:
-                await asyncio.sleep(random.uniform(*prof["nav_delay"]))
+        summary = []
+        for domain in DOMAINS:
+            try:
+                n_rows, n_imgs = await scrape_domain(domain, page, ctx, prof, asin_filter)
+                summary.append((domain, n_rows, n_imgs, "OK"))
+            except Exception as e:
+                print(f"\n  ✗ {domain} failed: {e}")
+                summary.append((domain, 0, 0, f"FAILED: {e}"))
 
-        print(f"\n  Total reviews collected: {len(all_rows)}")
-
-        # ── Step 2: deduplicate by Review ID ─────────────────────────────
-        seen_ids, unique_rows = set(), []
-        for row in all_rows:
-            rid = row[IDX['Review ID']]
-            if rid and rid not in seen_ids:
-                seen_ids.add(rid)
-                unique_rows.append(row)
-        dupes = len(all_rows) - len(unique_rows)
-        if dupes:
-            print(f"  Removed {dupes} duplicate review(s) → {len(unique_rows)} unique")
-        all_rows = unique_rows
-
-        # ── Step 3: reviewer image enrichment ────────────────────────────
-        print(f"  Switching to {dc['amazon_home']} for image fetching …")
-        await page.goto(dc["amazon_home"], wait_until="domcontentloaded")
-        await asyncio.sleep(random.uniform(1.5, 3.0))
-        page = ctx.pages[0] if ctx.pages else page
-
-        review_ids      = [row[IDX['Review ID']] for row in all_rows]
-        id_to_row       = {row[IDX['Review ID']]: row for row in all_rows}
-        total_with_imgs = 0
-        i               = 0
-        jitter          = prof["fetch_jitter"]
-        batch_min       = prof["batch_min"]
-        batch_max       = prof["batch_max"]
-
-        print(f"  Fetching reviewer images (batches of {batch_min}–{batch_max}, "
-              f"jitter {jitter[0]}–{jitter[1]}ms) …")
-
-        while i < len(review_ids):
-            batch   = review_ids[i:i + random.randint(batch_min, batch_max)]
-            results = await page.evaluate(batch_fetch_js, [batch, jitter[0], jitter[1]])
-
-            for rid, imgs in results.items():
-                if imgs:
-                    id_to_row[rid][IDX['사진 유무']] = 'Y'
-                    id_to_row[rid][IDX['Image URL']] = '|'.join(imgs)
-                    total_with_imgs += 1
-
-            i   += len(batch)
-            done = min(i, len(review_ids))
-            print(f"    {done}/{len(review_ids)}  ({total_with_imgs} with images)")
-
-            if done < len(review_ids):
-                await asyncio.sleep(random.uniform(*prof["batch_delay"]))
-
-        # ── Step 4: apply ASIN filter if requested ───────────────────────
-        if ASIN_FILTER_FILE:
-            with open(os.path.expanduser(ASIN_FILTER_FILE), encoding='utf-8') as af:
-                target_asins = {line.strip() for line in af if line.strip()}
-            before = len(all_rows)
-            all_rows = [r for r in all_rows if r[IDX['ASIN']] in target_asins]
-            print(f"  ASIN filter: kept {len(all_rows)}/{before} reviews "
-                  f"({len(target_asins)} target ASINs)")
-
-        # ── Step 5: apply column filter if requested ──────────────────────
-        if HEADERS_TO_INCLUDE:
-            keep_idx    = [IDX[h] for h in HEADERS_TO_INCLUDE if h in IDX]
-            out_headers = [ALL_HEADERS[i] for i in keep_idx]
-            out_rows    = [[row[i] for i in keep_idx] for row in all_rows]
-        else:
-            out_headers = ALL_HEADERS
-            out_rows    = all_rows
-
-        # ── Step 6: write CSV ─────────────────────────────────────────────
-        with open(out_file, 'w', newline='', encoding='utf-8-sig') as f:
-            writer = csv.writer(f)
-            writer.writerow(out_headers)
-            writer.writerows(out_rows)
-
-        print(f"\nDone. {total_with_imgs}/{len(all_rows)} reviews have images.")
-        print(f"Saved → {out_file}")
         if HEADLESS:
             await ctx.close()
         else:
             await browser.close()
+
+    print(f"\n{'═'*60}")
+    print("  SUMMARY")
+    print(f"{'═'*60}")
+    for domain, n_rows, n_imgs, status in summary:
+        print(f"  {domain:4s}  {n_rows:>5} reviews  {n_imgs:>4} with images  [{status}]")
+    print(f"{'═'*60}")
 
 
 if __name__ == '__main__':
