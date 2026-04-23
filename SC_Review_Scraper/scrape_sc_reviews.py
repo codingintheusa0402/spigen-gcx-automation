@@ -12,7 +12,7 @@ from playwright.async_api import async_playwright
 # USER CONFIG — edit these before each run
 # ═══════════════════════════════════════════════════════════════════════════════
 
-DOMAINS = ["EU", "JP"]
+DOMAINS = ["EU", "JP", "IN"]
 # List of domains to scrape sequentially. Each gets its own CSV file.
 # Single domain example : DOMAINS = ["US"]
 # Supported             : "US" | "EU" | "UK" | "DE" | "FR" | "IT" | "ES" | "JP" | "IN"
@@ -23,6 +23,15 @@ DOMAINS = ["EU", "JP"]
 PAGES = 10
 # Max pages to scrape per domain (50 reviews per page).
 # US full scrape ≈ 49 pages (~2,449 reviews).
+
+START_PAGE = 1
+# Page to start from. Set > 1 to resume a previously interrupted run.
+# When resuming, also set APPEND_CSV = True to avoid overwriting saved rows.
+
+APPEND_CSV = False
+# False — overwrites the CSV at the start (default, fresh run).
+# True  — appends to an existing CSV without rewriting the header.
+#          Use together with START_PAGE to resume an interrupted run.
 
 STAR_FILTER = "1,2,3"
 # Comma-separated star ratings to include.
@@ -309,9 +318,20 @@ async def scrape_domain(domain, page, ctx, prof, asin_filter):
     print(f"{'═'*60}")
 
     # ── Step 1: scrape pages — write header once, append after each page ──
-    _csv_write_header(out_file, ALL_HEADERS)
-    all_rows = []
-    p = 1
+    if APPEND_CSV:
+        # Resume mode: read existing rows so dedup + image enrichment work correctly
+        all_rows = []
+        if os.path.exists(out_file):
+            with open(out_file, encoding='utf-8-sig') as f:
+                reader = csv.reader(f)
+                next(reader, None)  # skip header
+                all_rows = list(reader)
+            print(f"  Resume mode     : loaded {len(all_rows)} existing rows from CSV")
+    else:
+        _csv_write_header(out_file, ALL_HEADERS)
+        all_rows = []
+
+    p = START_PAGE
     while p <= PAGES:
         url = dc["sc_base"] + params + (f"&pageNumber={p}" if p > 1 else "")
         print(f"  Page {p}/{PAGES} …", end=" ", flush=True)
