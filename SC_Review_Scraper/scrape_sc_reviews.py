@@ -16,9 +16,8 @@ DOMAINS = ["EU", "JP", "IN"]
 # List of domains to scrape sequentially. Each gets its own CSV file.
 # Single domain example : DOMAINS = ["US"]
 # Supported             : "US" | "EU" | "UK" | "DE" | "FR" | "IT" | "ES" | "JP" | "IN"
-# Note: "EU" scrapes sellercentral-europe.amazon.com with whatever marketplace
-#       is currently active in your browser session. Use "UK"/"DE"/etc. when you
-#       need per-country runs and have switched the SC marketplace accordingly.
+# "EU" automatically scrapes UK + DE + FR + IT + ES in sequence using each
+# country's marketplaceId and writes all reviews into one EU_*.csv file.
 
 PAGES = 10
 # Max pages to scrape per domain (50 reviews per page).
@@ -74,9 +73,13 @@ CHROME_USER_DATA = os.path.expanduser("~/Library/Application Support/Google/Chro
 # ═══════════════════════════════════════════════════════════════════════════════
 # DOMAIN REGISTRY
 # Add new marketplaces here as they are onboarded.
-# EU domains (UK/DE/FR/IT/ES) share sellercentral-europe.amazon.com.
-# "EU" is the generic entry for that portal without assuming a specific country.
+# EU domains (UK/DE/FR/IT/ES) share sellercentral-europe.amazon.com but each
+# requires its own marketplaceId parameter. When DOMAINS = ["EU"], the scraper
+# automatically loops through all EU_COUNTRIES and writes to one EU_*.csv.
 # ═══════════════════════════════════════════════════════════════════════════════
+
+# When "EU" is in DOMAINS, these sub-countries are scraped in order.
+EU_COUNTRIES = ["UK", "DE", "FR", "IT", "ES"]
 
 _DOMAINS = {
     "US": {
@@ -85,41 +88,40 @@ _DOMAINS = {
         "review_url":  "https://www.amazon.com/gp/customer-reviews/",
         "country":     "US",
     },
-    "EU": {
-        "sc_base":     "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
-        "amazon_home": "https://www.amazon.co.uk/",
-        "review_url":  "https://www.amazon.co.uk/gp/customer-reviews/",
-        "country":     "EU",
-    },
     "UK": {
-        "sc_base":     "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
-        "amazon_home": "https://www.amazon.co.uk/",
-        "review_url":  "https://www.amazon.co.uk/gp/customer-reviews/",
-        "country":     "UK",
+        "sc_base":        "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
+        "marketplace_id": "A1F83G8C2ARO7P",
+        "amazon_home":    "https://www.amazon.co.uk/",
+        "review_url":     "https://www.amazon.co.uk/gp/customer-reviews/",
+        "country":        "UK",
     },
     "DE": {
-        "sc_base":     "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
-        "amazon_home": "https://www.amazon.de/",
-        "review_url":  "https://www.amazon.de/gp/customer-reviews/",
-        "country":     "DE",
+        "sc_base":        "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
+        "marketplace_id": "A1PA6795UKMFR9",
+        "amazon_home":    "https://www.amazon.de/",
+        "review_url":     "https://www.amazon.de/gp/customer-reviews/",
+        "country":        "DE",
     },
     "FR": {
-        "sc_base":     "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
-        "amazon_home": "https://www.amazon.fr/",
-        "review_url":  "https://www.amazon.fr/gp/customer-reviews/",
-        "country":     "FR",
+        "sc_base":        "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
+        "marketplace_id": "A13V1IB3VIYZZH",
+        "amazon_home":    "https://www.amazon.fr/",
+        "review_url":     "https://www.amazon.fr/gp/customer-reviews/",
+        "country":        "FR",
     },
     "IT": {
-        "sc_base":     "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
-        "amazon_home": "https://www.amazon.it/",
-        "review_url":  "https://www.amazon.it/gp/customer-reviews/",
-        "country":     "IT",
+        "sc_base":        "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
+        "marketplace_id": "APJ6JRA9NG5V4",
+        "amazon_home":    "https://www.amazon.it/",
+        "review_url":     "https://www.amazon.it/gp/customer-reviews/",
+        "country":        "IT",
     },
     "ES": {
-        "sc_base":     "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
-        "amazon_home": "https://www.amazon.es/",
-        "review_url":  "https://www.amazon.es/gp/customer-reviews/",
-        "country":     "ES",
+        "sc_base":        "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
+        "marketplace_id": "A1RKKUPIHCS9HS",
+        "amazon_home":    "https://www.amazon.es/",
+        "review_url":     "https://www.amazon.es/gp/customer-reviews/",
+        "country":        "ES",
     },
     "JP": {
         "sc_base":     "https://sellercentral.amazon.co.jp/brand-customer-reviews/",
@@ -301,13 +303,20 @@ def _csv_rewrite(path, headers, rows):
         w.writerows(rows)
 
 
-async def scrape_domain(domain, page, ctx, prof, asin_filter):
-    """Scrape one domain end-to-end. Returns (total_rows, total_with_imgs)."""
+async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, append=False):
+    """Scrape one domain end-to-end. Returns (total_rows, total_with_imgs).
+
+    out_file : override output path (used by EU group to share one CSV).
+    append   : skip header write and load existing rows from out_file first
+               (used for EU sub-countries 2-5 so they append to the shared file).
+    """
     dc         = _DOMAINS[domain]
-    out_file   = _out_file(domain)
+    out_file   = out_file or _out_file(domain)
     extract_js = _make_extract_js(domain, dc["country"])
     fetch_js   = _make_batch_fetch_js(dc["review_url"])
     params     = f"?pageSize=50&stars={STAR_FILTER}"
+    if "marketplace_id" in dc:
+        params += f"&marketplaceId={dc['marketplace_id']}"
     jitter     = prof["fetch_jitter"]
     batch_min  = prof["batch_min"]
     batch_max  = prof["batch_max"]
@@ -318,20 +327,21 @@ async def scrape_domain(domain, page, ctx, prof, asin_filter):
     print(f"{'═'*60}")
 
     # ── Step 1: scrape pages — write header once, append after each page ──
-    if APPEND_CSV:
-        # Resume mode: read existing rows so dedup + image enrichment work correctly
+    if APPEND_CSV or append:
+        # Resume / EU-group append: read existing rows for dedup + image enrichment
         all_rows = []
         if os.path.exists(out_file):
             with open(out_file, encoding='utf-8-sig') as f:
                 reader = csv.reader(f)
                 next(reader, None)  # skip header
                 all_rows = list(reader)
-            print(f"  Resume mode     : loaded {len(all_rows)} existing rows from CSV")
+            label = "Resume mode" if APPEND_CSV else "Appending to shared file"
+            print(f"  {label}   : loaded {len(all_rows)} existing rows from CSV")
     else:
         _csv_write_header(out_file, ALL_HEADERS)
         all_rows = []
 
-    p = START_PAGE
+    p = START_PAGE if not append else 1
     while p <= PAGES:
         url = dc["sc_base"] + params + (f"&pageNumber={p}" if p > 1 else "")
         print(f"  Page {p}/{PAGES} …", end=" ", flush=True)
@@ -405,6 +415,14 @@ async def scrape_domain(domain, page, ctx, prof, asin_filter):
         out_rows    = all_rows
 
     # ── Step 6: final rewrite with image data ─────────────────────────────
+    # In append mode (EU group), merge with enriched rows already in the file
+    # from previous sub-countries before rewriting.
+    if append and os.path.exists(out_file):
+        with open(out_file, encoding='utf-8-sig') as f:
+            reader = csv.reader(f)
+            next(reader, None)  # skip header
+            prev_rows = list(reader)
+        out_rows = prev_rows + out_rows
     _csv_rewrite(out_file, out_headers, out_rows)
     print(f"\n  ✓ {domain} done — {total_with_imgs}/{len(all_rows)} with images → {out_file}")
 
@@ -414,9 +432,9 @@ async def scrape_domain(domain, page, ctx, prof, asin_filter):
 async def main():
     if DETECTION_AVOIDANCE not in _PROFILES:
         raise ValueError("DETECTION_AVOIDANCE must be LOW, MEDIUM, or HIGH.")
-    unknown = [d for d in DOMAINS if d not in _DOMAINS]
+    unknown = [d for d in DOMAINS if d not in _DOMAINS and d != "EU"]
     if unknown:
-        raise ValueError(f"Unknown domain(s): {unknown}. Choose from: {list(_DOMAINS)}")
+        raise ValueError(f"Unknown domain(s): {unknown}. Choose from: EU | {list(_DOMAINS)}")
 
     prof = _PROFILES[DETECTION_AVOIDANCE]
 
@@ -443,12 +461,29 @@ async def main():
 
         summary = []
         for domain in DOMAINS:
-            try:
-                n_rows, n_imgs = await scrape_domain(domain, page, ctx, prof, asin_filter)
-                summary.append((domain, n_rows, n_imgs, "OK"))
-            except Exception as e:
-                print(f"\n  ✗ {domain} failed: {e}")
-                summary.append((domain, 0, 0, f"FAILED: {e}"))
+            if domain == "EU":
+                # Scrape all EU sub-countries into one combined EU_*.csv
+                eu_file = os.path.join(OUT_DIR, "EU_seller_central_reviews.csv")
+                eu_rows, eu_imgs = 0, 0
+                try:
+                    for i, sub in enumerate(EU_COUNTRIES):
+                        n_rows, n_imgs = await scrape_domain(
+                            sub, page, ctx, prof, asin_filter,
+                            out_file=eu_file, append=(i > 0)
+                        )
+                        eu_rows += n_rows
+                        eu_imgs += n_imgs
+                    summary.append(("EU", eu_rows, eu_imgs, "OK"))
+                except Exception as e:
+                    print(f"\n  ✗ EU failed: {e}")
+                    summary.append(("EU", eu_rows, eu_imgs, f"FAILED: {e}"))
+            else:
+                try:
+                    n_rows, n_imgs = await scrape_domain(domain, page, ctx, prof, asin_filter)
+                    summary.append((domain, n_rows, n_imgs, "OK"))
+                except Exception as e:
+                    print(f"\n  ✗ {domain} failed: {e}")
+                    summary.append((domain, 0, 0, f"FAILED: {e}"))
 
         if HEADLESS:
             await ctx.close()

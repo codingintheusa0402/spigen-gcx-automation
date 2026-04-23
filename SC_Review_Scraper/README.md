@@ -47,18 +47,19 @@ Edit the **USER CONFIG** section at the top of `scrape_sc_reviews.py`.
 
 Marketplace to scrape.
 
-| Value | Marketplace | Status |
-|-------|-------------|--------|
-| `"US"` | United States | Verified |
-| `"UK"` | United Kingdom | Configured — verify SC URL before use |
-| `"DE"` | Germany | Configured — verify SC URL before use |
-| `"FR"` | France | Configured — verify SC URL before use |
-| `"IT"` | Italy | Configured — verify SC URL before use |
-| `"ES"` | Spain | Configured — verify SC URL before use |
-| `"JP"` | Japan | Configured — verify SC URL before use |
-| `"IN"` | India | Configured — verify SC URL before use |
+| Value | Marketplace | Output file | Notes |
+|-------|-------------|-------------|-------|
+| `"US"` | United States | `US_*.csv` | Verified |
+| `"EU"` | UK + DE + FR + IT + ES combined | `EU_*.csv` | Auto-expands; uses `marketplaceId` per country |
+| `"UK"` | United Kingdom | `UK_*.csv` | Single-country run |
+| `"DE"` | Germany | `DE_*.csv` | Single-country run |
+| `"FR"` | France | `FR_*.csv` | Single-country run |
+| `"IT"` | Italy | `IT_*.csv` | Single-country run |
+| `"ES"` | Spain | `ES_*.csv` | Single-country run |
+| `"JP"` | Japan | `JP_*.csv` | Verified |
+| `"IN"` | India | `IN_*.csv` | Verified |
 
-> EU marketplaces (UK/DE/FR/IT/ES) share `sellercentral-europe.amazon.com`. Make sure the active Seller Central session is switched to the correct marketplace before running.
+> `"EU"` automatically scrapes UK → DE → FR → IT → ES in sequence, switching marketplaces via the `marketplaceId` URL parameter. All five countries are written into one `EU_seller_central_reviews.csv`. Use individual codes (`"UK"`, `"DE"`, etc.) only if you need a single-country file.
 
 ### `PAGES`
 
