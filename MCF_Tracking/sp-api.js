@@ -573,9 +573,9 @@ function _buildFeeMapForWindow(ep, postedAfter, postedBefore, maxPages) {
              '&MaxResultsPerPage=100';
     if (nextToken) qs += '&NextToken=' + encodeURIComponent(nextToken);
 
-    var res      = spapiFetchWithRetry('GET', '/finances/v0/financialEvents', { queryString: qs, endpoint: ep }, 3, 5000);
-    var payload  = res.payload || res;
-    nextToken    = payload.NextToken || null;
+    var res       = spapiFetchWithRetry('GET', '/finances/v0/financialEvents', { queryString: qs, endpoint: ep }, 3, 5000);
+    var payload   = res.payload || res;
+    nextToken     = payload.NextToken || null;
     var shipments = (payload.FinancialEvents || {}).ShipmentEventList || [];
 
     for (var i = 0; i < shipments.length; i++) {
@@ -583,13 +583,19 @@ function _buildFeeMapForWindow(ep, postedAfter, postedBefore, maxPages) {
       var sid = String(ev.SellerOrderId || '').trim();
       if (!sid) continue;
 
+      // For GCX MCF orders: sum ALL fees regardless of type (fee type names differ from marketplace).
+      // For other orders: apply the standard MCF-fee-type filter.
+      var isGcx = sid.toUpperCase().indexOf('GCX') === 0;
       var total = 0;
+
       (ev.ShipmentFeeList || []).forEach(function(f) {
-        if (_isMcfFeeType(f.FeeType)) total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0);
+        if (isGcx || _isMcfFeeType(f.FeeType))
+          total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0);
       });
       (ev.ShipmentItemList || []).forEach(function(item) {
         (item.ItemFeeList || []).forEach(function(f) {
-          if (_isMcfFeeType(f.FeeType)) total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0);
+          if (isGcx || _isMcfFeeType(f.FeeType))
+            total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0);
         });
       });
 
@@ -860,11 +866,13 @@ function backfillMCFFees() {
     Logger.log('Month ' + (mi + 1) + '/' + monthKeys.length + ': ' + mk +
                ' (' + byMonth[mk].length + ' orders)');
 
-    // Build a fee map for this window across both endpoints
+    // Build a fee map for this window across both endpoints (maxPages=20 covers ~2000 events/month)
     var feeMap = {};
     ['EU', 'FE'].forEach(function(ep) {
       try {
-        var m = _buildFeeMapForWindow(ep, after, before, 5);
+        var m = _buildFeeMapForWindow(ep, after, before, 20);
+        var gcxFound = Object.keys(m).filter(function(k) { return k.toUpperCase().indexOf('GCX') === 0; });
+        if (gcxFound.length) Logger.log('  [' + ep + '] GCX entries in feeMap: ' + gcxFound.join(', '));
         Object.keys(m).forEach(function(k) { if (!feeMap[k]) feeMap[k] = m[k]; });
       } catch (e) { Logger.log('  ' + ep + ' error: ' + e.message); }
     });
