@@ -550,7 +550,7 @@ async def main():
                     f"--user-data-dir={SCRAPER_PROFILE_DIR}",
                     "--no-first-run",
                     "--no-default-browser-check",
-                ])
+                ], stderr=subprocess.DEVNULL)
                 print("Waiting for Chrome to start …", end=" ", flush=True)
                 for _ in range(30):
                     if _port_open(9222): break
