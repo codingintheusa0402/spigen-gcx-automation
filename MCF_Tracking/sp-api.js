@@ -909,7 +909,44 @@ function diagnoseMCFFee() {
   var SAMPLE_ROWS  = 5;   // how many rows to inspect
   var sheet        = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   var lastRow      = sheet.getLastRow();
-  var allValues    = sheet.getRange(1, 1, lastRow, 25).getValues(); // cols A–Y
+  var lastCol      = sheet.getLastColumn();
+  var allValues    = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+
+  // Log first 4 rows entirely so we can see the full header structure
+  Logger.log('=== ROWS 1–4 (all non-empty cells) ===');
+  for (var ri = 0; ri < Math.min(4, allValues.length); ri++) {
+    allValues[ri].forEach(function(v, ci) {
+      if (v !== '' && v !== null && v !== undefined) {
+        Logger.log('  row' + (ri+1) + ' col ' + _bfColLetter(ci+1) + ': ' + String(v).substring(0, 60));
+      }
+    });
+  }
+
+  // Scan rows 4–10 for Amazon-format order IDs (NNN-NNNNNNN-NNNNNNN)
+  Logger.log('=== Cols with Amazon order ID format (rows 4–10) ===');
+  for (var ri2 = 3; ri2 < Math.min(10, allValues.length); ri2++) {
+    allValues[ri2].forEach(function(v, ci) {
+      if (/^\d{3}-\d{7}-\d{7}$/.test(String(v).trim())) {
+        Logger.log('  row' + (ri2+1) + ' col ' + _bfColLetter(ci+1) + ': ' + v);
+      }
+    });
+  }
+
+  // Try listFulfillmentOrders to see if Amazon has the sellerFulfillmentOrderId↔displayableOrderId mapping
+  Logger.log('=== listFulfillmentOrders sample (EU, from 2025-03-01) ===');
+  try {
+    var lfRes = spapiFetchWithRetry('GET', '/fba/outbound/2020-07-01/fulfillmentOrders',
+      { queryString: 'queryStartDate=' + encodeURIComponent('2025-03-01T00:00:00Z'), endpoint: 'EU' }, 2, 3000);
+    var lfPayload = lfRes.payload || lfRes;
+    var lfOrders  = lfPayload.fulfillmentOrders || [];
+    Logger.log('  count returned: ' + lfOrders.length);
+    lfOrders.slice(0, 5).forEach(function(o) {
+      Logger.log('  sellerFulfillmentOrderId=' + o.sellerFulfillmentOrderId +
+                 '  displayableOrderId=' + o.displayableOrderId);
+    });
+  } catch (e) {
+    Logger.log('  listFulfillmentOrders error: ' + e.message);
+  }
 
   var sentDateColIdx = 15; // P
   var orderIdColIdx  = 16; // Q
@@ -952,13 +989,24 @@ function diagnoseMCFFee() {
           var sids = shipments.slice(0, 5).map(function(e) { return e.SellerOrderId || '(none)'; });
           Logger.log('  [' + ep + '] Sample SellerOrderIds: ' + sids.join(' | '));
 
-          // Check if our orderId appears
+          // Log ALL GCX-prefixed SellerOrderIds found (our MCF format)
+          var gcxIds = shipments.filter(function(e) {
+            return String(e.SellerOrderId || '').toUpperCase().indexOf('GCX') === 0;
+          }).map(function(e) { return e.SellerOrderId; });
+          if (gcxIds.length) Logger.log('  [' + ep + '] GCX-format SellerOrderIds found: ' + gcxIds.join(' | '));
+
+          // Check if our orderId appears (exact)
           var match = shipments.filter(function(e) {
             return String(e.SellerOrderId || '').trim() === s.orderId;
           });
           if (match.length) {
-            Logger.log('  [' + ep + '] MATCH FOUND — FeeTypes: ' +
-              (match[0].ShipmentFeeList || []).map(function(f) { return f.FeeType; }).join(', '));
+            var feeTypes = (match[0].ShipmentFeeList || []).map(function(f) { return f.FeeType; });
+            var itemFeeTypes = [];
+            (match[0].ShipmentItemList || []).forEach(function(item) {
+              (item.ItemFeeList || []).forEach(function(f) { itemFeeTypes.push(f.FeeType); });
+            });
+            Logger.log('  [' + ep + '] MATCH FOUND — ShipmentFeeTypes: ' + feeTypes.join(', ') +
+                       '  ItemFeeTypes: ' + itemFeeTypes.join(', '));
           } else {
             Logger.log('  [' + ep + '] No match for "' + s.orderId + '"');
           }
@@ -988,4 +1036,89 @@ function diagnoseMCFFee() {
   });
 
   Logger.log('\n=== diagnoseMCFFee done ===');
+}
+
+/**
+ * Broad scan: queries Finances API over a 3-month window and searches EVERY
+ * event list for any string value that contains "GCX" (our MCF order prefix).
+ * Also logs counts for all non-empty event lists.
+ *
+ * Run from the Apps Script editor to find which event list MCF fees appear in.
+ * Adjust SCAN_START / SCAN_END if you want a different window.
+ */
+function scanFinancesForMCF() {
+  var SCAN_START = '2025-01-01T00:00:00Z';
+  var SCAN_END   = '2025-07-01T00:00:00Z';
+
+  ['EU', 'FE'].forEach(function(ep) {
+    Logger.log('\n══════ ' + ep + ' | ' + SCAN_START + ' → ' + SCAN_END + ' ══════');
+
+    var nextToken = null, page = 0, maxPages = 30;
+    var listCounts   = {};   // eventListName → total event count
+    var gcxHits      = [];   // { list, key, value } for every GCX match
+
+    do {
+      var qs = 'PostedAfter='   + encodeURIComponent(SCAN_START) +
+               '&PostedBefore=' + encodeURIComponent(SCAN_END)   +
+               '&MaxResultsPerPage=100';
+      if (nextToken) qs += '&NextToken=' + encodeURIComponent(nextToken);
+
+      try {
+        var res     = spapiFetchWithRetry('GET', '/finances/v0/financialEvents',
+                        { queryString: qs, endpoint: ep }, 3, 5000);
+        var payload = res.payload || res;
+        nextToken   = payload.NextToken || null;
+        var fe      = payload.FinancialEvents || {};
+
+        Object.keys(fe).forEach(function(listName) {
+          var events = fe[listName];
+          if (!Array.isArray(events) || !events.length) return;
+
+          listCounts[listName] = (listCounts[listName] || 0) + events.length;
+
+          // Deep-scan every event for any string value containing "GCX"
+          events.forEach(function(ev, idx) {
+            _deepScanForGcx(ev, listName, idx, gcxHits);
+          });
+        });
+
+        page++;
+      } catch (e) {
+        Logger.log('  page ' + page + ' error: ' + e.message);
+        break;
+      }
+    } while (nextToken && page < maxPages);
+
+    // Summary
+    Logger.log('  Pages fetched: ' + page);
+    Logger.log('  Non-empty event lists:');
+    Object.keys(listCounts).sort().forEach(function(k) {
+      Logger.log('    ' + k + ': ' + listCounts[k] + ' events');
+    });
+    if (gcxHits.length) {
+      Logger.log('  GCX hits found (' + gcxHits.length + '):');
+      gcxHits.slice(0, 20).forEach(function(h) {
+        Logger.log('    [' + h.list + '] ' + h.key + ' = ' + h.value);
+      });
+    } else {
+      Logger.log('  *** NO GCX hits in any event list ***');
+    }
+  });
+
+  Logger.log('\n=== scanFinancesForMCF done ===');
+}
+
+/** Recursively walks an object and records any string containing "GCX". */
+function _deepScanForGcx(obj, listName, idx, hits) {
+  if (!obj || typeof obj !== 'object') return;
+  Object.keys(obj).forEach(function(k) {
+    var v = obj[k];
+    if (typeof v === 'string' && v.toUpperCase().indexOf('GCX') >= 0) {
+      hits.push({ list: listName, key: k, value: v.substring(0, 80) });
+    } else if (Array.isArray(v)) {
+      v.forEach(function(item) { _deepScanForGcx(item, listName, idx, hits); });
+    } else if (v && typeof v === 'object') {
+      _deepScanForGcx(v, listName, idx, hits);
+    }
+  });
 }
