@@ -6,6 +6,7 @@ Edit the USER CONFIG section below, then run:
 """
 
 import asyncio, csv, random, os, sys
+sys.stdout.reconfigure(line_buffering=True)  # flush every print immediately when running in background
 from playwright.async_api import async_playwright
 
 # ═══════════════════════════════════════════════════════════════════════════════
