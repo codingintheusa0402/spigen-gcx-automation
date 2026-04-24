@@ -231,11 +231,12 @@ SCROLL_JS = """
 () => new Promise(resolve => {
   const maxScroll = document.body.scrollHeight * 0.75;
   let pos = 0;
+  const cap = setTimeout(resolve, 5000);  // hard cap: always resolves within 5 s
   const tick = () => {
     pos += Math.random() * 180 + 60;
     window.scrollTo(0, Math.min(pos, maxScroll));
     if (pos < maxScroll) setTimeout(tick, Math.random() * 120 + 60);
-    else resolve();
+    else { clearTimeout(cap); resolve(); }
   };
   tick();
 })
