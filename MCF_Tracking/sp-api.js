@@ -1047,57 +1047,62 @@ function diagnoseMCFFee() {
  * Adjust SCAN_START / SCAN_END if you want a different window.
  */
 function scanFinancesForMCF() {
-  var SCAN_START = '2025-01-01T00:00:00Z';
-  var SCAN_END   = '2025-07-01T00:00:00Z';
+  // Split into 90-day chunks to stay within the 180-day API limit.
+  var windows = [
+    { start: '2025-01-01T00:00:00Z', end: '2025-04-01T00:00:00Z' },
+    { start: '2025-04-01T00:00:00Z', end: '2025-07-01T00:00:00Z' }
+  ];
 
   ['EU', 'FE'].forEach(function(ep) {
-    Logger.log('\n══════ ' + ep + ' | ' + SCAN_START + ' → ' + SCAN_END + ' ══════');
+    var listCounts = {};
+    var gcxHits    = [];
+    var totalPages = 0;
 
-    var nextToken = null, page = 0, maxPages = 30;
-    var listCounts   = {};   // eventListName → total event count
-    var gcxHits      = [];   // { list, key, value } for every GCX match
+    windows.forEach(function(win) {
+      Logger.log('\n══════ ' + ep + ' | ' + win.start + ' → ' + win.end + ' ══════');
 
-    do {
-      var qs = 'PostedAfter='   + encodeURIComponent(SCAN_START) +
-               '&PostedBefore=' + encodeURIComponent(SCAN_END)   +
-               '&MaxResultsPerPage=100';
-      if (nextToken) qs += '&NextToken=' + encodeURIComponent(nextToken);
+      var nextToken = null, page = 0, maxPages = 30;
+      do {
+        var qs = 'PostedAfter='   + encodeURIComponent(win.start) +
+                 '&PostedBefore=' + encodeURIComponent(win.end)   +
+                 '&MaxResultsPerPage=100';
+        if (nextToken) qs += '&NextToken=' + encodeURIComponent(nextToken);
 
-      try {
-        var res     = spapiFetchWithRetry('GET', '/finances/v0/financialEvents',
-                        { queryString: qs, endpoint: ep }, 3, 5000);
-        var payload = res.payload || res;
-        nextToken   = payload.NextToken || null;
-        var fe      = payload.FinancialEvents || {};
+        try {
+          var res     = spapiFetchWithRetry('GET', '/finances/v0/financialEvents',
+                          { queryString: qs, endpoint: ep }, 3, 5000);
+          var payload = res.payload || res;
+          nextToken   = payload.NextToken || null;
+          var fe      = payload.FinancialEvents || {};
 
-        Object.keys(fe).forEach(function(listName) {
-          var events = fe[listName];
-          if (!Array.isArray(events) || !events.length) return;
-
-          listCounts[listName] = (listCounts[listName] || 0) + events.length;
-
-          // Deep-scan every event for any string value containing "GCX"
-          events.forEach(function(ev, idx) {
-            _deepScanForGcx(ev, listName, idx, gcxHits);
+          Object.keys(fe).forEach(function(listName) {
+            var events = fe[listName];
+            if (!Array.isArray(events) || !events.length) return;
+            listCounts[listName] = (listCounts[listName] || 0) + events.length;
+            events.forEach(function(ev) { _deepScanForGcx(ev, listName, gcxHits); });
           });
-        });
 
-        page++;
-      } catch (e) {
-        Logger.log('  page ' + page + ' error: ' + e.message);
-        break;
-      }
-    } while (nextToken && page < maxPages);
+          page++;
+        } catch (e) {
+          Logger.log('  page ' + page + ' error: ' + e.message);
+          break;
+        }
+      } while (nextToken && page < maxPages);
 
-    // Summary
-    Logger.log('  Pages fetched: ' + page);
+      Logger.log('  window pages fetched: ' + page);
+      totalPages += page;
+    });
+
+    // Per-endpoint summary
+    Logger.log('\n── ' + ep + ' SUMMARY ──');
+    Logger.log('  Total pages: ' + totalPages);
     Logger.log('  Non-empty event lists:');
     Object.keys(listCounts).sort().forEach(function(k) {
       Logger.log('    ' + k + ': ' + listCounts[k] + ' events');
     });
     if (gcxHits.length) {
-      Logger.log('  GCX hits found (' + gcxHits.length + '):');
-      gcxHits.slice(0, 20).forEach(function(h) {
+      Logger.log('  GCX hits (' + gcxHits.length + '):');
+      gcxHits.slice(0, 30).forEach(function(h) {
         Logger.log('    [' + h.list + '] ' + h.key + ' = ' + h.value);
       });
     } else {
@@ -1109,16 +1114,16 @@ function scanFinancesForMCF() {
 }
 
 /** Recursively walks an object and records any string containing "GCX". */
-function _deepScanForGcx(obj, listName, idx, hits) {
+function _deepScanForGcx(obj, listName, hits) {
   if (!obj || typeof obj !== 'object') return;
   Object.keys(obj).forEach(function(k) {
     var v = obj[k];
     if (typeof v === 'string' && v.toUpperCase().indexOf('GCX') >= 0) {
       hits.push({ list: listName, key: k, value: v.substring(0, 80) });
     } else if (Array.isArray(v)) {
-      v.forEach(function(item) { _deepScanForGcx(item, listName, idx, hits); });
+      v.forEach(function(item) { _deepScanForGcx(item, listName, hits); });
     } else if (v && typeof v === 'object') {
-      _deepScanForGcx(v, listName, idx, hits);
+      _deepScanForGcx(v, listName, hits);
     }
   });
 }
