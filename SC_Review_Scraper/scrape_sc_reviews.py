@@ -580,7 +580,12 @@ async def main():
                 await _p.goto(_url, wait_until="domcontentloaded")
             print("  → If all SC accounts are already logged in, press Enter to start scraping.")
             print("    If not, log in first — then press Enter.")
-            await asyncio.get_event_loop().run_in_executor(None, input)
+            import sys
+            if sys.stdin.isatty():
+                await asyncio.get_event_loop().run_in_executor(None, input)
+            else:
+                print("  (non-interactive mode: starting in 5 s …)")
+                await asyncio.sleep(5)
             # After login confirmation, use the first page as the scraping page.
 
         page = ctx.pages[0] if ctx.pages else await ctx.new_page()
