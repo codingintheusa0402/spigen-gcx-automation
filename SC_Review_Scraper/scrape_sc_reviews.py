@@ -72,8 +72,8 @@ DETECTION_AVOIDANCE = "MEDIUM"
 # MEDIUM — randomized delays + scroll simulation (recommended for daily use)
 # HIGH   — aggressive randomization + long delays (safest for large/frequent scrapes)
 
-HEADLESS = False
-# False (default) — connects to your running Chrome via CDP (port 9222).
+HEADLESS = True
+# False — connects to your running Chrome via CDP (port 9222).
 #                   Browser window stays visible; ideal for watching and debugging.
 # True            — launches a headless Chromium using your saved Chrome profile so
 #                   existing login sessions/cookies are reused. Chrome must be fully
@@ -527,6 +527,11 @@ async def main():
 
     async with async_playwright() as pw:
         if HEADLESS:
+            import subprocess, shutil
+            if shutil.which("pgrep") and subprocess.run(
+                    ["pgrep", "-x", "Google Chrome"], capture_output=True).returncode == 0:
+                print("⚠  Chrome is open — close it first (Cmd+Q), then press Enter.")
+                await asyncio.get_event_loop().run_in_executor(None, input)
             ctx     = await pw.chromium.launch_persistent_context(
                 CHROME_USER_DATA, channel="chrome", headless=True)
             browser = None
@@ -542,13 +547,14 @@ async def main():
                 "https://sellercentral.amazon.in/ap/signin",
             ]
             print("Opening Seller Central login pages …")
-            _login_page = ctx.pages[0] if ctx.pages else await ctx.new_page()
-            await _login_page.goto(_login_urls[0], wait_until="domcontentloaded")
+            _lp = ctx.pages[0] if ctx.pages else await ctx.new_page()
+            await _lp.goto(_login_urls[0], wait_until="domcontentloaded")
             for _url in _login_urls[1:]:
                 _p = await ctx.new_page()
                 await _p.goto(_url, wait_until="domcontentloaded")
             print("  → Log in to all tabs, then press Enter here to start scraping.")
             await asyncio.get_event_loop().run_in_executor(None, input)
+            # After login confirmation, use the first page as the scraping page.
 
         page = ctx.pages[0] if ctx.pages else await ctx.new_page()
 
