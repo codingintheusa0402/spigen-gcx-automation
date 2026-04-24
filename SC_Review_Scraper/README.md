@@ -63,12 +63,24 @@ Marketplace to scrape.
 
 ### `PAGES`
 
-Number of pages to scrape. Each page returns up to 50 reviews.
+Number of pages to scrape. Total reviews ≈ `PAGES × PAGE_SIZE`.
 
 ```python
-PAGES = 30      # ~1,500 reviews
-PAGES = 49      # full US scrape (~2,449 reviews)
+PAGES = 30      # 1,500 reviews at PAGE_SIZE=50
+PAGES = 25      # 2,500 reviews at PAGE_SIZE=100
 ```
+
+### `PAGE_SIZE`
+
+Number of reviews returned per page by Seller Central. Supported values: `25`, `50`, `100`.
+
+```python
+PAGE_SIZE = 50    # default — 50 reviews/page
+PAGE_SIZE = 100   # fewer page loads, larger DOM per page
+PAGE_SIZE = 25    # smaller batches
+```
+
+Higher values collect the same total reviews in fewer navigations but parse a larger DOM per page. `50` is the recommended default for stability.
 
 ### `STAR_FILTER`
 
@@ -80,23 +92,13 @@ STAR_FILTER = "1,2,3,4,5"   # all reviews
 STAR_FILTER = "1"            # 1-star only
 ```
 
-### `OUT_FILE`
+### `OUT_DIR`
 
-Output CSV path. `None` auto-names the file based on domain.
-
-```python
-OUT_FILE = None                                      # → ~/Desktop/US_seller_central_reviews.csv
-OUT_FILE = "/Users/me/Desktop/my_reviews.csv"        # custom path
-```
-
-### `STAR_FILTER`
-
-Comma-separated star ratings to include.
+Directory where CSVs are saved. Each domain writes to `<OUT_DIR>/<DOMAIN>_seller_central_reviews.csv`.
 
 ```python
-STAR_FILTER = "1,2,3"       # critical reviews only (default)
-STAR_FILTER = "1,2,3,4,5"   # all reviews
-STAR_FILTER = "1"            # 1-star only
+OUT_DIR = os.path.expanduser("~/Desktop")           # default
+OUT_DIR = "/Users/me/Documents/reviews"             # custom path
 ```
 
 ### `ASIN_FILTER_FILE`

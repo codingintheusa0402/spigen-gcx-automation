@@ -20,8 +20,13 @@ DOMAINS = ["EU", "JP", "IN"]
 # country's marketplaceId and writes all reviews into one EU_*.csv file.
 
 PAGES = 10
-# Max pages to scrape per domain (50 reviews per page).
-# US full scrape ≈ 49 pages (~2,449 reviews).
+# Max pages to scrape per domain.
+# Total reviews ≈ PAGES × PAGE_SIZE.
+
+PAGE_SIZE = 50
+# Number of reviews per page returned by Seller Central.
+# Supported values: 25 | 50 | 100
+# Higher values mean fewer page loads but larger DOM per page.
 
 START_PAGE = 1
 # Page to start from. Set > 1 to resume a previously interrupted run.
@@ -379,14 +384,14 @@ async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, app
     out_file   = out_file or _out_file(domain)
     extract_js = _make_extract_js(domain, dc["country"])
     fetch_js   = _make_batch_fetch_js(dc["review_url"])
-    params     = f"?pageSize=50&stars={STAR_FILTER}"
+    params     = f"?pageSize={PAGE_SIZE}&stars={STAR_FILTER}"
     jitter     = prof["fetch_jitter"]
     batch_min  = prof["batch_min"]
     batch_max  = prof["batch_max"]
 
     print(f"\n{'═'*60}")
     print(f"  Domain : {domain}  ({dc['sc_base']})")
-    print(f"  Pages  : {PAGES}  |  Stars: {STAR_FILTER}  |  Output: {out_file}")
+    print(f"  Pages  : {PAGES}  |  Page size: {PAGE_SIZE}  |  Stars: {STAR_FILTER}  |  Output: {out_file}")
     print(f"{'═'*60}")
 
     # Switch SC marketplace via UI dropdown if this domain has a display name
@@ -506,7 +511,7 @@ async def main():
         print(f"ASIN filter loaded: {len(asin_filter)} ASINs from {ASIN_FILTER_FILE}")
 
     print(f"Domains     : {DOMAINS}")
-    print(f"Pages/domain: {PAGES}  |  Stars: {STAR_FILTER}  |  Avoidance: {DETECTION_AVOIDANCE}")
+    print(f"Pages/domain: {PAGES}  |  Page size: {PAGE_SIZE}  |  Stars: {STAR_FILTER}  |  Avoidance: {DETECTION_AVOIDANCE}")
     print(f"Headless    : {HEADLESS}")
 
     async with async_playwright() as pw:
