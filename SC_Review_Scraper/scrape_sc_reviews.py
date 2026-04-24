@@ -5,7 +5,7 @@ Edit the USER CONFIG section below, then run:
     python3 scrape_sc_reviews.py
 """
 
-import asyncio, csv, random, os
+import asyncio, csv, random, os, sys
 from playwright.async_api import async_playwright
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -432,7 +432,7 @@ async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, app
         print(f"  Page {p}/{pages} …", end=" ", flush=True)
         try:
             await page.bring_to_front()
-            await page.goto(url, wait_until="domcontentloaded")
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
             await page.wait_for_selector('.reviewContainer[data-testid]', timeout=15000)
         except Exception as e:
             print(f"SKIP (timeout/error: {e})")
@@ -461,9 +461,9 @@ async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, app
 
     # ── Step 3: image enrichment ──────────────────────────────────────────
     print(f"  Switching to {dc['amazon_home']} for image fetching …")
-    await page.goto(dc["amazon_home"], wait_until="domcontentloaded")
+    await page.bring_to_front()
+    await page.goto(dc["amazon_home"], wait_until="domcontentloaded", timeout=30000)
     await asyncio.sleep(random.uniform(1.5, 3.0))
-    page = ctx.pages[0] if ctx.pages else page
 
     review_ids      = [row[IDX['Review ID']] for row in all_rows]
     id_to_row       = {row[IDX['Review ID']]: row for row in all_rows}
@@ -524,7 +524,7 @@ async def main():
             asin_filter = {line.strip() for line in af if line.strip()}
         print(f"ASIN filter loaded: {len(asin_filter)} ASINs from {ASIN_FILTER_FILE}")
 
-    print(f"Domains     : {DOMAINS}")
+    print(f"Domains     : {DOMAINS}  (parallel)")
     print(f"Pages/domain: {PAGES}  |  Overrides: {PAGES_OVERRIDE or 'none'}  |  Page size: {PAGE_SIZE}  |  Stars: {STAR_FILTER}  |  Avoidance: {DETECTION_AVOIDANCE}")
     print(f"Headless    : {HEADLESS}")
 
@@ -534,7 +534,8 @@ async def main():
             if shutil.which("pgrep") and __import__("subprocess").run(
                     ["pgrep", "-x", "Google Chrome"], capture_output=True).returncode == 0:
                 print("⚠  Chrome is open — close it first (Cmd+Q), then press Enter.")
-                await asyncio.get_event_loop().run_in_executor(None, input)
+                if sys.stdin.isatty():
+                    await asyncio.get_event_loop().run_in_executor(None, input)
             ctx     = await pw.chromium.launch_persistent_context(
                 SCRAPER_PROFILE_DIR, channel="chrome", headless=True)
             browser = None
@@ -566,39 +567,42 @@ async def main():
             browser = await pw.chromium.connect_over_cdp("http://localhost:9222")
             ctx     = browser.contexts[0]
 
-            # Open one login tab per unique SC endpoint so the user can verify sessions.
-            _login_urls = [
-                "https://sellercentral.amazon.com/ap/signin",
-                "https://sellercentral-europe.amazon.com/ap/signin",
-                "https://sellercentral.amazon.co.jp/ap/signin",
-                "https://sellercentral.amazon.in/ap/signin",
-            ]
-            print("Opening Seller Central login pages …")
-            _lp = ctx.pages[0] if ctx.pages else await ctx.new_page()
-            await _lp.goto(_login_urls[0], wait_until="domcontentloaded")
-            for _url in _login_urls[1:]:
-                _p = await ctx.new_page()
-                await _p.goto(_url, wait_until="domcontentloaded")
-            print("  → If all SC accounts are already logged in, press Enter to start scraping.")
-            print("    If not, log in first — then press Enter.")
-            import sys
-            if sys.stdin.isatty():
-                await asyncio.get_event_loop().run_in_executor(None, input)
-            else:
-                print("  (non-interactive mode: starting in 5 s …)")
-                await asyncio.sleep(5)
-            # After login confirmation, use the first page as the scraping page.
+        # ── Open one login tab per SC endpoint ────────────────────────────────
+        _login_endpoints = [
+            ("US", "https://sellercentral.amazon.com/ap/signin"),
+            ("EU", "https://sellercentral-europe.amazon.com/ap/signin"),
+            ("JP", "https://sellercentral.amazon.co.jp/ap/signin"),
+            ("IN", "https://sellercentral.amazon.in/ap/signin"),
+        ]
+        print("Opening Seller Central login pages …")
+        existing = list(ctx.pages)
+        for _label, _url in _login_endpoints:
+            _p = existing.pop(0) if existing else await ctx.new_page()
+            await _p.bring_to_front()
+            await _p.goto(_url, wait_until="domcontentloaded", timeout=30000)
+        print("  → Log in to all tabs (complete any OTP), then press Enter to start scraping.")
+        if sys.stdin.isatty():
+            await asyncio.get_event_loop().run_in_executor(None, input)
+        else:
+            print("  (non-interactive: starting in 5 s …)")
+            await asyncio.sleep(5)
 
-        page = ctx.pages[0] if ctx.pages else await ctx.new_page()
+        # ── Create one dedicated scraping page per domain group ───────────────
+        # Each group gets its own fresh visible tab; all share session cookies.
+        domain_pages = {}
+        for d in DOMAINS:
+            group = "EU" if d == "EU" else d
+            if group not in domain_pages:
+                domain_pages[group] = await ctx.new_page()
 
-        summary = []
-        for domain in DOMAINS:
-            eff_pages = PAGES_OVERRIDE.get(domain, PAGES)
-            if domain == "EU":
-                # Scrape all EU sub-countries into one combined EU_*.csv
-                eu_file = os.path.join(OUT_DIR, "EU_seller_central_reviews.csv")
-                eu_rows, eu_imgs = 0, 0
-                try:
+        # ── Run all domains simultaneously ────────────────────────────────────
+        async def _run(domain):
+            try:
+                group = "EU" if domain == "EU" else domain
+                page  = domain_pages[group]
+                if domain == "EU":
+                    eu_file = os.path.join(OUT_DIR, "EU_seller_central_reviews.csv")
+                    eu_rows, eu_imgs = 0, 0
                     for i, sub in enumerate(EU_COUNTRIES):
                         sub_pages = PAGES_OVERRIDE.get(sub, PAGES)
                         n_rows, n_imgs = await scrape_domain(
@@ -607,18 +611,17 @@ async def main():
                         )
                         eu_rows += n_rows
                         eu_imgs += n_imgs
-                    summary.append(("EU", eu_rows, eu_imgs, "OK"))
-                except Exception as e:
-                    print(f"\n  ✗ EU failed: {e}")
-                    summary.append(("EU", eu_rows, eu_imgs, f"FAILED: {e}"))
-            else:
-                try:
+                    return ("EU", eu_rows, eu_imgs, "OK")
+                else:
+                    eff_pages = PAGES_OVERRIDE.get(domain, PAGES)
                     n_rows, n_imgs = await scrape_domain(
                         domain, page, ctx, prof, asin_filter, pages=eff_pages)
-                    summary.append((domain, n_rows, n_imgs, "OK"))
-                except Exception as e:
-                    print(f"\n  ✗ {domain} failed: {e}")
-                    summary.append((domain, 0, 0, f"FAILED: {e}"))
+                    return (domain, n_rows, n_imgs, "OK")
+            except Exception as e:
+                print(f"\n  ✗ {domain} failed: {e}")
+                return (domain, 0, 0, f"FAILED: {e}")
+
+        results = await asyncio.gather(*[_run(d) for d in DOMAINS])
 
         if HEADLESS:
             await ctx.close()
@@ -628,7 +631,7 @@ async def main():
     print(f"\n{'═'*60}")
     print("  SUMMARY")
     print(f"{'═'*60}")
-    for domain, n_rows, n_imgs, status in summary:
+    for domain, n_rows, n_imgs, status in results:
         print(f"  {domain:4s}  {n_rows:>5} reviews  {n_imgs:>4} with images  [{status}]")
     print(f"{'═'*60}")
 

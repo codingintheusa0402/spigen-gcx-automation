@@ -1,41 +1,34 @@
 # Seller Central Review Scraper
 
-Scrapes reviews from Amazon Seller Central and enriches each review with customer-attached image URLs. Configurable per marketplace, star filter, detection avoidance level, and output columns.
+Scrapes reviews from Amazon Seller Central and enriches each review with customer-attached image URLs. All configured domains scrape **simultaneously** in parallel. Configurable per marketplace, star filter, detection avoidance level, and output columns.
 
 ## How it works
 
-1. **Page scraping** — Connects to an existing Chrome session via CDP and navigates through Seller Central review pages, extracting review content with optional human-like scroll simulation and random delays.
-2. **Deduplication** — Removes any duplicate Review IDs that appear across page boundaries before image fetching.
-3. **Image enrichment** — Navigates to the marketplace's amazon domain and fetches each review's detail page using in-browser `fetch()` with session cookies to extract customer-attached image URLs.
-4. **CSV output** — Writes all data to a UTF-8 BOM CSV (Excel-compatible, Korean-safe).
+1. **Auto-launch Chrome** — Starts Chrome with a dedicated scraper profile (`~/.chrome-scraper-profile`) and remote debugging on port 9222. Sessions persist between runs — log in once, done.
+2. **Login tabs** — Opens one tab per SC endpoint (US, EU, JP, IN). Log in and complete any OTP, then press Enter.
+3. **Parallel scraping** — Each domain gets its own tab and scrapes simultaneously. EU sub-countries (UK → DE → FR → IT → ES) run sequentially on one shared tab.
+4. **Incremental CSV write** — Reviews are flushed to CSV after every page so no data is lost if the run is interrupted.
+5. **Deduplication** — Removes duplicate Review IDs across page boundaries before image fetching.
+6. **Image enrichment** — Navigates to the amazon domain and fetches each review's detail page using in-browser `fetch()` with session cookies to extract customer-attached image URLs.
 
 ## Prerequisites
 
-### 1. Launch Chrome with remote debugging enabled
-
-```bash
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
-```
-
-### 2. Log in to both accounts in that Chrome window
-
-- **Amazon Seller Central** for the target marketplace
-- **Google Chrome account** (sign in to your Chrome profile)
-
-> Sessions expire overnight. If the script times out on page 1, re-login to both and re-run.
-
-### 3. Install dependencies
+### Install dependencies
 
 ```bash
 pip install -r requirements.txt
 playwright install chromium
 ```
 
+> Chrome must be installed at `/Applications/Google Chrome.app` (default Mac path). Update `CHROME_PATH` in the config if yours is different.
+
 ## Usage
 
 ```bash
 python3 scrape_sc_reviews.py
 ```
+
+On first run Chrome opens automatically → log in to all SC accounts → press Enter. Subsequent runs reuse saved sessions.
 
 ---
 
