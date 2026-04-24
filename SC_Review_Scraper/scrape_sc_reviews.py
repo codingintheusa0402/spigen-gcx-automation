@@ -431,6 +431,7 @@ async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, app
         url = dc["sc_base"] + params + (f"&pageNumber={p}" if p > 1 else "")
         print(f"  Page {p}/{pages} …", end=" ", flush=True)
         try:
+            await page.bring_to_front()
             await page.goto(url, wait_until="domcontentloaded")
             await page.wait_for_selector('.reviewContainer[data-testid]', timeout=15000)
         except Exception as e:
