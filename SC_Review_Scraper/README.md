@@ -63,11 +63,20 @@ Marketplace to scrape.
 
 ### `PAGES`
 
-Number of pages to scrape. Total reviews ≈ `PAGES × PAGE_SIZE`.
+Default page limit applied to every domain. Total reviews ≈ `PAGES × PAGE_SIZE`.
 
 ```python
 PAGES = 30      # 1,500 reviews at PAGE_SIZE=50
 PAGES = 25      # 2,500 reviews at PAGE_SIZE=100
+```
+
+### `PAGES_OVERRIDE`
+
+Per-domain page limit. Domains not listed here fall back to `PAGES`. UK and DE are EU sub-countries — their entries apply automatically when scraping `"EU"`.
+
+```python
+PAGES_OVERRIDE = {}                          # no overrides (default)
+PAGES_OVERRIDE = {"US": 20, "UK": 20, "DE": 20}   # US/UK/DE get 20 pages, others use PAGES
 ```
 
 ### `PAGE_SIZE`

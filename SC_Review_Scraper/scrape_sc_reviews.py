@@ -12,7 +12,7 @@ from playwright.async_api import async_playwright
 # USER CONFIG — edit these before each run
 # ═══════════════════════════════════════════════════════════════════════════════
 
-DOMAINS = ["EU", "JP", "IN"]
+DOMAINS = ["US", "EU", "JP", "IN"]
 # List of domains to scrape sequentially. Each gets its own CSV file.
 # Single domain example : DOMAINS = ["US"]
 # Supported             : "US" | "EU" | "UK" | "DE" | "FR" | "IT" | "ES" | "JP" | "IN"
@@ -20,8 +20,17 @@ DOMAINS = ["EU", "JP", "IN"]
 # country's marketplaceId and writes all reviews into one EU_*.csv file.
 
 PAGES = 10
-# Max pages to scrape per domain.
+# Default max pages to scrape per domain.
 # Total reviews ≈ PAGES × PAGE_SIZE.
+# Override per-domain with PAGES_OVERRIDE below.
+
+PAGES_OVERRIDE = {
+    "US": 20,
+    "UK": 20,
+    "DE": 20,
+}
+# Per-domain page limit. Domains not listed here use PAGES.
+# UK and DE are EU sub-countries — their overrides apply when scraping "EU" too.
 
 PAGE_SIZE = 50
 # Number of reviews per page returned by Seller Central.
@@ -37,7 +46,7 @@ APPEND_CSV = False
 # True  — appends to an existing CSV without rewriting the header.
 #          Use together with START_PAGE to resume an interrupted run.
 
-STAR_FILTER = "1,2,3"
+STAR_FILTER = "1,2,3,4,5"
 # Comma-separated star ratings to include.
 # Critical reviews only: "1,2,3"   All reviews: "1,2,3,4,5"
 
@@ -373,13 +382,15 @@ async def _switch_sc_marketplace(page, display_name, prof):
         print(f"WARN: marketplace switch failed ({e}) — scraping with current marketplace")
 
 
-async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, append=False):
+async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, append=False, pages=None):
     """Scrape one domain end-to-end. Returns (total_rows, total_with_imgs).
 
     out_file : override output path (used by EU group to share one CSV).
     append   : skip header write and load existing rows from out_file first
                (used for EU sub-countries 2-5 so they append to the shared file).
+    pages    : page limit for this domain (overrides PAGES global).
     """
+    pages      = pages if pages is not None else PAGES
     dc         = _DOMAINS[domain]
     out_file   = out_file or _out_file(domain)
     extract_js = _make_extract_js(domain, dc["country"])
@@ -391,7 +402,7 @@ async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, app
 
     print(f"\n{'═'*60}")
     print(f"  Domain : {domain}  ({dc['sc_base']})")
-    print(f"  Pages  : {PAGES}  |  Page size: {PAGE_SIZE}  |  Stars: {STAR_FILTER}  |  Output: {out_file}")
+    print(f"  Pages  : {pages}  |  Page size: {PAGE_SIZE}  |  Stars: {STAR_FILTER}  |  Output: {out_file}")
     print(f"{'═'*60}")
 
     # Switch SC marketplace via UI dropdown if this domain has a display name
@@ -414,7 +425,7 @@ async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, app
         all_rows = []
 
     p = START_PAGE if not append else 1
-    while p <= PAGES:
+    while p <= pages:
         url = dc["sc_base"] + params + (f"&pageNumber={p}" if p > 1 else "")
         print(f"  Page {p}/{PAGES} …", end=" ", flush=True)
         try:
@@ -430,7 +441,7 @@ async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, app
         all_rows.extend(rows)
         _csv_append_rows(out_file, rows)   # ← incremental write after every page
         p += 1
-        if p <= PAGES:
+        if p <= pages:
             await asyncio.sleep(random.uniform(*prof["nav_delay"]))
 
     print(f"\n  Total collected : {len(all_rows)}")
@@ -511,7 +522,7 @@ async def main():
         print(f"ASIN filter loaded: {len(asin_filter)} ASINs from {ASIN_FILTER_FILE}")
 
     print(f"Domains     : {DOMAINS}")
-    print(f"Pages/domain: {PAGES}  |  Page size: {PAGE_SIZE}  |  Stars: {STAR_FILTER}  |  Avoidance: {DETECTION_AVOIDANCE}")
+    print(f"Pages/domain: {PAGES}  |  Overrides: {PAGES_OVERRIDE or 'none'}  |  Page size: {PAGE_SIZE}  |  Stars: {STAR_FILTER}  |  Avoidance: {DETECTION_AVOIDANCE}")
     print(f"Headless    : {HEADLESS}")
 
     async with async_playwright() as pw:
@@ -527,15 +538,17 @@ async def main():
 
         summary = []
         for domain in DOMAINS:
+            eff_pages = PAGES_OVERRIDE.get(domain, PAGES)
             if domain == "EU":
                 # Scrape all EU sub-countries into one combined EU_*.csv
                 eu_file = os.path.join(OUT_DIR, "EU_seller_central_reviews.csv")
                 eu_rows, eu_imgs = 0, 0
                 try:
                     for i, sub in enumerate(EU_COUNTRIES):
+                        sub_pages = PAGES_OVERRIDE.get(sub, PAGES)
                         n_rows, n_imgs = await scrape_domain(
                             sub, page, ctx, prof, asin_filter,
-                            out_file=eu_file, append=(i > 0)
+                            out_file=eu_file, append=(i > 0), pages=sub_pages
                         )
                         eu_rows += n_rows
                         eu_imgs += n_imgs
@@ -545,7 +558,8 @@ async def main():
                     summary.append(("EU", eu_rows, eu_imgs, f"FAILED: {e}"))
             else:
                 try:
-                    n_rows, n_imgs = await scrape_domain(domain, page, ctx, prof, asin_filter)
+                    n_rows, n_imgs = await scrape_domain(
+                        domain, page, ctx, prof, asin_filter, pages=eff_pages)
                     summary.append((domain, n_rows, n_imgs, "OK"))
                 except Exception as e:
                     print(f"\n  ✗ {domain} failed: {e}")
