@@ -860,7 +860,7 @@ function backfillMCFFees() {
     var after  = new Date(yr, mo - 1, 1);
     var before = new Date(yr, mo,     1);
     before.setDate(before.getDate() + 45);
-    var now = new Date();
+    var now = new Date(Date.now() - 2 * 60 * 1000); // 2-min buffer: API rejects future dates
     if (before > now) before = now;
 
     Logger.log('Month ' + (mi + 1) + '/' + monthKeys.length + ': ' + mk +
@@ -1134,4 +1134,28 @@ function _deepScanForGcx(obj, listName, hits) {
       _deepScanForGcx(v, listName, hits);
     }
   });
+}
+
+/**
+ * Logs the first 20 non-empty Q-column (col 17) values exactly as stored,
+ * plus their P-column (col 16) sentDate. Run to see the exact Q-col format
+ * so we can compare it to SellerOrderId values in the Finances API.
+ */
+function sampleQcol() {
+  var sheet    = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var lastRow  = sheet.getLastRow();
+  var startRow = 4; // data starts at row 4 (row 3 is header)
+  var maxRows  = Math.min(lastRow - startRow + 1, 200);
+  var data     = sheet.getRange(startRow, 1, maxRows, 17).getValues(); // A:Q
+
+  Logger.log('=== sampleQcol — first 20 non-empty Q (col 17) values ===');
+  var shown = 0;
+  for (var i = 0; i < data.length && shown < 20; i++) {
+    var q = data[i][16]; // Q col index 16
+    var p = data[i][15]; // P col index 15
+    if (q === '' || q === null || q === undefined) continue;
+    Logger.log('  row ' + (startRow + i) + '  P="' + p + '"  Q="' + String(q) + '"');
+    shown++;
+  }
+  Logger.log('=== done (' + shown + ' rows shown) ===');
 }
