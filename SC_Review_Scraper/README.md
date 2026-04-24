@@ -139,21 +139,21 @@ HEADERS_TO_INCLUDE = ['ASIN', 'Created 날짜', 'Reviewer', 'Review Ratings',
 
 Full column list: `ASIN` · `Created 날짜` · `사진 유무` · `Reviewer` · `Review Ratings` · `Review Title` · `본문` · `Product Rating` · `Ratings Count` · `Domain Code` · `국가` · `Review Link` · `Image URL` · `Review ID`
 
-### `HEADLESS` / `CHROME_USER_DATA`
+### `HEADLESS` / `SCRAPER_PROFILE_DIR` / `CHROME_PATH`
 
-Controls whether the browser is visible.
+Controls whether the browser is visible and which Chrome profile is used.
 
 | Value | Behaviour | Use when |
 |-------|-----------|----------|
-| `False` (default) | Connects to your running Chrome via CDP (port 9222). Browser window is visible. | Debugging — watch the scraper navigate in real time |
-| `True` | Launches a headless Chromium using your saved Chrome profile so existing login cookies are reused. No window appears. | Background / automated runs |
+| `False` (default) | Auto-launches Chrome with `SCRAPER_PROFILE_DIR`. Browser window is visible. SC sessions persist between runs — log in once, done. | Normal use |
+| `True` | Launches headless Chromium using `SCRAPER_PROFILE_DIR`. Chrome must be fully closed first. | Background / automated runs |
 
-> **Headless requirement:** Chrome must be fully closed before running with `HEADLESS = True` — an open Chrome holds a lock on the profile directory that prevents Playwright from using it.
+`SCRAPER_PROFILE_DIR` is a dedicated Chrome profile at `~/.chrome-scraper-profile`. It is separate from your regular Chrome profile, so SC sessions are saved there without affecting your everyday browsing. On first run, log in to all SC accounts; subsequent runs reuse the saved sessions automatically.
 
 ```python
 HEADLESS = False
-CHROME_USER_DATA = os.path.expanduser("~/Library/Application Support/Google/Chrome")
-# Windows: "%LOCALAPPDATA%/Google/Chrome/User Data"
+SCRAPER_PROFILE_DIR = os.path.expanduser("~/.chrome-scraper-profile")
+CHROME_PATH = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 ```
 
 ### `DETECTION_AVOIDANCE`

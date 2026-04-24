@@ -72,17 +72,19 @@ DETECTION_AVOIDANCE = "MEDIUM"
 # MEDIUM — randomized delays + scroll simulation (recommended for daily use)
 # HIGH   — aggressive randomization + long delays (safest for large/frequent scrapes)
 
-HEADLESS = True
-# False — connects to your running Chrome via CDP (port 9222).
-#                   Browser window stays visible; ideal for watching and debugging.
-# True            — launches a headless Chromium using your saved Chrome profile so
-#                   existing login sessions/cookies are reused. Chrome must be fully
-#                   closed before running in headless mode (profile lock conflict).
+HEADLESS = False
+# False (default) — auto-launches Chrome with SCRAPER_PROFILE_DIR; sessions persist
+#                   between runs so you only need to log in once. Browser is visible.
+# True            — launches headless Chromium using SCRAPER_PROFILE_DIR.
+#                   Chrome must be fully closed before running in headless mode.
 
-CHROME_USER_DATA = os.path.expanduser("~/Library/Application Support/Google/Chrome")
-# Path to your Chrome user data directory. Used only when HEADLESS = True.
-# Mac default : ~/Library/Application Support/Google/Chrome
-# Windows     : %LOCALAPPDATA%/Google/Chrome/User Data
+SCRAPER_PROFILE_DIR = os.path.expanduser("~/.chrome-scraper-profile")
+# Dedicated Chrome profile for scraping. SC login sessions are saved here between runs.
+# First run: Chrome opens → log in to all SC accounts → sessions persist automatically.
+# Subsequent runs: Chrome opens with saved sessions → scraping starts after Enter.
+
+CHROME_PATH = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+# Path to the Chrome executable. Used only when HEADLESS = False.
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # DOMAIN REGISTRY
@@ -427,7 +429,7 @@ async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, app
     p = START_PAGE if not append else 1
     while p <= pages:
         url = dc["sc_base"] + params + (f"&pageNumber={p}" if p > 1 else "")
-        print(f"  Page {p}/{PAGES} …", end=" ", flush=True)
+        print(f"  Page {p}/{pages} …", end=" ", flush=True)
         try:
             await page.goto(url, wait_until="domcontentloaded")
             await page.wait_for_selector('.reviewContainer[data-testid]', timeout=15000)
@@ -527,15 +529,39 @@ async def main():
 
     async with async_playwright() as pw:
         if HEADLESS:
-            import subprocess, shutil
-            if shutil.which("pgrep") and subprocess.run(
+            import shutil
+            if shutil.which("pgrep") and __import__("subprocess").run(
                     ["pgrep", "-x", "Google Chrome"], capture_output=True).returncode == 0:
                 print("⚠  Chrome is open — close it first (Cmd+Q), then press Enter.")
                 await asyncio.get_event_loop().run_in_executor(None, input)
             ctx     = await pw.chromium.launch_persistent_context(
-                CHROME_USER_DATA, channel="chrome", headless=True)
+                SCRAPER_PROFILE_DIR, channel="chrome", headless=True)
             browser = None
         else:
+            import subprocess, socket, time as _time
+
+            def _port_open(p):
+                s = socket.socket(); r = s.connect_ex(('127.0.0.1', p)); s.close(); return r == 0
+
+            if not _port_open(9222):
+                print(f"Launching Chrome with scraper profile: {SCRAPER_PROFILE_DIR}")
+                os.makedirs(SCRAPER_PROFILE_DIR, exist_ok=True)
+                subprocess.Popen([CHROME_PATH,
+                    "--remote-debugging-port=9222",
+                    f"--user-data-dir={SCRAPER_PROFILE_DIR}",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                ])
+                print("Waiting for Chrome to start …", end=" ", flush=True)
+                for _ in range(30):
+                    if _port_open(9222): break
+                    _time.sleep(1)
+                else:
+                    raise RuntimeError("Chrome did not open on port 9222 within 30 s")
+                print("ready")
+            else:
+                print("Chrome already running on port 9222 — connecting …")
+
             browser = await pw.chromium.connect_over_cdp("http://localhost:9222")
             ctx     = browser.contexts[0]
 
@@ -552,7 +578,8 @@ async def main():
             for _url in _login_urls[1:]:
                 _p = await ctx.new_page()
                 await _p.goto(_url, wait_until="domcontentloaded")
-            print("  → Log in to all tabs, then press Enter here to start scraping.")
+            print("  → If all SC accounts are already logged in, press Enter to start scraping.")
+            print("    If not, log in first — then press Enter.")
             await asyncio.get_event_loop().run_in_executor(None, input)
             # After login confirmation, use the first page as the scraping page.
 
