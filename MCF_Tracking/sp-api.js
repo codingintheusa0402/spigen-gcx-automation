@@ -895,3 +895,97 @@ function _bfColLetter(n) {
   while (n > 0) { var r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
   return s;
 }
+
+/**
+ * Diagnostic: logs what the Finances API actually returns for the first N unfilled rows.
+ * Run from Apps Script editor to diagnose why backfillMCFFees writes 0 fees.
+ * Checks:
+ *   1. Raw ShipmentEvent count + sample SellerOrderIds from the API
+ *   2. Whether any SellerOrderId matches the Q-col order ID
+ *   3. What FeeTypes exist on matched events
+ *   4. Whether ServiceFeeEventList (alternative MCF billing) has matching entries
+ */
+function diagnoseMCFFee() {
+  var SAMPLE_ROWS  = 5;   // how many rows to inspect
+  var sheet        = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var lastRow      = sheet.getLastRow();
+  var allValues    = sheet.getRange(1, 1, lastRow, 25).getValues(); // cols A–Y
+
+  var sentDateColIdx = 15; // P
+  var orderIdColIdx  = 16; // Q
+
+  // Collect first SAMPLE_ROWS with both orderId and sentDate
+  var samples = [];
+  for (var r = 1; r < lastRow && samples.length < SAMPLE_ROWS; r++) {
+    var orderId  = String(allValues[r][orderIdColIdx] || '').trim();
+    var sentDate = allValues[r][sentDateColIdx];
+    if (orderId && sentDate) samples.push({ row: r + 1, orderId: orderId, sentDate: sentDate });
+  }
+
+  Logger.log('=== diagnoseMCFFee: inspecting ' + samples.length + ' rows ===');
+
+  samples.forEach(function(s) {
+    Logger.log('\n--- Row ' + s.row + ' | orderId=' + s.orderId + ' | sentDate=' + s.sentDate + ' ---');
+
+    var after = _parseCellDate(s.sentDate);
+    if (!after || isNaN(after.getTime())) { Logger.log('  SKIP: bad sentDate'); return; }
+    var before = new Date(after); before.setDate(before.getDate() + 60);
+    var cap = new Date(Date.now() - 5 * 60 * 1000);
+    if (before > cap) before = cap;
+
+    Logger.log('  window: ' + after.toISOString() + ' → ' + before.toISOString());
+
+    ['EU', 'FE'].forEach(function(ep) {
+      try {
+        // ── ShipmentEventList ───────────────────────────────────────────────
+        var qs = 'PostedAfter='   + encodeURIComponent(after.toISOString()) +
+                 '&PostedBefore=' + encodeURIComponent(before.toISOString()) +
+                 '&MaxResultsPerPage=100';
+        var res      = spapiFetchWithRetry('GET', '/finances/v0/financialEvents',
+                         { queryString: qs, endpoint: ep }, 2, 3000);
+        var payload  = res.payload || res;
+        var shipments = (payload.FinancialEvents || {}).ShipmentEventList || [];
+
+        Logger.log('  [' + ep + '] ShipmentEventList count: ' + shipments.length);
+        if (shipments.length) {
+          // Log first 5 SellerOrderIds so we can see the ID format
+          var sids = shipments.slice(0, 5).map(function(e) { return e.SellerOrderId || '(none)'; });
+          Logger.log('  [' + ep + '] Sample SellerOrderIds: ' + sids.join(' | '));
+
+          // Check if our orderId appears
+          var match = shipments.filter(function(e) {
+            return String(e.SellerOrderId || '').trim() === s.orderId;
+          });
+          if (match.length) {
+            Logger.log('  [' + ep + '] MATCH FOUND — FeeTypes: ' +
+              (match[0].ShipmentFeeList || []).map(function(f) { return f.FeeType; }).join(', '));
+          } else {
+            Logger.log('  [' + ep + '] No match for "' + s.orderId + '"');
+          }
+        }
+
+        // ── ServiceFeeEventList (alternative MCF billing path) ──────────────
+        var svcFees = (payload.FinancialEvents || {}).ServiceFeeEventList || [];
+        Logger.log('  [' + ep + '] ServiceFeeEventList count: ' + svcFees.length);
+        if (svcFees.length) {
+          var svcSample = svcFees.slice(0, 3).map(function(e) {
+            return (e.SellerOrderId || e.AmazonOrderId || e.FeeReason || '?');
+          });
+          Logger.log('  [' + ep + '] Sample ServiceFee keys: ' + svcSample.join(' | '));
+        }
+
+        // ── List ALL event list keys present in this response ───────────────
+        var fe = payload.FinancialEvents || {};
+        var presentKeys = Object.keys(fe).filter(function(k) {
+          return Array.isArray(fe[k]) && fe[k].length > 0;
+        });
+        Logger.log('  [' + ep + '] Non-empty event lists: ' + (presentKeys.join(', ') || '(none)'));
+
+      } catch (e) {
+        Logger.log('  [' + ep + '] ERROR: ' + e.message);
+      }
+    });
+  });
+
+  Logger.log('\n=== diagnoseMCFFee done ===');
+}
