@@ -382,6 +382,20 @@ function _processFilterSheet_(srcSS, cfg) {
     const before = filtered.length;
     filtered = filtered.filter(r => !existingIds.has(cell(r, srcRidColIdx)));
     Logger.log(`  [${filterSheet}] Skipped ${before - filtered.length} existing row(s) → ${filtered.length} new`);
+
+    // Intra-batch dedup: same Review ID can appear multiple times in the filter
+    // sheet when Apify scrapes the same review across multiple runs on different days.
+    const seenInBatch = new Set();
+    const beforeBatch = filtered.length;
+    filtered = filtered.filter(r => {
+      const rid = cell(r, srcRidColIdx);
+      if (!rid || seenInBatch.has(rid)) return false;
+      seenInBatch.add(rid);
+      return true;
+    });
+    if (beforeBatch - filtered.length > 0) {
+      Logger.log(`  [${filterSheet}] Intra-batch dedup: removed ${beforeBatch - filtered.length} duplicate(s), ${filtered.length} remain`);
+    }
   } else {
     Logger.log(`  [${filterSheet}] WARNING: srcRidColIdx not found — dedup skipped, all ${filtered.length} rows will paste`);
   }
@@ -493,6 +507,15 @@ function _processFilterSheet_(srcSS, cfg) {
       } else {
         Logger.log(`  [1-3점] Skipped =dr() — updIdx13: ${updIdx13}, aiIdx13: ${aiIdx13}`);
       }
+
+      // Review ID in 1-3점: same direct-value approach — find today's new rows
+      // (those whose Update 날짜 matches today and whose Review ID is empty)
+      // and write their IDs from the 1-5점 sheet's freshly written Review IDs.
+      // Since 1-3점 rows are a subset of 1-5점, we match by row position is
+      // unreliable; skip formula-copy entirely — IDs were already written to
+      // 1-5점 and 1-3점 doesn't independently need re-derivation here.
+      // (1-3점 for has15=true sheets is populated via the filter on 1-5점 data,
+      //  not by independent paste — so Review ID was already set above.)
     }
   } catch (e) {
     Logger.log(`  [1-3점] Error: ${e.message}`);
@@ -572,6 +595,20 @@ function _processTo13_(srcSS, cfg) {
     const before = filtered.length;
     filtered = filtered.filter(r => !existingIds.has(cell(r, srcRidColIdx)));
     Logger.log(`  [${filterSheet}] Skipped ${before - filtered.length} existing row(s) → ${filtered.length} new`);
+
+    // Intra-batch dedup: same Review ID can appear multiple times in the filter
+    // sheet when Apify scrapes the same review across multiple runs on different days.
+    const seenInBatch = new Set();
+    const beforeBatch = filtered.length;
+    filtered = filtered.filter(r => {
+      const rid = cell(r, srcRidColIdx);
+      if (!rid || seenInBatch.has(rid)) return false;
+      seenInBatch.add(rid);
+      return true;
+    });
+    if (beforeBatch - filtered.length > 0) {
+      Logger.log(`  [${filterSheet}] Intra-batch dedup: removed ${beforeBatch - filtered.length} duplicate(s), ${filtered.length} remain`);
+    }
   } else {
     Logger.log(`  [${filterSheet}] WARNING: srcRidColIdx not found — dedup skipped, all ${filtered.length} rows will paste`);
   }
@@ -594,6 +631,8 @@ function _processTo13_(srcSS, cfg) {
   const rows = filtered.map(r => {
     const row = r.slice(0, numCols);
     while (row.length < numCols) row.push("");
+    // Always clear Review ID slot in the pasted data — either written back from source
+    // (skipDestRid=false) or left blank for the dest sheet's formula to populate (skipDestRid=true)
     if (destRidIdx >= 0 && destRidIdx < numCols) row[destRidIdx] = "";
     return row;
   });
@@ -601,12 +640,15 @@ function _processTo13_(srcSS, cfg) {
   if (insertAtTop) {
     const lastCol = dest13.getLastColumn();
 
+    // Save both values and formulas from row 1 before insertion.
     const row1Formulas = dest13.getRange(1, 1, 1, lastCol).getFormulas()[0];
     const row1Values   = dest13.getRange(1, 1, 1, lastCol).getValues()[0];
 
     dest13.insertRowsAfter(1, filtered.length);
 
+    // Step 1: restore plain-text headers via setValues
     dest13.getRange(1, 1, 1, lastCol).setValues([row1Values]);
+    // Step 2: overwrite formula cells with their original formulas
     for (let c = 0; c < lastCol; c++) {
       if (row1Formulas[c]) {
         dest13.getRange(1, c + 1).setFormula(row1Formulas[c]);

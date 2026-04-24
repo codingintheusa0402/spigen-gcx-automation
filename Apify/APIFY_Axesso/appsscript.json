@@ -4,11 +4,18 @@
     "enabledAdvancedServices": [
       {
         "userSymbol": "Sheets",
-        "serviceId": "sheets",
-        "version": "v4"
+        "version": "v4",
+        "serviceId": "sheets"
       }
     ]
   },
   "exceptionLogging": "STACKDRIVER",
-  "runtimeVersion": "V8"
+  "runtimeVersion": "V8",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/script.scriptapp",
+    "https://www.googleapis.com/auth/drive"
+  ]
 }
