@@ -557,6 +557,27 @@ function _isMcfFeeType(feeType) {
 }
 
 /**
+ * Returns a GCX order ID with its trailing number shifted by delta.
+ * Works on IDs matching GCX-XX-YYMMDD-N (single dash, non-negative number).
+ * Returns null for double-dash or out-of-range IDs.
+ *
+ * Why: The Q column auto-generates IDs one step before the order is submitted to
+ * Amazon's FBA Outbound API. Amazon records the submitted ID (N) as SellerOrderId
+ * in the Finances API, while the sheet stores N-1. So we index each feeMap entry
+ * under both the API ID (N) and the Q-column ID (N-1) for the lookup to succeed.
+ */
+function _gcxNumAlias(id, delta) {
+  var m = /^(GCX-[A-Z]+-\d{6}-)(\d+)$/.exec(String(id));
+  if (!m) return null;
+  var newNum = parseInt(m[2], 10) + delta;
+  if (newNum < 0) return null;
+  var ns  = String(newNum);
+  var pad = m[2].length;
+  while (ns.length < pad) ns = '0' + ns;
+  return m[1] + ns;
+}
+
+/**
  * Fetches ALL ShipmentEvent financial events for a single date window on one endpoint.
  * Returns a plain object mapping SellerOrderId → fee (absolute value).
  * Used by backfillMCFFees() to build a bulk fee map instead of one call per order.
@@ -599,7 +620,16 @@ function _buildFeeMapForWindow(ep, postedAfter, postedBefore, maxPages) {
         });
       });
 
-      if (total !== 0) feeMap[sid] = Math.abs(total);
+      if (total !== 0) {
+        var abs = Math.abs(total);
+        feeMap[sid] = abs;
+        // Index under Q-column ID (N-1) so the backfill lookup succeeds even when
+        // the sheet stores one less than the sellerFulfillmentOrderId Amazon recorded.
+        if (isGcx) {
+          var alias = _gcxNumAlias(sid, -1);
+          if (alias && !feeMap[alias]) feeMap[alias] = abs;
+        }
+      }
     }
 
     page++;
@@ -872,7 +902,7 @@ function backfillMCFFees() {
       try {
         var m = _buildFeeMapForWindow(ep, after, before, 20);
         var gcxFound = Object.keys(m).filter(function(k) { return k.toUpperCase().indexOf('GCX') === 0; });
-        if (gcxFound.length) Logger.log('  [' + ep + '] GCX entries in feeMap: ' + gcxFound.join(', '));
+        if (gcxFound.length) Logger.log('  [' + ep + '] GCX entries in feeMap (' + gcxFound.length + '): ' + gcxFound.slice(0, 10).join(', ') + (gcxFound.length > 10 ? ' …' : ''));
         Object.keys(m).forEach(function(k) { if (!feeMap[k]) feeMap[k] = m[k]; });
       } catch (e) { Logger.log('  ' + ep + ' error: ' + e.message); }
     });
