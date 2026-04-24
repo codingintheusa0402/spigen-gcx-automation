@@ -534,6 +534,22 @@ async def main():
             browser = await pw.chromium.connect_over_cdp("http://localhost:9222")
             ctx     = browser.contexts[0]
 
+            # Open one login tab per unique SC endpoint so the user can verify sessions.
+            _login_urls = [
+                "https://sellercentral.amazon.com/ap/signin",
+                "https://sellercentral-europe.amazon.com/ap/signin",
+                "https://sellercentral.amazon.co.jp/ap/signin",
+                "https://sellercentral.amazon.in/ap/signin",
+            ]
+            print("Opening Seller Central login pages …")
+            _login_page = ctx.pages[0] if ctx.pages else await ctx.new_page()
+            await _login_page.goto(_login_urls[0], wait_until="domcontentloaded")
+            for _url in _login_urls[1:]:
+                _p = await ctx.new_page()
+                await _p.goto(_url, wait_until="domcontentloaded")
+            print("  → Log in to all tabs, then press Enter here to start scraping.")
+            await asyncio.get_event_loop().run_in_executor(None, input)
+
         page = ctx.pages[0] if ctx.pages else await ctx.new_page()
 
         summary = []
