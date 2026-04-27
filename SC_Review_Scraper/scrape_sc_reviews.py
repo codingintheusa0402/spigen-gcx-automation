@@ -428,7 +428,6 @@ async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, app
         url = dc["sc_base"] + params + (f"&pageNumber={p}" if p > 1 else "")
         print(f"  Page {p}/{pages} …", end=" ", flush=True)
         try:
-            await page.bring_to_front()
             await page.goto(url, wait_until="domcontentloaded", timeout=30000)
             await page.wait_for_selector('.reviewContainer[data-testid]', timeout=15000)
         except Exception as e:
@@ -460,7 +459,6 @@ async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, app
 
     # ── Step 3: image enrichment ──────────────────────────────────────────
     print(f"  Switching to {dc['amazon_home']} for image fetching …")
-    await page.bring_to_front()
     await page.goto(dc["amazon_home"], wait_until="domcontentloaded", timeout=30000)
     await asyncio.sleep(random.uniform(1.5, 3.0))
 
