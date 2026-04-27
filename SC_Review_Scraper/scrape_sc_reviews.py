@@ -20,16 +20,12 @@ DOMAINS = ["US", "EU", "JP", "IN"]
 # "EU" automatically scrapes UK + DE + FR + IT + ES in sequence using each
 # country's marketplaceId and writes all reviews into one EU_*.csv file.
 
-PAGES = 10
+PAGES = 30
 # Default max pages to scrape per domain.
 # Total reviews ≈ PAGES × PAGE_SIZE.
 # Override per-domain with PAGES_OVERRIDE below.
 
-PAGES_OVERRIDE = {
-    "US": 20,
-    "UK": 20,
-    "DE": 20,
-}
+PAGES_OVERRIDE = {}
 # Per-domain page limit. Domains not listed here use PAGES.
 # UK and DE are EU sub-countries — their overrides apply when scraping "EU" too.
 
@@ -471,8 +467,21 @@ async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, app
 
     print(f"  Image fetch     : batches {batch_min}–{batch_max}, jitter {jitter[0]}–{jitter[1]}ms")
     while i < len(review_ids):
-        batch   = review_ids[i:i + random.randint(batch_min, batch_max)]
-        results = await page.evaluate(fetch_js, [batch, jitter[0], jitter[1]])
+        batch = review_ids[i:i + random.randint(batch_min, batch_max)]
+        try:
+            results = await page.evaluate(fetch_js, [batch, jitter[0], jitter[1]])
+        except Exception as _img_err:
+            if "closed" in str(_img_err).lower():
+                raise
+            # Page navigated away mid-batch (consent redirect, session expiry, etc.)
+            # Re-anchor to amazon home and retry this batch once.
+            print(f"  WARN image batch failed ({_img_err}) — re-navigating and retrying …")
+            try:
+                await page.goto(dc["amazon_home"], wait_until="domcontentloaded", timeout=30000)
+                await asyncio.sleep(random.uniform(1.5, 3.0))
+                results = await page.evaluate(fetch_js, [batch, jitter[0], jitter[1]])
+            except Exception:
+                results = {}  # give up on this batch, images stay empty
         for rid, imgs in results.items():
             if imgs:
                 id_to_row[rid][IDX['사진 유무']] = 'Y'
@@ -567,12 +576,19 @@ async def main():
             ctx     = browser.contexts[0]
 
         # ── Open one login tab per SC endpoint ────────────────────────────────
-        _login_endpoints = [
-            ("US", "https://sellercentral.amazon.com/ap/signin"),
-            ("EU", "https://sellercentral-europe.amazon.com/ap/signin"),
-            ("JP", "https://sellercentral.amazon.co.jp/ap/signin"),
-            ("IN", "https://sellercentral.amazon.in/ap/signin"),
-        ]
+        _login_endpoints = []
+        _seen_eu = False
+        for _d in DOMAINS:
+            if _d == "EU":
+                if not _seen_eu:
+                    _seen_eu = True
+                    # Open a tab for each EU country that will actually be scraped.
+                    # UK/DE/FR sessions carry from sellercentral-europe, but IT/ES
+                    # need their own domains — open all to be safe.
+                    for _sub in EU_COUNTRIES:
+                        _login_endpoints.append((_sub, _DOMAINS[_sub]["sc_base"]))
+            else:
+                _login_endpoints.append((_d, _DOMAINS[_d]["sc_base"]))
         print("Opening Seller Central login pages …")
         existing = list(ctx.pages)
         for _label, _url in _login_endpoints:
