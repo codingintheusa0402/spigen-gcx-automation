@@ -341,8 +341,8 @@ async def _switch_sc_marketplace(page, display_name, prof):
     """
     print(f"  Switching SC marketplace → {display_name} ...", end=" ", flush=True)
     try:
-        # 1. Open the dropdown
-        await page.click('.dropdown-account-switcher-header')
+        # 1. Open the dropdown (JS click bypasses viewport-visibility requirement)
+        await page.evaluate("document.querySelector('.dropdown-account-switcher-header').click()")
         await asyncio.sleep(0.8)
 
         # 2. Try to find the indented target item (may already be visible)
