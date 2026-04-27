@@ -202,20 +202,20 @@ function spapiFetch(method, path, opts) {
   return JSON.parse(text || '{}');
 }
 
-/***** ========= RETRY ON 429 HELPERS ========= *****/
+/***** ========= RETRY ON 429 / BANDWIDTH HELPERS ========= *****/
 function _isRateLimit429(err) {
   var msg = (err && err.message) ? err.message : String(err);
-  // Covers both "SP-API error 429" and JSON body { "code": "QuotaExceeded" }
   return msg.indexOf('SP-API error 429') >= 0 || msg.indexOf('"code":"QuotaExceeded"') >= 0;
 }
 
+function _isBandwidthError(err) {
+  var msg = (err && err.message) ? err.message : String(err);
+  return msg.indexOf('Bandwidth quota exceeded') >= 0;
+}
+
 /**
- * Wrapper around spapiFetch that retries when 429 (QuotaExceeded).
- * @param {string} method
- * @param {string} path
- * @param {Object} opts - same as spapiFetch opts (queryString, body, endpoint)
- * @param {number} [attempts=3] - total attempts including first try
- * @param {number} [waitMs=5000] - wait between retries (ms)
+ * Wrapper around spapiFetch that retries on 429 (QuotaExceeded) and transient
+ * bandwidth errors. Bandwidth errors get a longer wait (15 s) to let GAS recover.
  */
 function spapiFetchWithRetry(method, path, opts, attempts, waitMs) {
   attempts = (attempts == null) ? 3 : attempts;
@@ -227,11 +227,17 @@ function spapiFetchWithRetry(method, path, opts, attempts, waitMs) {
       return spapiFetch(method, path, opts);
     } catch (err) {
       lastErr = err;
-      if (_isRateLimit429(err) && i < attempts - 1) {
-        Utilities.sleep(waitMs);
-        continue;
+      if (i < attempts - 1) {
+        if (_isRateLimit429(err)) {
+          Utilities.sleep(waitMs);
+          continue;
+        }
+        if (_isBandwidthError(err)) {
+          Utilities.sleep(15000); // 15 s to let GAS URL-fetch quota recover
+          continue;
+        }
       }
-      throw err; // non-429 or out of attempts
+      throw err;
     }
   }
   if (lastErr) throw lastErr;
@@ -447,9 +453,24 @@ function getMcfStockByAsin(asin, marketplaceId) {
  * @param {string} [sentDate] Optional yyyy-mm-dd sent date from col P. Skips the fulfillment order lookup when provided.
  * @return {number} Fee amount in the order's marketplace currency (GBP for UK, EUR for EU).
  */
-function MCFFee(method, orderId, sentDate) {
+function MCFFee(methodOrOrderId, orderIdOrSentDate, sentDateArg) {
+  // Supports three calling conventions:
+  //   =MCFFee(Qn)                  → FinancesAPI, no sentDate
+  //   =MCFFee(Qn, Pn)              → FinancesAPI, sentDate=Pn
+  //   =MCFFee("FinancesAPI", Qn, Pn) → explicit method (legacy 3-arg form)
+  var METHODS = ['FinancesAPI', 'getFulfillmentPreview'];
+  var method, orderId, sentDate;
+  if (METHODS.indexOf(String(methodOrOrderId || '').trim()) >= 0) {
+    method   = String(methodOrOrderId).trim();
+    orderId  = orderIdOrSentDate;
+    sentDate = sentDateArg;
+  } else {
+    method   = 'FinancesAPI';
+    orderId  = methodOrOrderId;
+    sentDate = orderIdOrSentDate;
+  }
   if (!orderId) return '';
-  method = String(method || 'getFulfillmentPreview').trim();
+  method = method || 'FinancesAPI';
   var dateKey = sentDate ? '_' + String(sentDate).trim() : '';
 
   var cache = CacheService.getScriptCache();
@@ -496,9 +517,20 @@ function MCFFee(method, orderId, sentDate) {
  * @param {string} [sentDate] Optional yyyy-mm-dd sent date from col P. Skips the fulfillment order lookup when provided.
  * @return {number} Fee amount in the order's marketplace currency.
  */
-function MCFFee_JP(method, orderId, sentDate) {
+function MCFFee_JP(methodOrOrderId, orderIdOrSentDate, sentDateArg) {
+  var METHODS = ['FinancesAPI', 'getFulfillmentPreview'];
+  var method, orderId, sentDate;
+  if (METHODS.indexOf(String(methodOrOrderId || '').trim()) >= 0) {
+    method   = String(methodOrOrderId).trim();
+    orderId  = orderIdOrSentDate;
+    sentDate = sentDateArg;
+  } else {
+    method   = 'FinancesAPI';
+    orderId  = methodOrOrderId;
+    sentDate = orderIdOrSentDate;
+  }
   if (!orderId) return '';
-  method = String(method || 'getFulfillmentPreview').trim();
+  method = method || 'FinancesAPI';
   var dateKey = sentDate ? '_' + String(sentDate).trim() : '';
 
   var cache = CacheService.getScriptCache();
