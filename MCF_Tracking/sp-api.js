@@ -43,6 +43,14 @@ function _resolveLwaProfileKey(endpointKey) {
 
 function getLwaAccessToken(endpointKey) {
   var prof = _resolveLwaProfileKey(endpointKey);
+
+  // Cache the token for 55 min (LWA tokens expire in 60 min).
+  // Concurrent formula cells reuse the same token instead of each fetching a new one.
+  var cacheKey = 'LWA_TOKEN_' + prof;
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get(cacheKey);
+  if (cached) return cached;
+
   var clientId, clientSecret, refreshToken;
   if (prof === 'JP') {
     clientId     = _prop('LWA_CLIENT_ID_JP',     _prop('LWA_CLIENT_ID'));
@@ -73,6 +81,8 @@ function getLwaAccessToken(endpointKey) {
   if (resp.getResponseCode() >= 300 || !body.access_token) {
     throw new Error('LWA token fetch failed: ' + resp.getResponseCode() + ' ' + text);
   }
+
+  cache.put(cacheKey, body.access_token, 3300); // 55 min TTL
   return body.access_token;
 }
 
