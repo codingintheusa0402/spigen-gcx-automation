@@ -567,6 +567,27 @@ function MCFFee_JP(methodOrOrderId, orderIdOrSentDate, sentDateArg) {
 }
 
 /**
+ * Safely parses a date value that may come from a Sheets cell.
+ * Handles: JS Date objects, ISO strings (yyyy-mm-dd), YYMMDD strings ("260427"),
+ * and other date-like strings. Returns null if unparseable.
+ */
+function _parseCellDate(val) {
+  if (!val && val !== 0) return null;
+  if (val instanceof Date) {
+    return isNaN(val.getTime()) ? null : new Date(val);
+  }
+  var s = String(val).trim();
+  if (!s) return null;
+  // YYMMDD: exactly 6 digits → "260427" → 2026-04-27
+  if (/^\d{6}$/.test(s)) {
+    var d = new Date('20' + s.slice(0, 2) + '-' + s.slice(2, 4) + '-' + s.slice(4, 6));
+    return isNaN(d.getTime()) ? null : d;
+  }
+  var d2 = new Date(s);
+  return isNaN(d2.getTime()) ? null : d2;
+}
+
+/**
  * Finances API method — actual settled MCF fee.
  * Searches ShipmentEventList for SellerOrderId === orderId and sums FBA/fulfillment fees.
  * Fees are stored as negative values in the Finances API; returns Math.abs(total).
@@ -578,7 +599,8 @@ function _fetchMcfFeeFinancesApi(orderId, ep, sentDate) {
 
   if (sentDate) {
     // Use the caller-supplied sent date (P col) — skip getFulfillmentOrderRaw entirely
-    postedAfter  = new Date(String(sentDate).trim());
+    postedAfter = _parseCellDate(sentDate);
+    if (!postedAfter) throw new Error('MCFFee: could not parse sentDate: ' + sentDate);
     postedBefore = new Date(postedAfter);
     postedBefore.setDate(postedBefore.getDate() + 60);
   } else {
@@ -729,10 +751,11 @@ function MCFFeeDebug(orderId, sentDate) {
     var postedAfter, postedBefore, dateSource;
 
     if (sentDate) {
-      postedAfter  = new Date(String(sentDate).trim());
+      postedAfter = _parseCellDate(sentDate);
+      if (!postedAfter) return [['Cannot parse sentDate: ' + sentDate]];
       postedBefore = new Date(postedAfter);
       postedBefore.setDate(postedBefore.getDate() + 90);
-      dateSource = 'sentDate (P col): ' + String(sentDate).trim();
+      dateSource = 'sentDate (P col): ' + postedAfter.toISOString().slice(0, 10);
     } else {
       var result = getFulfillmentOrderRaw(String(orderId), 'EU');
       var fo = result.fulfillmentOrder || {};
