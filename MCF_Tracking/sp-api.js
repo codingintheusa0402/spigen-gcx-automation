@@ -445,9 +445,23 @@ function getMcfStockByAsin(asin, marketplaceId) {
  * @param {string} [sentDate] Optional yyyy-mm-dd sent date from col P. Skips the fulfillment order lookup when provided.
  * @return {number} Fee amount in the order's marketplace currency (GBP for UK, EUR for EU).
  */
-function MCFFee(method, orderId, sentDate) {
+function MCFFee(orderIdOrMethod, sentDateOrOrderId, legacySentDate) {
+  // Supports both calling conventions:
+  //   New (simple):  =MCFFee(Q14)          or  =MCFFee(Q14, P14)
+  //   Old (verbose): =MCFFee("FinancesAPI", Q14, P14)
+  // Always uses FinancesAPI. getFulfillmentPreview still works via old convention.
+  var METHODS = ['FinancesAPI', 'getFulfillmentPreview'];
+  var method, orderId, sentDate;
+  if (METHODS.indexOf(String(orderIdOrMethod || '').trim()) >= 0) {
+    method   = String(orderIdOrMethod).trim();
+    orderId  = sentDateOrOrderId;
+    sentDate = legacySentDate;
+  } else {
+    method   = 'FinancesAPI';
+    orderId  = orderIdOrMethod;
+    sentDate = sentDateOrOrderId;
+  }
   if (!orderId) return '';
-  method = String(method || 'getFulfillmentPreview').trim();
   var dateKey = sentDate ? '_' + String(sentDate).trim() : '';
 
   var cache = CacheService.getScriptCache();
@@ -455,13 +469,11 @@ function MCFFee(method, orderId, sentDate) {
   var cached = cache.get(key);
   if (cached !== null) return cached === '__EMPTY__' ? '' : parseFloat(cached);
 
-  // Live fetch on cache miss. Safe for < ~50 cells at once; for 100+ cells run
-  // backfillMCFFees() from the editor instead (avoids GAS execution queue overload).
   try {
     var fee = '';
     if (method === 'FinancesAPI') {
-      fee = _fetchMcfFeeFinancesApi(String(orderId), 'EU', sentDate, 3);
-      if (fee === '') fee = _fetchMcfFeeFinancesApi(String(orderId), 'FE', sentDate, 3);
+      fee = _fetchMcfFeeFinancesApi(String(orderId), 'EU', sentDate, 5);
+      if (fee === '') fee = _fetchMcfFeeFinancesApi(String(orderId), 'FE', sentDate, 5);
     } else {
       try { fee = _fetchMcfFeePreview(String(orderId), 'EU'); } catch(e) {}
       if (fee === '') { try { fee = _fetchMcfFeePreview(String(orderId), 'FE'); } catch(e) {} }
@@ -484,9 +496,19 @@ function MCFFee(method, orderId, sentDate) {
  * @param {string} [sentDate] Optional yyyy-mm-dd sent date from col P. Skips the fulfillment order lookup when provided.
  * @return {number} Fee amount in the order's marketplace currency.
  */
-function MCFFee_JP(method, orderId, sentDate) {
+function MCFFee_JP(orderIdOrMethod, sentDateOrOrderId, legacySentDate) {
+  var METHODS = ['FinancesAPI', 'getFulfillmentPreview'];
+  var method, orderId, sentDate;
+  if (METHODS.indexOf(String(orderIdOrMethod || '').trim()) >= 0) {
+    method   = String(orderIdOrMethod).trim();
+    orderId  = sentDateOrOrderId;
+    sentDate = legacySentDate;
+  } else {
+    method   = 'FinancesAPI';
+    orderId  = orderIdOrMethod;
+    sentDate = sentDateOrOrderId;
+  }
   if (!orderId) return '';
-  method = String(method || 'getFulfillmentPreview').trim();
   var dateKey = sentDate ? '_' + String(sentDate).trim() : '';
 
   var cache = CacheService.getScriptCache();
@@ -497,8 +519,8 @@ function MCFFee_JP(method, orderId, sentDate) {
   try {
     var fee = '';
     if (method === 'FinancesAPI') {
-      fee = _fetchMcfFeeFinancesApi(String(orderId), 'FE', sentDate, 3);
-      if (fee === '') fee = _fetchMcfFeeFinancesApi(String(orderId), 'EU', sentDate, 3);
+      fee = _fetchMcfFeeFinancesApi(String(orderId), 'FE', sentDate, 5);
+      if (fee === '') fee = _fetchMcfFeeFinancesApi(String(orderId), 'EU', sentDate, 5);
     } else {
       try { fee = _fetchMcfFeePreview(String(orderId), 'FE'); } catch(e) {}
       if (fee === '') { try { fee = _fetchMcfFeePreview(String(orderId), 'EU'); } catch(e) {} }
@@ -561,6 +583,13 @@ function _fetchMcfFeeFinancesApi(orderId, ep, sentDate, maxPages) {
   // Primary: match by sellerFulfillmentOrderId
   var fee = _sumMcfFeeFromShipments(shipments, orderId);
   if (fee !== '') return fee;
+
+  // GCX alias: Q col stores N, Finances API may record as N+1 (see _gcxNumAlias)
+  var gcxAlias = _gcxNumAlias(String(orderId), 1);
+  if (gcxAlias) {
+    fee = _sumMcfFeeFromShipments(shipments, gcxAlias);
+    if (fee !== '') return fee;
+  }
 
   // Fallback: some MCF orders settle in the Finances API under displayableOrderId
   // (e.g. when fulfilling a linked Amazon marketplace order)
@@ -696,16 +725,20 @@ function _collectShipmentEvents(ep, postedAfter, postedBefore, maxPages) {
  */
 function _sumMcfFeeFromShipments(shipments, targetOrderId) {
   var target = String(targetOrderId).trim();
+  var isGcx  = target.toUpperCase().indexOf('GCX') === 0;
   for (var i = 0; i < shipments.length; i++) {
     var ev = shipments[i];
     if (String(ev.SellerOrderId || '').trim() !== target) continue;
     var total = 0;
     (ev.ShipmentFeeList || []).forEach(function(f) {
-      if (_isMcfFeeType(f.FeeType)) total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0);
+      // GCX MCF orders: sum ALL fee types (same logic as _buildFeeMapForWindow)
+      if (isGcx || _isMcfFeeType(f.FeeType))
+        total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0);
     });
     (ev.ShipmentItemList || []).forEach(function(item) {
       (item.ItemFeeList || []).forEach(function(f) {
-        if (_isMcfFeeType(f.FeeType)) total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0);
+        if (isGcx || _isMcfFeeType(f.FeeType))
+          total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0);
       });
     });
     return Math.abs(total);
