@@ -14,7 +14,7 @@ from playwright.async_api import async_playwright
 # USER CONFIG — edit these before each run
 # ═══════════════════════════════════════════════════════════════════════════════
 
-DOMAINS = ["EU", "JP", "IN"]
+DOMAINS = ["EU"]
 # List of domains to scrape sequentially. Each gets its own CSV file.
 # Single domain example : DOMAINS = ["US"]
 # Supported             : "US" | "EU" | "UK" | "DE" | "FR" | "IT" | "ES" | "JP" | "IN"
@@ -687,33 +687,50 @@ async def main():
             browser = await pw.chromium.connect_over_cdp("http://localhost:9222")
             ctx     = browser.contexts[0]
 
-        # ── Open one login tab per SC endpoint ────────────────────────────────
+        # ── Session check: navigate to each SC URL; only prompt login if needed ──
         _login_endpoints = []
         _seen_eu = False
         for _d in DOMAINS:
             if _d == "EU":
                 if not _seen_eu:
                     _seen_eu = True
-                    # All EU countries share sellercentral-europe.amazon.com — one login covers all.
                     _login_endpoints.append(("EU", "https://sellercentral-europe.amazon.com/brand-customer-reviews/"))
             else:
                 _login_endpoints.append((_d, _DOMAINS[_d]["sc_base"]))
-        print("Opening Seller Central login pages …")
-        existing = list(ctx.pages)
+
+        print("Checking Seller Central sessions …")
+        existing  = list(ctx.pages)
+        needs_login = []
         for _label, _url in _login_endpoints:
             _p = existing.pop(0) if existing else await ctx.new_page()
-            await _p.bring_to_front()
-            await _p.goto(_url, wait_until="domcontentloaded", timeout=30000)
-        print("  → Log in to all tabs (complete any OTP), then press Enter to start scraping.")
-        if sys.stdin.isatty():
-            await asyncio.get_event_loop().run_in_executor(None, input)
+            try:
+                await _p.goto(_url, wait_until="domcontentloaded", timeout=30000)
+                # Login redirects always land on a URL containing /ap/ or signin
+                _logged_in = not any(x in _p.url for x in ["/ap/", "signin", "mfa"])
+            except Exception:
+                _logged_in = False
+
+            if _logged_in:
+                print(f"  [{_label}] Session valid — skipping login")
+            else:
+                await _p.bring_to_front()
+                needs_login.append(_label)
+                print(f"  [{_label}] Not logged in — tab opened")
+
+        if needs_login:
+            print(f"\n  Login required for: {needs_login}")
+            print("  → Complete login + OTP for all tabs, then press Enter to start scraping.")
+            if sys.stdin.isatty():
+                await asyncio.get_event_loop().run_in_executor(None, input)
+            else:
+                wait = LOGIN_WAIT_SECONDS
+                print(f"  (non-interactive: starting in {wait} s — log in now)")
+                for remaining in range(wait, 0, -1):
+                    print(f"\r  {remaining:3d}s remaining …", end="", flush=True)
+                    await asyncio.sleep(1)
+                print("\r  Starting scrape!                    ")
         else:
-            wait = LOGIN_WAIT_SECONDS
-            print(f"  (non-interactive: starting in {wait} s — log in to all tabs now)")
-            for remaining in range(wait, 0, -1):
-                print(f"\r  {remaining:3d}s remaining …", end="", flush=True)
-                await asyncio.sleep(1)
-            print("\r  Starting scrape!                    ")
+            print("  All sessions valid — starting scrape immediately.")
 
         # ── Create one dedicated scraping page per domain group ───────────────
         # Each group gets its own fresh visible tab; all share session cookies.
