@@ -471,9 +471,12 @@ function MCFFee(orderIdOrMethod, sentDateOrOrderId, legacySentDate) {
 
   try {
     var fee = '';
+    // maxPages: 3 when sentDate given (tight 60-day window), 2 without (wide 180-day window).
+    // Keeps each formula call well under GAS's 30-second custom-function limit.
+    var pages = sentDate ? 3 : 2;
     if (method === 'FinancesAPI') {
-      fee = _fetchMcfFeeFinancesApi(String(orderId), 'EU', sentDate, 5);
-      if (fee === '') fee = _fetchMcfFeeFinancesApi(String(orderId), 'FE', sentDate, 5);
+      fee = _fetchMcfFeeFinancesApi(String(orderId), 'EU', sentDate, pages);
+      if (fee === '') fee = _fetchMcfFeeFinancesApi(String(orderId), 'FE', sentDate, pages);
     } else {
       try { fee = _fetchMcfFeePreview(String(orderId), 'EU'); } catch(e) {}
       if (fee === '') { try { fee = _fetchMcfFeePreview(String(orderId), 'FE'); } catch(e) {} }
@@ -518,9 +521,10 @@ function MCFFee_JP(orderIdOrMethod, sentDateOrOrderId, legacySentDate) {
 
   try {
     var fee = '';
+    var pages = sentDate ? 3 : 2;
     if (method === 'FinancesAPI') {
-      fee = _fetchMcfFeeFinancesApi(String(orderId), 'FE', sentDate, 5);
-      if (fee === '') fee = _fetchMcfFeeFinancesApi(String(orderId), 'EU', sentDate, 5);
+      fee = _fetchMcfFeeFinancesApi(String(orderId), 'FE', sentDate, pages);
+      if (fee === '') fee = _fetchMcfFeeFinancesApi(String(orderId), 'EU', sentDate, pages);
     } else {
       try { fee = _fetchMcfFeePreview(String(orderId), 'FE'); } catch(e) {}
       if (fee === '') { try { fee = _fetchMcfFeePreview(String(orderId), 'EU'); } catch(e) {} }
@@ -557,7 +561,8 @@ function _parseCellDate(val) {
 
 function _fetchMcfFeeFinancesApi(orderId, ep, sentDate, maxPages) {
   var postedAfter, postedBefore;
-  var foCache = null; // cache getFulfillmentOrderRaw result to avoid a double call in fallback
+  // skipFallback: true when called from formula (no sentDate) — avoids extra getFulfillmentOrderRaw call
+  var skipDisplayableFallback = false;
 
   if (sentDate) {
     // Use the caller-supplied sent date (P col) — skip getFulfillmentOrderRaw entirely
@@ -565,13 +570,13 @@ function _fetchMcfFeeFinancesApi(orderId, ep, sentDate, maxPages) {
     postedBefore = new Date(postedAfter);
     postedBefore.setDate(postedBefore.getDate() + 60);
   } else {
-    // Fallback: derive date from fulfillment order
-    var result = getFulfillmentOrderRaw(orderId, ep);
-    foCache = result.fulfillmentOrder || {};
-    if (!foCache.receivedDate) return '';
-    postedAfter  = new Date(foCache.receivedDate);
-    postedBefore = new Date(foCache.receivedDate);
-    postedBefore.setDate(postedBefore.getDate() + 60);
+    // No sentDate: search the last 180 days without calling getFulfillmentOrderRaw.
+    // getFulfillmentOrderRaw is slow (~2-3 s per call); skipping it prevents formula
+    // cells from timing out when many run concurrently (GAS 30 s limit).
+    var _now2 = new Date();
+    postedAfter  = new Date(_now2.getTime() - 180 * 24 * 3600 * 1000);
+    postedBefore = new Date(_now2.getTime() - 5 * 60 * 1000);
+    skipDisplayableFallback = true; // skip the extra API call in the fallback below
   }
 
   var _now = new Date(Date.now() - 5 * 60 * 1000); // 5-min buffer for GAS-Amazon clock drift
@@ -592,18 +597,19 @@ function _fetchMcfFeeFinancesApi(orderId, ep, sentDate, maxPages) {
   }
 
   // Fallback: some MCF orders settle in the Finances API under displayableOrderId
-  // (e.g. when fulfilling a linked Amazon marketplace order)
-  try {
-    if (!foCache) {
+  // Only run when sentDate was provided (skipDisplayableFallback = false) — calling
+  // getFulfillmentOrderRaw here without sentDate would cause the formula timeout again.
+  if (!skipDisplayableFallback) {
+    try {
       var foResult = getFulfillmentOrderRaw(orderId, ep);
-      foCache = foResult.fulfillmentOrder || {};
-    }
-    var displayableId = (foCache.displayableOrderId || '').trim();
-    if (displayableId && displayableId !== orderId) {
-      var fee2 = _sumMcfFeeFromShipments(shipments, displayableId);
-      if (fee2 !== '') return fee2;
-    }
-  } catch (e) { /* fallback failed — order not yet settled */ }
+      var foCache  = foResult.fulfillmentOrder || {};
+      var displayableId = (foCache.displayableOrderId || '').trim();
+      if (displayableId && displayableId !== orderId) {
+        var fee2 = _sumMcfFeeFromShipments(shipments, displayableId);
+        if (fee2 !== '') return fee2;
+      }
+    } catch (e) { /* fallback failed — order not yet settled */ }
+  }
 
   return ''; // order not yet settled — caller caches as __EMPTY__ for 10min and retries
 }
