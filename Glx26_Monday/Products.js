@@ -42,9 +42,10 @@ function runProductNowAndPollRecurring() {
 /**********************************************************
  * INTERNAL: start Product run using Task saved input
  **********************************************************/
-function startProductRun_() {
+function startProductRun_(memoryMb) {
   const ss = SpreadsheetApp.getActive();
   const token = _getToken();
+  const memory = memoryMb || 2048;
 
   const url =
     `https://api.apify.com/v2/actor-tasks/${encodeURIComponent(
@@ -52,14 +53,14 @@ function startProductRun_() {
     )}/runs?token=${encodeURIComponent(token)}`;
 
   Logger.log(
-    'Starting Product run (async): ' +
+    `Starting Product run (async, memory=${memory} MB): ` +
       url.replace(/token=[^&]+/, 'token=***')
   );
 
   const resp = UrlFetchApp.fetch(url, {
     method: 'post',
     contentType: 'application/json',
-    payload: JSON.stringify({ memory: 2048 }),
+    payload: JSON.stringify({ memory }),
     muteHttpExceptions: true
   });
 
@@ -171,31 +172,36 @@ function pollProductRunAndWrite() {
     }
 
     _cleanupProductState_();
+    props.deleteProperty('PRODUCT_OOM_RETRIED');
     _deleteTriggersByHandler_('pollProductRunAndWrite');
     return;
   }
 
   if (['FAILED', 'ABORTED', 'TIMED-OUT'].includes(status)) {
-    // exitCode 137 = OOM kill. Auto-resurrect with 4096 MB so it continues where it left off.
+    // exitCode 137 = OOM kill.
+    // Resurrection re-runs the actor from scratch (no checkpointing) so the dataset fills
+    // with duplicates and can loop endlessly. Instead: start one fresh run at 4096 MB.
     const exitCode = runData.exitCode;
-    if (status === 'FAILED' && exitCode === 137) {
-      const resurrectUrl =
-        `https://api.apify.com/v2/actor-runs/${encodeURIComponent(runId)}/resurrect` +
-        `?token=${encodeURIComponent(token)}&memory=4096`;
+    const alreadyRetried = props.getProperty('PRODUCT_OOM_RETRIED');
+    if (status === 'FAILED' && exitCode === 137 && !alreadyRetried) {
+      Logger.log(`Product OOM (exitCode 137) — starting fresh run at 4096 MB`);
+      _cleanupProductState_();
+      _deleteTriggersByHandler_('pollProductRunAndWrite');
       try {
-        const rResp = UrlFetchApp.fetch(resurrectUrl, { method: 'post', muteHttpExceptions: true });
-        if (rResp.getResponseCode() < 400) {
-          Logger.log(`Product OOM (exitCode 137) — resurrected runId=${runId} with 4096 MB`);
-          ss.toast('Product OOM — resurrected with 4096 MB, continuing…', 'Product', 8);
-          return; // keep polling with same runId
-        }
+        props.setProperty('PRODUCT_OOM_RETRIED', '1');
+        startProductRun_(4096);
+        _scheduleRecurringProductPoll_();
+        ss.toast('Product OOM — retrying with 4096 MB (fresh run)', 'Product', 8);
       } catch (e) {
-        Logger.log('Resurrection failed: ' + e);
+        props.deleteProperty('PRODUCT_OOM_RETRIED');
+        ss.toast('Product OOM retry failed: ' + e.message, 'Product Error', 8);
       }
+      return;
     }
+    props.deleteProperty('PRODUCT_OOM_RETRIED');
     _cleanupProductState_();
     _deleteTriggersByHandler_('pollProductRunAndWrite');
-    ss.toast(`Product run failed: ${status}`, 'Product Error', 8);
+    ss.toast(`Product run ${status}${exitCode === 137 ? ' (OOM, already retried)' : ''}`, 'Product Error', 8);
   }
 }
 
@@ -236,7 +242,14 @@ function _fetchAllDatasetItems_filtered_(datasetId, token) {
     if (items.length < limit) break;
   }
 
-  return allItems;
+  // Deduplicate by ASIN — a fresh retry run appends to the same dataset so
+  // the same products appear twice. Keep the last occurrence (most recent scrape).
+  const seen = new Map();
+  for (const item of allItems) {
+    const key = item.asin || item.url;
+    if (key) seen.set(key, item);
+  }
+  return [...seen.values()];
 }
 
 
