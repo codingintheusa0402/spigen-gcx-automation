@@ -584,11 +584,9 @@ async def main():
             if _d == "EU":
                 if not _seen_eu:
                     _seen_eu = True
-                    # Open a tab for each EU country that will actually be scraped.
-                    # UK/DE/FR sessions carry from sellercentral-europe, but IT/ES
-                    # need their own domains — open all to be safe.
-                    for _sub in EU_COUNTRIES:
-                        _login_endpoints.append((_sub, _DOMAINS[_sub]["sc_base"]))
+                    # EU Seller Central shares one session — logging into any one
+                    # country portal covers all others. Open only the first country.
+                    _login_endpoints.append((EU_COUNTRIES[0], _DOMAINS[EU_COUNTRIES[0]]["sc_base"]))
             else:
                 _login_endpoints.append((_d, _DOMAINS[_d]["sc_base"]))
         print("Opening Seller Central login pages …")
