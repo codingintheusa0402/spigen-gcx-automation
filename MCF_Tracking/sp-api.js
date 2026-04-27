@@ -540,13 +540,12 @@ function _fetchMcfFeeFinancesApi(orderId, ep, sentDate) {
     postedBefore = new Date(postedAfter);
     postedBefore.setDate(postedBefore.getDate() + 60);
   } else {
-    // Fallback: derive date from fulfillment order
-    var result = getFulfillmentOrderRaw(orderId, ep);
-    foCache = result.fulfillmentOrder || {};
-    if (!foCache.receivedDate) return '';
-    postedAfter  = new Date(foCache.receivedDate);
-    postedBefore = new Date(foCache.receivedDate);
-    postedBefore.setDate(postedBefore.getDate() + 60);
+    // No sentDate supplied — default to last 180 days instead of calling getFulfillmentOrderRaw.
+    // getFulfillmentOrderRaw costs one FBA Outbound API call per formula cell; with many cells
+    // running concurrently that exhausts GAS's daily URL-fetch bandwidth quota.
+    var _ref = new Date(Date.now() - 5 * 60 * 1000);
+    postedAfter  = new Date(_ref.getTime() - 180 * 24 * 3600 * 1000);
+    postedBefore = new Date(_ref);
   }
 
   var _now = new Date(Date.now() - 5 * 60 * 1000); // 5-min buffer for GAS-Amazon clock drift
@@ -560,18 +559,18 @@ function _fetchMcfFeeFinancesApi(orderId, ep, sentDate) {
   if (fee !== '') return fee;
 
   // Fallback: some MCF orders settle in the Finances API under displayableOrderId
-  // (e.g. when fulfilling a linked Amazon marketplace order)
-  try {
-    if (!foCache) {
-      var foResult = getFulfillmentOrderRaw(orderId, ep);
-      foCache = foResult.fulfillmentOrder || {};
-    }
-    var displayableId = (foCache.displayableOrderId || '').trim();
-    if (displayableId && displayableId !== orderId) {
-      var fee2 = _sumMcfFeeFromShipments(shipments, displayableId);
-      if (fee2 !== '') return fee2;
-    }
-  } catch (e) { /* fallback failed — order not yet settled */ }
+  // (e.g. when fulfilling a linked Amazon marketplace order).
+  // Only run when sentDate was provided — foCache is only populated in that path.
+  // Without sentDate, getFulfillmentOrderRaw was already skipped to save bandwidth.
+  if (foCache !== null) {
+    try {
+      var displayableId = (foCache.displayableOrderId || '').trim();
+      if (displayableId && displayableId !== orderId) {
+        var fee2 = _sumMcfFeeFromShipments(shipments, displayableId);
+        if (fee2 !== '') return fee2;
+      }
+    } catch (e) { /* fallback failed — order not yet settled */ }
+  }
 
   return ''; // order not yet settled — caller caches as __EMPTY__ for 10min and retries
 }
