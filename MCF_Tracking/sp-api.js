@@ -202,20 +202,21 @@ function spapiFetch(method, path, opts) {
   return JSON.parse(text || '{}');
 }
 
-/***** ========= RETRY ON 429 HELPERS ========= *****/
+/***** ========= RETRY ON 429 / BANDWIDTH HELPERS ========= *****/
 function _isRateLimit429(err) {
   var msg = (err && err.message) ? err.message : String(err);
   // Covers both "SP-API error 429" and JSON body { "code": "QuotaExceeded" }
   return msg.indexOf('SP-API error 429') >= 0 || msg.indexOf('"code":"QuotaExceeded"') >= 0;
 }
 
+function _isBandwidthError(err) {
+  var msg = (err && err.message) ? err.message : String(err);
+  return msg.indexOf('Bandwidth quota exceeded') >= 0;
+}
+
 /**
- * Wrapper around spapiFetch that retries when 429 (QuotaExceeded).
- * @param {string} method
- * @param {string} path
- * @param {Object} opts - same as spapiFetch opts (queryString, body, endpoint)
- * @param {number} [attempts=3] - total attempts including first try
- * @param {number} [waitMs=5000] - wait between retries (ms)
+ * Wrapper around spapiFetch that retries on 429 (QuotaExceeded) and
+ * transient GAS bandwidth quota errors (15 s wait).
  */
 function spapiFetchWithRetry(method, path, opts, attempts, waitMs) {
   attempts = (attempts == null) ? 3 : attempts;
@@ -227,11 +228,11 @@ function spapiFetchWithRetry(method, path, opts, attempts, waitMs) {
       return spapiFetch(method, path, opts);
     } catch (err) {
       lastErr = err;
-      if (_isRateLimit429(err) && i < attempts - 1) {
-        Utilities.sleep(waitMs);
-        continue;
+      if (i < attempts - 1) {
+        if (_isRateLimit429(err))  { Utilities.sleep(waitMs);  continue; }
+        if (_isBandwidthError(err)) { Utilities.sleep(15000); continue; }
       }
-      throw err; // non-429 or out of attempts
+      throw err;
     }
   }
   if (lastErr) throw lastErr;
