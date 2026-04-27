@@ -9,6 +9,14 @@ var BF_COL_RESULT  = 26;   // Z — static tracking number
                             //     replace =AMZTK(Q…) formula with =IF(Z…="","",HYPERLINK(…Z…,Z…))
 var BF_COL_FEE     = 25;   // Y — Transportation Fee (€, ¥, £) written by backfillMCFFees()
 
+// ── Fee backfill bandwidth controls ──────────────────────────────────────────
+// GAS has a daily URL Fetch quota (~50 MB). The Finances API returns ALL financial
+// events (not just MCF), so fetching many months at once can exhaust the quota.
+// Set MONTHS_TO_PROCESS to 2-3 and run repeatedly to cover all months.
+var BF_MONTHS_TO_PROCESS = 3;   // how many calendar months back to scan per run
+                                 // Increase to cover more history; lower to save quota.
+                                 // Set to 0 to scan all months (may hit quota limit).
+
 /**
  * Writes tracking numbers as static values into BF_COL_RESULT.
  * - Skips rows that already have a valid (non-error) tracking number.
@@ -120,21 +128,39 @@ function backfillMCFFees() {
   var now = new Date(Date.now() - 5 * 60 * 1000); // 5-min buffer for clock drift
   if (!minDate) minDate = new Date(now.getTime() - 180 * 24 * 3600 * 1000); // fallback: 180 days
 
-  Logger.log('backfillMCFFees: %s rows pending, window %s → now', pending.length, minDate.toISOString().slice(0, 10));
+  // Apply month cap to avoid exhausting GAS's daily URL Fetch quota.
+  // The Finances API returns ALL events (not just MCF), so scanning many months at
+  // once downloads tens of MB. Run with BF_MONTHS_TO_PROCESS=2-3, repeat for older months.
+  if (BF_MONTHS_TO_PROCESS > 0) {
+    var cap = new Date(now);
+    cap.setMonth(cap.getMonth() - BF_MONTHS_TO_PROCESS);
+    if (minDate < cap) {
+      Logger.log('backfillMCFFees: capping scan to %s months back (oldest: %s → cap: %s). ' +
+                 'Run again to cover earlier months.',
+                 BF_MONTHS_TO_PROCESS, minDate.toISOString().slice(0, 10), cap.toISOString().slice(0, 10));
+      minDate = cap;
+    }
+  }
 
-  // Fetch all financial events in 60-day windows for one endpoint
+  Logger.log('backfillMCFFees: %s rows pending, scanning %s → now', pending.length, minDate.toISOString().slice(0, 10));
+
+  // Fetch financial events in 30-day windows (smaller windows = fewer events per call = less bandwidth).
+  // maxPages=10 × 50 events/page = 500 events per 30-day window.
+  var BF_WINDOW_DAYS = 30;
+  var BF_MAX_PAGES   = 10;
+
   function fetchFeeMap(ep) {
     var feeMap      = {};
     var windowStart = new Date(minDate);
 
     while (windowStart < now) {
       var windowEnd = new Date(windowStart);
-      windowEnd.setDate(windowEnd.getDate() + 60);
+      windowEnd.setDate(windowEnd.getDate() + BF_WINDOW_DAYS);
       if (windowEnd > now) windowEnd = now;
       if (windowStart >= windowEnd) break;
 
       try {
-        var chunk = _buildFeeMapForWindow(ep, windowStart, windowEnd);
+        var chunk = _buildFeeMapForWindow(ep, windowStart, windowEnd, BF_MAX_PAGES);
         var keys  = Object.keys(chunk);
         keys.forEach(function(k) { feeMap[k] = chunk[k]; });
         Logger.log('  [%s] %s – %s: %s orders found', ep,
@@ -144,7 +170,7 @@ function backfillMCFFees() {
           Logger.log('  [%s] 429 — sleeping 15 s, retrying window', ep);
           Utilities.sleep(15000);
           try {
-            var chunk2 = _buildFeeMapForWindow(ep, windowStart, windowEnd);
+            var chunk2 = _buildFeeMapForWindow(ep, windowStart, windowEnd, BF_MAX_PAGES);
             Object.keys(chunk2).forEach(function(k) { feeMap[k] = chunk2[k]; });
           } catch (e2) {
             Logger.log('  [%s] retry also failed: %s', ep, e2.message);
@@ -156,7 +182,7 @@ function backfillMCFFees() {
 
       windowStart = new Date(windowEnd);
       windowStart.setDate(windowStart.getDate() + 1);
-      Utilities.sleep(500); // stay under SP-API rate limit between windows
+      Utilities.sleep(1000); // 1s between windows (up from 500ms) to reduce burst bandwidth
     }
 
     return feeMap;

@@ -591,7 +591,7 @@ function _buildFeeMapForWindow(ep, postedAfter, postedBefore, maxPages) {
   do {
     var qs = 'PostedAfter='   + encodeURIComponent(postedAfter.toISOString()) +
              '&PostedBefore=' + encodeURIComponent(postedBefore.toISOString()) +
-             '&MaxResultsPerPage=100';
+             '&MaxResultsPerPage=50';  // 50 (not 100) to halve response size and stay under GAS bandwidth quota
     if (nextToken) qs += '&NextToken=' + encodeURIComponent(nextToken);
 
     var res       = spapiFetchWithRetry('GET', '/finances/v0/financialEvents', { queryString: qs, endpoint: ep }, 3, 5000);
