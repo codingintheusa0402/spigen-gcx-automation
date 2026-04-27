@@ -831,7 +831,13 @@ function MCFFeeDebug(orderId, sentDate) {
     rows.push([dateSource, 'window end: ' + postedBefore.toISOString(), 'Total events: ' + shipments.length, '', '']);
     if (displayableId) rows.push(['displayableOrderId fallback', displayableId, '', '', '']);
     return rows;
-  } catch(e) { return [['ERR: ' + (e.message || e)]]; }
+  } catch(e) {
+    var msg = e.message || String(e);
+    if (_isRateLimit429(e)) {
+      return [['429 QuotaExceeded — SP-API rate limit hit. Wait 60 s then retry (only run one debug cell at a time).']];
+    }
+    return [['ERR: ' + msg]];
+  }
 }
 
 /**
