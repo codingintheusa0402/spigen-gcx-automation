@@ -202,20 +202,20 @@ function spapiFetch(method, path, opts) {
   return JSON.parse(text || '{}');
 }
 
-/***** ========= RETRY ON 429 / BANDWIDTH HELPERS ========= *****/
+/***** ========= RETRY ON 429 HELPERS ========= *****/
 function _isRateLimit429(err) {
   var msg = (err && err.message) ? err.message : String(err);
+  // Covers both "SP-API error 429" and JSON body { "code": "QuotaExceeded" }
   return msg.indexOf('SP-API error 429') >= 0 || msg.indexOf('"code":"QuotaExceeded"') >= 0;
 }
 
-function _isBandwidthError(err) {
-  var msg = (err && err.message) ? err.message : String(err);
-  return msg.indexOf('Bandwidth quota exceeded') >= 0;
-}
-
 /**
- * Wrapper around spapiFetch that retries on 429 (QuotaExceeded) and transient
- * bandwidth errors. Bandwidth errors get a longer wait (15 s) to let GAS recover.
+ * Wrapper around spapiFetch that retries when 429 (QuotaExceeded).
+ * @param {string} method
+ * @param {string} path
+ * @param {Object} opts - same as spapiFetch opts (queryString, body, endpoint)
+ * @param {number} [attempts=3] - total attempts including first try
+ * @param {number} [waitMs=5000] - wait between retries (ms)
  */
 function spapiFetchWithRetry(method, path, opts, attempts, waitMs) {
   attempts = (attempts == null) ? 3 : attempts;
@@ -227,17 +227,11 @@ function spapiFetchWithRetry(method, path, opts, attempts, waitMs) {
       return spapiFetch(method, path, opts);
     } catch (err) {
       lastErr = err;
-      if (i < attempts - 1) {
-        if (_isRateLimit429(err)) {
-          Utilities.sleep(waitMs);
-          continue;
-        }
-        if (_isBandwidthError(err)) {
-          Utilities.sleep(15000); // 15 s to let GAS URL-fetch quota recover
-          continue;
-        }
+      if (_isRateLimit429(err) && i < attempts - 1) {
+        Utilities.sleep(waitMs);
+        continue;
       }
-      throw err;
+      throw err; // non-429 or out of attempts
     }
   }
   if (lastErr) throw lastErr;
@@ -453,39 +447,9 @@ function getMcfStockByAsin(asin, marketplaceId) {
  * @param {string} [sentDate] Optional yyyy-mm-dd sent date from col P. Skips the fulfillment order lookup when provided.
  * @return {number} Fee amount in the order's marketplace currency (GBP for UK, EUR for EU).
  */
-function MCFFee(methodOrOrderId, orderIdOrSentDate, sentDateArg) {
-  // Supports three calling conventions:
-  //   =MCFFee(Qn)                  → FinancesAPI, no sentDate
-  //   =MCFFee(Qn, Pn)              → FinancesAPI, sentDate=Pn
-  //   =MCFFee("FinancesAPI", Qn, Pn) → explicit method (legacy 3-arg form)
-  var METHODS = ['FinancesAPI', 'getFulfillmentPreview'];
-  var method, orderId, sentDate;
-  if (METHODS.indexOf(String(methodOrOrderId || '').trim()) >= 0) {
-    method   = String(methodOrOrderId).trim();
-    orderId  = orderIdOrSentDate;
-    sentDate = sentDateArg;
-  } else {
-    method   = 'FinancesAPI';
-    orderId  = methodOrOrderId;
-    sentDate = orderIdOrSentDate;
-  }
+function MCFFee(method, orderId, sentDate) {
   if (!orderId) return '';
-  method = method || 'FinancesAPI';
-
-  // Auto-correct swapped args: =MCFFee(Pn, Qn) instead of =MCFFee(Qn, Pn).
-  // If orderId looks like a date and sentDate looks like an order ID, swap them.
-  if (orderId && sentDate) {
-    var _oStr = String(orderId).trim();
-    var _sStr = String(sentDate).trim();
-    var _orderIdIsDate = (orderId instanceof Date) ||
-                         /^\d{4}-\d{2}-\d{2}/.test(_oStr) ||
-                         /^\d{6}$/.test(_oStr);
-    var _sentDateIsOrderId = /^[A-Z]/.test(_sStr) || /\d{3}-\d{7}-\d{7}/.test(_sStr);
-    if (_orderIdIsDate && (_sentDateIsOrderId || !(/^\d{4}-\d{2}-\d{2}/.test(_sStr)))) {
-      var _tmp = orderId; orderId = sentDate; sentDate = _tmp;
-    }
-  }
-
+  method = String(method || 'getFulfillmentPreview').trim();
   var dateKey = sentDate ? '_' + String(sentDate).trim() : '';
 
   var cache = CacheService.getScriptCache();
@@ -532,33 +496,9 @@ function MCFFee(methodOrOrderId, orderIdOrSentDate, sentDateArg) {
  * @param {string} [sentDate] Optional yyyy-mm-dd sent date from col P. Skips the fulfillment order lookup when provided.
  * @return {number} Fee amount in the order's marketplace currency.
  */
-function MCFFee_JP(methodOrOrderId, orderIdOrSentDate, sentDateArg) {
-  var METHODS = ['FinancesAPI', 'getFulfillmentPreview'];
-  var method, orderId, sentDate;
-  if (METHODS.indexOf(String(methodOrOrderId || '').trim()) >= 0) {
-    method   = String(methodOrOrderId).trim();
-    orderId  = orderIdOrSentDate;
-    sentDate = sentDateArg;
-  } else {
-    method   = 'FinancesAPI';
-    orderId  = methodOrOrderId;
-    sentDate = orderIdOrSentDate;
-  }
+function MCFFee_JP(method, orderId, sentDate) {
   if (!orderId) return '';
-  method = method || 'FinancesAPI';
-
-  if (orderId && sentDate) {
-    var _oStr = String(orderId).trim();
-    var _sStr = String(sentDate).trim();
-    var _orderIdIsDate = (orderId instanceof Date) ||
-                         /^\d{4}-\d{2}-\d{2}/.test(_oStr) ||
-                         /^\d{6}$/.test(_oStr);
-    var _sentDateIsOrderId = /^[A-Z]/.test(_sStr) || /\d{3}-\d{7}-\d{7}/.test(_sStr);
-    if (_orderIdIsDate && (_sentDateIsOrderId || !(/^\d{4}-\d{2}-\d{2}/.test(_sStr)))) {
-      var _tmp = orderId; orderId = sentDate; sentDate = _tmp;
-    }
-  }
-
+  method = String(method || 'getFulfillmentPreview').trim();
   var dateKey = sentDate ? '_' + String(sentDate).trim() : '';
 
   var cache = CacheService.getScriptCache();
@@ -595,27 +535,6 @@ function MCFFee_JP(methodOrOrderId, orderIdOrSentDate, sentDateArg) {
 }
 
 /**
- * Safely parses a date value that may come from a Sheets cell.
- * Handles: JS Date objects, ISO strings (yyyy-mm-dd), YYMMDD strings ("260427"),
- * and other date-like strings. Returns null if unparseable.
- */
-function _parseCellDate(val) {
-  if (!val && val !== 0) return null;
-  if (val instanceof Date) {
-    return isNaN(val.getTime()) ? null : new Date(val);
-  }
-  var s = String(val).trim();
-  if (!s) return null;
-  // YYMMDD: exactly 6 digits → "260427" → 2026-04-27
-  if (/^\d{6}$/.test(s)) {
-    var d = new Date('20' + s.slice(0, 2) + '-' + s.slice(2, 4) + '-' + s.slice(4, 6));
-    return isNaN(d.getTime()) ? null : d;
-  }
-  var d2 = new Date(s);
-  return isNaN(d2.getTime()) ? null : d2;
-}
-
-/**
  * Finances API method — actual settled MCF fee.
  * Searches ShipmentEventList for SellerOrderId === orderId and sums FBA/fulfillment fees.
  * Fees are stored as negative values in the Finances API; returns Math.abs(total).
@@ -627,8 +546,7 @@ function _fetchMcfFeeFinancesApi(orderId, ep, sentDate) {
 
   if (sentDate) {
     // Use the caller-supplied sent date (P col) — skip getFulfillmentOrderRaw entirely
-    postedAfter = _parseCellDate(sentDate);
-    if (!postedAfter) throw new Error('MCFFee: could not parse sentDate: ' + sentDate);
+    postedAfter  = new Date(String(sentDate).trim());
     postedBefore = new Date(postedAfter);
     postedBefore.setDate(postedBefore.getDate() + 60);
   } else {
@@ -779,11 +697,10 @@ function MCFFeeDebug(orderId, sentDate) {
     var postedAfter, postedBefore, dateSource;
 
     if (sentDate) {
-      postedAfter = _parseCellDate(sentDate);
-      if (!postedAfter) return [['Cannot parse sentDate: ' + sentDate]];
+      postedAfter  = new Date(String(sentDate).trim());
       postedBefore = new Date(postedAfter);
       postedBefore.setDate(postedBefore.getDate() + 90);
-      dateSource = 'sentDate (P col): ' + postedAfter.toISOString().slice(0, 10);
+      dateSource = 'sentDate (P col): ' + String(sentDate).trim();
     } else {
       var result = getFulfillmentOrderRaw(String(orderId), 'EU');
       var fo = result.fulfillmentOrder || {};
