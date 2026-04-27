@@ -352,48 +352,42 @@ async def _switch_sc_marketplace(page, display_name, prof):
         await page.evaluate("document.querySelector('.dropdown-account-switcher-header').click()")
         await asyncio.sleep(0.8)
 
-        # 2. Try to find the indented target item (may already be visible)
-        target_js = f"""
-        () => {{
-            const items = [...document.querySelectorAll('.dropdown-account-switcher-list-item-indented')];
-            return items.find(el => (el.title || el.textContent.trim()) === '{display_name}') !== undefined;
-        }}
-        """
-        found = await page.evaluate(target_js)
+        # 2. Expand the "Spigen EU" account group to reveal country sub-items.
+        #    Don't rely on the header label (may show a non-EU account); always
+        #    target "Spigen EU" explicitly.
+        await page.evaluate("""
+        () => {
+            const items = [...document.querySelectorAll(
+                '.dropdown-account-switcher-list-item:not(.dropdown-account-switcher-list-item-indented)'
+            )];
+            const eu = items.find(el => el.textContent.includes('Spigen EU'));
+            if (eu) eu.click();
+        }
+        """)
+        await asyncio.sleep(0.5)
 
-        if not found:
-            # 3. Expand the current account (the one shown in the header global label)
-            await page.evaluate("""
-            () => {
-                const label = document.querySelector('.dropdown-account-switcher-header-label-global');
-                const acctName = label ? label.textContent.trim() : null;
-                if (!acctName) return;
-                const items = [...document.querySelectorAll(
-                    '.dropdown-account-switcher-list-item:not(.dropdown-account-switcher-list-item-indented)'
-                )];
-                const acct = items.find(el => (el.title || el.textContent.trim()) === acctName);
-                if (acct) acct.click();
-            }
-            """)
-            await asyncio.sleep(0.8)
-
-        # 4. Click the target marketplace item
+        # 3. Click the target marketplace item (exact match, then partial fallback)
         clicked = await page.evaluate(f"""
         () => {{
             const items = [...document.querySelectorAll('.dropdown-account-switcher-list-item-indented')];
-            const item = items.find(el => (el.title || el.textContent.trim()) === '{display_name}');
+            let item = items.find(el => (el.title || el.textContent.trim()) === '{display_name}');
+            if (!item) item = items.find(el => el.textContent.includes('{display_name}'));
             if (item) {{ item.click(); return true; }}
             return false;
         }}
         """)
 
         if not clicked:
-            print(f"WARN: '{display_name}' not found in dropdown — scraping with current marketplace")
-            # Close the dropdown by pressing Escape
+            # Log what's actually visible to help diagnose future mismatches
+            visible = await page.evaluate("""
+            () => [...document.querySelectorAll('.dropdown-account-switcher-list-item-indented')]
+                  .map(el => el.title || el.textContent.trim())
+            """)
+            print(f"WARN: '{display_name}' not found (visible: {visible}) — scraping with current marketplace")
             await page.keyboard.press('Escape')
             return
 
-        # 5. Wait for /home navigation (SC reloads to home after marketplace switch)
+        # 4. Wait for /home navigation (SC reloads to home after marketplace switch)
         await page.wait_for_load_state("domcontentloaded")
         await asyncio.sleep(random.uniform(*prof["read_delay"]))
         print("done")
