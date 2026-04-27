@@ -450,13 +450,28 @@ function MCFFee(method, orderId, sentDate) {
   method = String(method || 'getFulfillmentPreview').trim();
   var dateKey = sentDate ? '_' + String(sentDate).trim() : '';
 
-  // Cache-read-only: 280+ simultaneous custom-function calls overwhelm the GAS execution
-  // queue. Run backfillMCFFees() from the Apps Script editor to populate fees in bulk.
   var cache = CacheService.getScriptCache();
   var key = 'MCFFEE_' + method + '_' + String(orderId) + dateKey;
   var cached = cache.get(key);
   if (cached !== null) return cached === '__EMPTY__' ? '' : parseFloat(cached);
-  return '';
+
+  // Live fetch on cache miss. Safe for < ~50 cells at once; for 100+ cells run
+  // backfillMCFFees() from the editor instead (avoids GAS execution queue overload).
+  try {
+    var fee = '';
+    if (method === 'FinancesAPI') {
+      fee = _fetchMcfFeeFinancesApi(String(orderId), 'EU', sentDate, 3);
+      if (fee === '') fee = _fetchMcfFeeFinancesApi(String(orderId), 'FE', sentDate, 3);
+    } else {
+      try { fee = _fetchMcfFeePreview(String(orderId), 'EU'); } catch(e) {}
+      if (fee === '') { try { fee = _fetchMcfFeePreview(String(orderId), 'FE'); } catch(e) {} }
+    }
+    cache.put(key, fee !== '' ? String(fee) : '__EMPTY__', fee !== '' ? 21600 : 600);
+    return fee !== '' ? parseFloat(fee) : '';
+  } catch (e) {
+    if (_isRateLimit429(e)) { cache.put(key, '__EMPTY__', 90); }
+    return '';
+  }
 }
 
 /**
@@ -478,7 +493,22 @@ function MCFFee_JP(method, orderId, sentDate) {
   var key = 'MCFFEE_JP_' + method + '_' + String(orderId) + dateKey;
   var cached = cache.get(key);
   if (cached !== null) return cached === '__EMPTY__' ? '' : parseFloat(cached);
-  return '';
+
+  try {
+    var fee = '';
+    if (method === 'FinancesAPI') {
+      fee = _fetchMcfFeeFinancesApi(String(orderId), 'FE', sentDate, 3);
+      if (fee === '') fee = _fetchMcfFeeFinancesApi(String(orderId), 'EU', sentDate, 3);
+    } else {
+      try { fee = _fetchMcfFeePreview(String(orderId), 'FE'); } catch(e) {}
+      if (fee === '') { try { fee = _fetchMcfFeePreview(String(orderId), 'EU'); } catch(e) {} }
+    }
+    cache.put(key, fee !== '' ? String(fee) : '__EMPTY__', fee !== '' ? 21600 : 600);
+    return fee !== '' ? parseFloat(fee) : '';
+  } catch (e) {
+    if (_isRateLimit429(e)) { cache.put(key, '__EMPTY__', 90); }
+    return '';
+  }
 }
 
 /**
@@ -648,7 +678,7 @@ function _collectShipmentEvents(ep, postedAfter, postedBefore, maxPages) {
   do {
     var qs = 'PostedAfter='   + encodeURIComponent(postedAfter.toISOString()) +
              '&PostedBefore=' + encodeURIComponent(postedBefore.toISOString()) +
-             '&MaxResultsPerPage=100';
+             '&MaxResultsPerPage=50';
     if (nextToken) qs += '&NextToken=' + encodeURIComponent(nextToken);
     var res      = spapiFetchWithRetry('GET', '/finances/v0/financialEvents', { queryString: qs, endpoint: ep }, 3, 5000);
     var payload  = res.payload || res;
