@@ -45,7 +45,7 @@ function runProductNowAndPollRecurring() {
 function startProductRun_(memoryMb) {
   const ss = SpreadsheetApp.getActive();
   const token = _getToken();
-  const memory = memoryMb || 2048;
+  const memory = memoryMb || 4096;
 
   const url =
     `https://api.apify.com/v2/actor-tasks/${encodeURIComponent(
