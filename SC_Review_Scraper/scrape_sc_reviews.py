@@ -341,6 +341,13 @@ async def _switch_sc_marketplace(page, display_name, prof):
     """
     print(f"  Switching SC marketplace → {display_name} ...", end=" ", flush=True)
     try:
+        # Ensure we're on an SC Europe page that has the account switcher.
+        # On a fresh tab (about:blank) or wrong page the element won't exist.
+        present = await page.evaluate("() => !!document.querySelector('.dropdown-account-switcher-header')")
+        if not present:
+            await page.goto("https://sellercentral-europe.amazon.com/", wait_until="domcontentloaded", timeout=30000)
+            await asyncio.sleep(1.0)
+
         # 1. Open the dropdown (JS click bypasses viewport-visibility requirement)
         await page.evaluate("document.querySelector('.dropdown-account-switcher-header').click()")
         await asyncio.sleep(0.8)
