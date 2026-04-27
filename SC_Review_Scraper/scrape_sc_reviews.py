@@ -6,6 +6,7 @@ Edit the USER CONFIG section below, then run:
 """
 
 import asyncio, csv, random, os, sys
+from collections import defaultdict
 sys.stdout.reconfigure(line_buffering=True)  # flush every print immediately when running in background
 from playwright.async_api import async_playwright
 
@@ -63,6 +64,11 @@ ASIN_FILTER_FILE = None
 # Only reviews whose ASIN matches an entry in this file will be saved to CSV.
 # None → save all reviews regardless of ASIN (default).
 # Example: ASIN_FILTER_FILE = "/Users/kevinkim/Desktop/target_asins.txt"
+
+FETCH_IMAGES = True
+# True  — fetch reviewer-attached media URLs after all page scraping is done.
+#         EU fetches images for all countries in one pass after UK→DE→FR→IT→ES.
+# False — skip image fetching entirely (faster runs, Image URL column stays empty).
 
 LOGIN_WAIT_SECONDS = 120
 # Seconds to wait for manual login when running non-interactively (background / no TTY).
@@ -381,23 +387,152 @@ async def _switch_sc_marketplace(page, display_name, prof):
         print(f"WARN: marketplace switch failed ({e}) — scraping with current marketplace")
 
 
-async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, append=False, pages=None):
+async def _enrich_rows_with_images(all_rows, dc, page, prof):
+    """Fetch reviewer images for rows from a single domain. Enriches rows in-place."""
+    if not all_rows:
+        return 0
+    fetch_js  = _make_batch_fetch_js(dc["review_url"])
+    jitter    = prof["fetch_jitter"]
+    batch_min = prof["batch_min"]
+    batch_max = prof["batch_max"]
+
+    print(f"  Switching to {dc['amazon_home']} for image fetching …")
+    await page.goto(dc["amazon_home"], wait_until="domcontentloaded", timeout=30000)
+    await asyncio.sleep(random.uniform(1.5, 3.0))
+
+    review_ids = [row[IDX['Review ID']] for row in all_rows]
+    id_to_row  = {row[IDX['Review ID']]: row for row in all_rows}
+    total      = 0
+    i          = 0
+
+    print(f"  Image fetch     : batches {batch_min}–{batch_max}, jitter {jitter[0]}–{jitter[1]}ms")
+    while i < len(review_ids):
+        batch = review_ids[i:i + random.randint(batch_min, batch_max)]
+        try:
+            results = await page.evaluate(fetch_js, [batch, jitter[0], jitter[1]])
+        except Exception as _err:
+            if "closed" in str(_err).lower():
+                raise
+            print(f"  WARN image batch failed ({_err}) — re-navigating and retrying …")
+            try:
+                await page.goto(dc["amazon_home"], wait_until="domcontentloaded", timeout=30000)
+                await asyncio.sleep(random.uniform(1.5, 3.0))
+                results = await page.evaluate(fetch_js, [batch, jitter[0], jitter[1]])
+            except Exception:
+                results = {}
+        for rid, imgs in results.items():
+            if imgs and rid in id_to_row:
+                id_to_row[rid][IDX['사진 유무']] = 'Y'
+                id_to_row[rid][IDX['Image URL']] = '|'.join(imgs)
+                total += 1
+        i   += len(batch)
+        done = min(i, len(review_ids))
+        print(f"    {done}/{len(review_ids)}  ({total} with images)")
+        if done < len(review_ids):
+            await asyncio.sleep(random.uniform(*prof["batch_delay"]))
+    return total
+
+
+async def _enrich_csv_with_images(csv_path, page, prof):
+    """Read csv_path, fetch reviewer images grouped by Domain Code, rewrite the file.
+
+    Used by the EU flow to run image fetching for all countries in one pass
+    after all page scraping is complete.
+    """
+    if not os.path.exists(csv_path):
+        return 0
+
+    with open(csv_path, encoding='utf-8-sig') as f:
+        reader  = csv.reader(f)
+        headers = next(reader, None)
+        rows    = list(reader)
+
+    if not headers or not rows:
+        return 0
+
+    file_idx = {h: idx for idx, h in enumerate(headers)}
+    if 'Domain Code' not in file_idx or 'Review ID' not in file_idx:
+        print(f"  SKIP image fetch — Domain Code / Review ID column missing in {csv_path}")
+        return 0
+
+    dc_col    = file_idx['Domain Code']
+    rid_col   = file_idx['Review ID']
+    img_col   = file_idx.get('Image URL')
+    photo_col = file_idx.get('사진 유무')
+
+    by_domain = defaultdict(list)
+    for i, row in enumerate(rows):
+        by_domain[row[dc_col]].append(i)
+
+    jitter    = prof["fetch_jitter"]
+    batch_min = prof["batch_min"]
+    batch_max = prof["batch_max"]
+    total     = 0
+
+    for dc_code, row_indices in by_domain.items():
+        if dc_code not in _DOMAINS:
+            print(f"  SKIP [{dc_code}] — not in domain registry")
+            continue
+        dc       = _DOMAINS[dc_code]
+        fetch_js = _make_batch_fetch_js(dc["review_url"])
+
+        print(f"\n  Image fetch [{dc_code}] : navigating to {dc['amazon_home']} …")
+        await page.goto(dc["amazon_home"], wait_until="domcontentloaded", timeout=30000)
+        await asyncio.sleep(random.uniform(1.5, 3.0))
+
+        review_ids = [rows[i][rid_col] for i in row_indices]
+        id_to_idx  = {rows[i][rid_col]: i for i in row_indices}
+
+        print(f"  Image fetch     : {len(review_ids)} reviews, batches {batch_min}–{batch_max}, jitter {jitter[0]}–{jitter[1]}ms")
+        i = 0
+        while i < len(review_ids):
+            batch = review_ids[i:i + random.randint(batch_min, batch_max)]
+            try:
+                results = await page.evaluate(fetch_js, [batch, jitter[0], jitter[1]])
+            except Exception as _err:
+                if "closed" in str(_err).lower():
+                    raise
+                print(f"  WARN image batch failed ({_err}) — re-navigating and retrying …")
+                try:
+                    await page.goto(dc["amazon_home"], wait_until="domcontentloaded", timeout=30000)
+                    await asyncio.sleep(random.uniform(1.5, 3.0))
+                    results = await page.evaluate(fetch_js, [batch, jitter[0], jitter[1]])
+                except Exception:
+                    results = {}
+            for rid, imgs in results.items():
+                if imgs and rid in id_to_idx:
+                    row_i = id_to_idx[rid]
+                    if photo_col is not None:
+                        rows[row_i][photo_col] = 'Y'
+                    if img_col is not None:
+                        rows[row_i][img_col] = '|'.join(imgs)
+                    total += 1
+            i   += len(batch)
+            done = min(i, len(review_ids))
+            print(f"    [{dc_code}] {done}/{len(review_ids)}  ({total} total with images)")
+            if done < len(review_ids):
+                await asyncio.sleep(random.uniform(*prof["batch_delay"]))
+
+    _csv_rewrite(csv_path, headers, rows)
+    return total
+
+
+async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, append=False, pages=None, skip_images=False):
     """Scrape one domain end-to-end. Returns (total_rows, total_with_imgs).
 
-    out_file : override output path (used by EU group to share one CSV).
-    append   : skip header write and load existing rows from out_file first
-               (used for EU sub-countries 2-5 so they append to the shared file).
-    pages    : page limit for this domain (overrides PAGES global).
+    out_file    : override output path (used by EU group to share one CSV).
+    append      : skip header write and load existing rows from out_file first
+                  (used for EU sub-countries 2-5 so they append to the shared file).
+    pages       : page limit for this domain (overrides PAGES global).
+    skip_images : defer image fetching to the caller (used by EU so images are
+                  fetched for all countries in one pass after all scraping is done).
+                  Ignored when FETCH_IMAGES = False.
     """
     pages      = pages if pages is not None else PAGES
     dc         = _DOMAINS[domain]
     out_file   = out_file or _out_file(domain)
     extract_js = _make_extract_js(domain, dc["country"])
-    fetch_js   = _make_batch_fetch_js(dc["review_url"])
     params     = f"?pageSize={PAGE_SIZE}&stars={STAR_FILTER}"
-    jitter     = prof["fetch_jitter"]
-    batch_min  = prof["batch_min"]
-    batch_max  = prof["batch_max"]
 
     print(f"\n{'═'*60}")
     print(f"  Domain : {domain}  ({dc['sc_base']})")
@@ -457,43 +592,10 @@ async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, app
         print(f"  Dedup           : removed {len(all_rows)-len(unique)} duplicates → {len(unique)} unique")
     all_rows = unique
 
-    # ── Step 3: image enrichment ──────────────────────────────────────────
-    print(f"  Switching to {dc['amazon_home']} for image fetching …")
-    await page.goto(dc["amazon_home"], wait_until="domcontentloaded", timeout=30000)
-    await asyncio.sleep(random.uniform(1.5, 3.0))
-
-    review_ids      = [row[IDX['Review ID']] for row in all_rows]
-    id_to_row       = {row[IDX['Review ID']]: row for row in all_rows}
+    # ── Step 3: image enrichment (skipped for EU — caller runs _enrich_csv_with_images) ──
     total_with_imgs = 0
-    i               = 0
-
-    print(f"  Image fetch     : batches {batch_min}–{batch_max}, jitter {jitter[0]}–{jitter[1]}ms")
-    while i < len(review_ids):
-        batch = review_ids[i:i + random.randint(batch_min, batch_max)]
-        try:
-            results = await page.evaluate(fetch_js, [batch, jitter[0], jitter[1]])
-        except Exception as _img_err:
-            if "closed" in str(_img_err).lower():
-                raise
-            # Page navigated away mid-batch (consent redirect, session expiry, etc.)
-            # Re-anchor to amazon home and retry this batch once.
-            print(f"  WARN image batch failed ({_img_err}) — re-navigating and retrying …")
-            try:
-                await page.goto(dc["amazon_home"], wait_until="domcontentloaded", timeout=30000)
-                await asyncio.sleep(random.uniform(1.5, 3.0))
-                results = await page.evaluate(fetch_js, [batch, jitter[0], jitter[1]])
-            except Exception:
-                results = {}  # give up on this batch, images stay empty
-        for rid, imgs in results.items():
-            if imgs:
-                id_to_row[rid][IDX['사진 유무']] = 'Y'
-                id_to_row[rid][IDX['Image URL']] = '|'.join(imgs)
-                total_with_imgs += 1
-        i   += len(batch)
-        done = min(i, len(review_ids))
-        print(f"    {done}/{len(review_ids)}  ({total_with_imgs} with images)")
-        if done < len(review_ids):
-            await asyncio.sleep(random.uniform(*prof["batch_delay"]))
+    if FETCH_IMAGES and not skip_images:
+        total_with_imgs = await _enrich_rows_with_images(all_rows, dc, page, prof)
 
     # ── Step 4: ASIN filter ───────────────────────────────────────────────
     if asin_filter:
@@ -621,15 +723,23 @@ async def main():
                 page  = domain_pages[group]
                 if domain == "EU":
                     eu_file = os.path.join(OUT_DIR, "EU_seller_central_reviews.csv")
-                    eu_rows, eu_imgs = 0, 0
+                    eu_rows = 0
+                    # Phase 1 — scrape all EU countries first (images deferred)
                     for i, sub in enumerate(EU_COUNTRIES):
                         sub_pages = PAGES_OVERRIDE.get(sub, PAGES)
-                        n_rows, n_imgs = await scrape_domain(
+                        n_rows, _ = await scrape_domain(
                             sub, page, ctx, prof, asin_filter,
-                            out_file=eu_file, append=(i > 0), pages=sub_pages
+                            out_file=eu_file, append=(i > 0), pages=sub_pages,
+                            skip_images=True
                         )
                         eu_rows += n_rows
-                        eu_imgs += n_imgs
+                    # Phase 2 — fetch images for all EU rows in one pass
+                    eu_imgs = 0
+                    if FETCH_IMAGES:
+                        print(f"\n{'═'*60}")
+                        print(f"  EU image fetch phase  ({eu_rows} reviews across {len(EU_COUNTRIES)} countries)")
+                        print(f"{'═'*60}")
+                        eu_imgs = await _enrich_csv_with_images(eu_file, page, prof)
                     return ("EU", eu_rows, eu_imgs, "OK")
                 else:
                     eff_pages = PAGES_OVERRIDE.get(domain, PAGES)
