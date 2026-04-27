@@ -13,7 +13,7 @@ from playwright.async_api import async_playwright
 # USER CONFIG — edit these before each run
 # ═══════════════════════════════════════════════════════════════════════════════
 
-DOMAINS = ["US", "EU", "JP", "IN"]
+DOMAINS = ["EU", "JP", "IN"]
 # List of domains to scrape sequentially. Each gets its own CSV file.
 # Single domain example : DOMAINS = ["US"]
 # Supported             : "US" | "EU" | "UK" | "DE" | "FR" | "IT" | "ES" | "JP" | "IN"
@@ -63,6 +63,10 @@ ASIN_FILTER_FILE = None
 # Only reviews whose ASIN matches an entry in this file will be saved to CSV.
 # None → save all reviews regardless of ASIN (default).
 # Example: ASIN_FILTER_FILE = "/Users/kevinkim/Desktop/target_asins.txt"
+
+LOGIN_WAIT_SECONDS = 120
+# Seconds to wait for manual login when running non-interactively (background / no TTY).
+# In interactive mode the script waits for Enter instead (no fixed timeout).
 
 DETECTION_AVOIDANCE = "MEDIUM"
 # LOW    — short delays, fastest runs, higher detection risk
@@ -599,8 +603,12 @@ async def main():
         if sys.stdin.isatty():
             await asyncio.get_event_loop().run_in_executor(None, input)
         else:
-            print("  (non-interactive: starting in 5 s …)")
-            await asyncio.sleep(5)
+            wait = LOGIN_WAIT_SECONDS
+            print(f"  (non-interactive: starting in {wait} s — log in to all tabs now)")
+            for remaining in range(wait, 0, -1):
+                print(f"\r  {remaining:3d}s remaining …", end="", flush=True)
+                await asyncio.sleep(1)
+            print("\r  Starting scrape!                    ")
 
         # ── Create one dedicated scraping page per domain group ───────────────
         # Each group gets its own fresh visible tab; all share session cookies.
