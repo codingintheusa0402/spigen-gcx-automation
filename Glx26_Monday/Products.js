@@ -57,12 +57,27 @@ function startProductRun_(memoryMb) {
       url.replace(/token=[^&]+/, 'token=***')
   );
 
-  const resp = UrlFetchApp.fetch(url, {
+  const fetchOpts = {
     method: 'post',
     contentType: 'application/json',
     payload: JSON.stringify({ memory }),
     muteHttpExceptions: true
-  });
+  };
+
+  let resp;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      resp = UrlFetchApp.fetch(url, fetchOpts);
+      break;
+    } catch (e) {
+      if (attempt < 2 && String(e.message || e).indexOf('Bandwidth quota exceeded') >= 0) {
+        Logger.log(`startProductRun_: bandwidth error, retrying in 15 s (attempt ${attempt + 1})`);
+        Utilities.sleep(15000);
+        continue;
+      }
+      throw e;
+    }
+  }
 
   const code = resp.getResponseCode();
   const body = resp.getContentText();
