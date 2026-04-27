@@ -471,6 +471,21 @@ function MCFFee(methodOrOrderId, orderIdOrSentDate, sentDateArg) {
   }
   if (!orderId) return '';
   method = method || 'FinancesAPI';
+
+  // Auto-correct swapped args: =MCFFee(Pn, Qn) instead of =MCFFee(Qn, Pn).
+  // If orderId looks like a date and sentDate looks like an order ID, swap them.
+  if (orderId && sentDate) {
+    var _oStr = String(orderId).trim();
+    var _sStr = String(sentDate).trim();
+    var _orderIdIsDate = (orderId instanceof Date) ||
+                         /^\d{4}-\d{2}-\d{2}/.test(_oStr) ||
+                         /^\d{6}$/.test(_oStr);
+    var _sentDateIsOrderId = /^[A-Z]/.test(_sStr) || /\d{3}-\d{7}-\d{7}/.test(_sStr);
+    if (_orderIdIsDate && (_sentDateIsOrderId || !(/^\d{4}-\d{2}-\d{2}/.test(_sStr)))) {
+      var _tmp = orderId; orderId = sentDate; sentDate = _tmp;
+    }
+  }
+
   var dateKey = sentDate ? '_' + String(sentDate).trim() : '';
 
   var cache = CacheService.getScriptCache();
@@ -531,6 +546,19 @@ function MCFFee_JP(methodOrOrderId, orderIdOrSentDate, sentDateArg) {
   }
   if (!orderId) return '';
   method = method || 'FinancesAPI';
+
+  if (orderId && sentDate) {
+    var _oStr = String(orderId).trim();
+    var _sStr = String(sentDate).trim();
+    var _orderIdIsDate = (orderId instanceof Date) ||
+                         /^\d{4}-\d{2}-\d{2}/.test(_oStr) ||
+                         /^\d{6}$/.test(_oStr);
+    var _sentDateIsOrderId = /^[A-Z]/.test(_sStr) || /\d{3}-\d{7}-\d{7}/.test(_sStr);
+    if (_orderIdIsDate && (_sentDateIsOrderId || !(/^\d{4}-\d{2}-\d{2}/.test(_sStr)))) {
+      var _tmp = orderId; orderId = sentDate; sentDate = _tmp;
+    }
+  }
+
   var dateKey = sentDate ? '_' + String(sentDate).trim() : '';
 
   var cache = CacheService.getScriptCache();
