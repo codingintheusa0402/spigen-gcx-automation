@@ -825,7 +825,7 @@ function _fetchMcfFeePreview(orderId, ep) {
  * After running, the 280 cells will show static values and never recalculate again.
  * For newly added rows, run backfillMCFFees() again — it skips rows that already have a value.
  */
-function backfillMCFFees() {
+function backfillMCFFees_legacy() {
   var sheet   = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   var lastRow = sheet.getLastRow();
   var lastCol = sheet.getLastColumn();
