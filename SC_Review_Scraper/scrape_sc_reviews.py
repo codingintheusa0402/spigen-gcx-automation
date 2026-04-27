@@ -111,35 +111,43 @@ _DOMAINS = {
         "review_url":  "https://www.amazon.com/gp/customer-reviews/",
         "country":     "US",
     },
+    # EU countries all share sellercentral-europe.amazon.com (one login session).
+    # sc_display_name tells _switch_sc_marketplace which country to select in the
+    # account-switcher dropdown before scraping each country's reviews.
     "UK": {
-        "sc_base":     "https://sellercentral.amazon.co.uk/brand-customer-reviews/",
-        "amazon_home": "https://www.amazon.co.uk/",
-        "review_url":  "https://www.amazon.co.uk/gp/customer-reviews/",
-        "country":     "UK",
+        "sc_base":         "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
+        "sc_display_name": "United Kingdom",
+        "amazon_home":     "https://www.amazon.co.uk/",
+        "review_url":      "https://www.amazon.co.uk/gp/customer-reviews/",
+        "country":         "UK",
     },
     "DE": {
-        "sc_base":     "https://sellercentral.amazon.de/brand-customer-reviews/",
-        "amazon_home": "https://www.amazon.de/",
-        "review_url":  "https://www.amazon.de/gp/customer-reviews/",
-        "country":     "DE",
+        "sc_base":         "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
+        "sc_display_name": "Germany",
+        "amazon_home":     "https://www.amazon.de/",
+        "review_url":      "https://www.amazon.de/gp/customer-reviews/",
+        "country":         "DE",
     },
     "FR": {
-        "sc_base":     "https://sellercentral.amazon.fr/brand-customer-reviews/",
-        "amazon_home": "https://www.amazon.fr/",
-        "review_url":  "https://www.amazon.fr/gp/customer-reviews/",
-        "country":     "FR",
+        "sc_base":         "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
+        "sc_display_name": "France",
+        "amazon_home":     "https://www.amazon.fr/",
+        "review_url":      "https://www.amazon.fr/gp/customer-reviews/",
+        "country":         "FR",
     },
     "IT": {
-        "sc_base":     "https://sellercentral.amazon.it/brand-customer-reviews/",
-        "amazon_home": "https://www.amazon.it/",
-        "review_url":  "https://www.amazon.it/gp/customer-reviews/",
-        "country":     "IT",
+        "sc_base":         "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
+        "sc_display_name": "Italy",
+        "amazon_home":     "https://www.amazon.it/",
+        "review_url":      "https://www.amazon.it/gp/customer-reviews/",
+        "country":         "IT",
     },
     "ES": {
-        "sc_base":     "https://sellercentral.amazon.es/brand-customer-reviews/",
-        "amazon_home": "https://www.amazon.es/",
-        "review_url":  "https://www.amazon.es/gp/customer-reviews/",
-        "country":     "ES",
+        "sc_base":         "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
+        "sc_display_name": "Spain",
+        "amazon_home":     "https://www.amazon.es/",
+        "review_url":      "https://www.amazon.es/gp/customer-reviews/",
+        "country":         "ES",
     },
     "JP": {
         "sc_base":     "https://sellercentral.amazon.co.jp/brand-customer-reviews/",
@@ -686,9 +694,8 @@ async def main():
             if _d == "EU":
                 if not _seen_eu:
                     _seen_eu = True
-                    # EU Seller Central shares one session — logging into any one
-                    # country portal covers all others. Open only the first country.
-                    _login_endpoints.append((EU_COUNTRIES[0], _DOMAINS[EU_COUNTRIES[0]]["sc_base"]))
+                    # All EU countries share sellercentral-europe.amazon.com — one login covers all.
+                    _login_endpoints.append(("EU", "https://sellercentral-europe.amazon.com/brand-customer-reviews/"))
             else:
                 _login_endpoints.append((_d, _DOMAINS[_d]["sc_base"]))
         print("Opening Seller Central login pages …")
