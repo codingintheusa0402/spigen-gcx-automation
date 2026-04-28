@@ -448,10 +448,16 @@ function getMcfStockByAsin(asin, marketplaceId) {
  * @return {number} Fee amount in the order's marketplace currency.
  */
 function MCFFee(arg1, arg2) {
-  // Accept both MCFFee(Q) and MCFFee(P, Q) — sentDate (P) is no longer used by the lookup
-  var orderId = (arg2 !== undefined && arg2 !== null && String(arg2).trim() !== '')
-    ? String(arg2).trim()
-    : String(arg1 || '').trim();
+  // MCFFee(Q)    → orderId only
+  // MCFFee(P, Q) → sentDate (P col, raw GAS value) + orderId (Q col)
+  var orderId, sentDate;
+  if (arg2 !== undefined && arg2 !== null && String(arg2).trim() !== '') {
+    sentDate = arg1;               // raw Date object or string from sheet cell
+    orderId  = String(arg2).trim();
+  } else {
+    orderId  = String(arg1 || '').trim();
+    sentDate = null;
+  }
   if (!orderId) return '';
 
   var cache = CacheService.getScriptCache();
@@ -464,7 +470,7 @@ function MCFFee(arg1, arg2) {
 
   for (var i = 0; i < endpoints.length; i++) {
     try {
-      var fee = _fetchMcfFeeFinancesApi(orderId, endpoints[i]);
+      var fee = _fetchMcfFeeFinancesApi(orderId, endpoints[i], sentDate);
       cache.put(key, fee === '' ? '__EMPTY__' : String(fee), fee === '' ? 600 : 21600);
       return fee;
     } catch (err) {
@@ -497,9 +503,14 @@ function MCFFee(arg1, arg2) {
  * @return {number} Fee amount in the order's marketplace currency.
  */
 function MCFFee_JP(arg1, arg2) {
-  var orderId = (arg2 !== undefined && arg2 !== null && String(arg2).trim() !== '')
-    ? String(arg2).trim()
-    : String(arg1 || '').trim();
+  var orderId, sentDate;
+  if (arg2 !== undefined && arg2 !== null && String(arg2).trim() !== '') {
+    sentDate = arg1;
+    orderId  = String(arg2).trim();
+  } else {
+    orderId  = String(arg1 || '').trim();
+    sentDate = null;
+  }
   if (!orderId) return '';
 
   var cache = CacheService.getScriptCache();
@@ -512,7 +523,7 @@ function MCFFee_JP(arg1, arg2) {
 
   for (var i = 0; i < endpoints.length; i++) {
     try {
-      var fee = _fetchMcfFeeFinancesApi(orderId, endpoints[i]);
+      var fee = _fetchMcfFeeFinancesApi(orderId, endpoints[i], sentDate);
       cache.put(key, fee === '' ? '__EMPTY__' : String(fee), fee === '' ? 600 : 21600);
       return fee;
     } catch (err) {
@@ -589,29 +600,51 @@ function _sumAllMcfFees(shipments) {
 /**
  * Finances API — actual settled MCF fee, formula-safe.
  *
- * Strategy (2 fast SP-API calls per cell, no retries → no timeout risk):
- * 1. getFulfillmentOrderRaw (1 attempt) → get displayableOrderId (Amazon 3-7-7 format)
- * 2. listFinancialEventsByOrderId(displayableOrderId) (1 attempt) → targeted single-order events
- * 3. Sum fees from the targeted response
+ * Two-strategy approach, all calls with 1 attempt (no retry sleep → no 30s timeout):
  *
- * No retries in this path — on 429, the error propagates to MCFFee which caches ''
- * for 90 s and lets the cell retry on the next recalculation with fewer concurrent peers.
- * For bulk backfill use backfillMCFFees() which runs sequentially with full retries.
+ * Strategy A — targeted (for orders linked to an Amazon marketplace order):
+ *   getFulfillmentOrderRaw → displayableOrderId (Amazon 3-7-7) →
+ *   listFinancialEventsByOrderId → sum fees
+ *
+ * Strategy B — date-range scan (for seller-created MCF orders with GCX orderId):
+ *   Finances API date-range (sentDate..sentDate+60d, 2 pages, 1 attempt) →
+ *   match SellerOrderId = orderId → sum fees
+ *
+ * Why 2 strategies: seller-created MCF orders store SellerOrderId = GCX orderId
+ * in the Finances API (confirmed: backfillMCFFees() matches this way).
+ * The targeted endpoint only works for Amazon marketplace–format IDs.
+ *
+ * On 429: error propagates up to MCFFee → caches '' for 90 s → auto-retries.
  */
-function _fetchMcfFeeFinancesApi(orderId, ep) {
-  // Step 1: get displayableOrderId — 1 attempt, no retry sleep to avoid timeout
-  var foResult = getFulfillmentOrderRaw(orderId, ep, 1);
-  var fo = foResult.fulfillmentOrder || {};
-  var displayableId = (fo.displayableOrderId || '').trim();
+function _fetchMcfFeeFinancesApi(orderId, ep, sentDate) {
+  // Strategy A: targeted via displayableOrderId (fast: 2 calls, ~1-2s)
+  try {
+    var foResult = getFulfillmentOrderRaw(orderId, ep, 1);
+    var displayableId = ((foResult.fulfillmentOrder || {}).displayableOrderId || '').trim();
+    if (/^\w{3}-\d{7}-\d{7}$/.test(displayableId)) {
+      var targeted = _listFinancialEventsByOrderId(displayableId, ep, 1);
+      var feeA = _sumAllMcfFees(targeted);
+      if (feeA !== '') return feeA;
+    }
+  } catch (e) { /* FO lookup failed (e.g. wrong endpoint) — try date-range */ }
 
-  // Step 2: targeted lookup (requires Amazon 3-7-7 format like S02-XXXXXXX-XXXXXXX)
-  if (/^\w{3}-\d{7}-\d{7}$/.test(displayableId)) {
-    var targeted = _listFinancialEventsByOrderId(displayableId, ep, 1); // 1 attempt
-    var fee = _sumAllMcfFees(targeted);
-    if (fee !== '') return fee;
+  // Strategy B: date-range scan, match by SellerOrderId (2 pages, 1 attempt, no retry sleep)
+  var postedAfter, postedBefore;
+  var parsedSentDate = _toSafeDate(sentDate);
+  if (parsedSentDate) {
+    postedAfter  = parsedSentDate;
+    postedBefore = new Date(parsedSentDate.getTime());
+    postedBefore.setDate(postedBefore.getDate() + 60);
+  } else {
+    var _ref = new Date(Date.now() - 5 * 60 * 1000);
+    postedAfter  = new Date(_ref.getTime() - 30 * 24 * 3600 * 1000); // last 30 days
+    postedBefore = new Date(_ref);
   }
+  var _now = new Date(Date.now() - 5 * 60 * 1000);
+  if (postedBefore > _now) postedBefore = _now;
 
-  return ''; // order not yet settled — caller caches '' for 10 min and retries
+  var shipments = _collectShipmentEvents(ep, postedAfter, postedBefore, 2, 1); // 2 pages, 1 attempt
+  return _sumMcfFeeFromShipments(shipments, orderId);
 }
 
 // Matches FBA / fulfillment fee type names used in Finances API ShipmentEvent
@@ -673,16 +706,18 @@ function _buildFeeMapForWindow(ep, postedAfter, postedBefore) {
 /**
  * Paginates ShipmentEventList for one endpoint + date window.
  * Returns a flat array of all ShipmentEvent objects (up to maxPages × 100).
+ * maxAttempts: default 3 (batch); pass 1 for formula cells (no retry sleep → no timeout).
  */
-function _collectShipmentEvents(ep, postedAfter, postedBefore, maxPages) {
+function _collectShipmentEvents(ep, postedAfter, postedBefore, maxPages, maxAttempts) {
   var all = [], nextToken = null, page = 0;
-  maxPages = maxPages || 5;
+  maxPages    = maxPages    || 5;
+  maxAttempts = maxAttempts != null ? maxAttempts : 3;
   do {
     var qs = 'PostedAfter='   + encodeURIComponent(postedAfter.toISOString()) +
              '&PostedBefore=' + encodeURIComponent(postedBefore.toISOString()) +
              '&MaxResultsPerPage=100';
     if (nextToken) qs += '&NextToken=' + encodeURIComponent(nextToken);
-    var res      = spapiFetchWithRetry('GET', '/finances/v0/financialEvents', { queryString: qs, endpoint: ep }, 3, 5000);
+    var res      = spapiFetchWithRetry('GET', '/finances/v0/financialEvents', { queryString: qs, endpoint: ep }, maxAttempts, 5000);
     var payload  = res.payload || res;
     nextToken    = payload.NextToken || null;
     var batch    = (payload.FinancialEvents || {}).ShipmentEventList || [];

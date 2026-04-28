@@ -43,14 +43,15 @@ Returns the actual settled MCF fulfillment fee via the Finances API. Always uses
 =IF(Q2<>"", MCFFee(P2, Q2), "")
 ```
 
-**Lookup strategy:** 2 fast targeted API calls per cell — no date-range scan.
-1. `getFulfillmentOrderRaw` (1 attempt, no retry) → get `displayableOrderId` (Amazon 3-7-7 format like `S02-XXXXXXX-XXXXXXX`)
-2. `GET /finances/v0/orders/{displayableOrderId}/financialEvents` (1 attempt) → single-order events, tiny response
-3. Sums `OrderFeeList` + `ShipmentFeeList` + `ItemFeeList`
+**Lookup strategy:** two strategies, all SP-API calls use 1 attempt (no retry sleep → no 30s timeout):
 
-> **Why no retry / no date-range scan?** With 15+ concurrent formula cells, retry sleeps (5s × 3 = 15s per cell) cause GAS 30s timeout. Instead: on 429, the cell immediately returns `''` cached for 90 s, then retries automatically on the next recalculation with fewer concurrent peers. Date-range scans (`listFinancialEvents`) download hundreds of events across multiple pages — too slow for concurrent cells.
+**Strategy A — targeted** (for Amazon marketplace–linked orders): `getFulfillmentOrderRaw` → `displayableOrderId` (Amazon 3-7-7 format) → `GET /finances/v0/orders/{id}/financialEvents` → tiny single-order response.
+
+**Strategy B — date-range scan** (for seller-created MCF orders with GCX orderId): `listFinancialEvents` for `sentDate → sentDate+60d` window (2 pages max), match `SellerOrderId = GCX orderId`. Confirmed: `backfillMCFFees()` matches fees this way, so Finances API stores `SellerOrderId = GCX-XX-XXXXXX-XX`.
+
+> **Why 1 attempt / 2 pages?** With 15+ concurrent formula cells, retry sleeps (5s × 3 = 15s) cause 30s GAS timeout. Instead: on 429, the cell returns `''` cached for 90 s and retries automatically with fewer concurrent peers. Events older than 2 pages: run `backfillMCFFees()` which uses 20 pages + full retries in a single sequential process.
 >
-> Both `=MCFFee(Q35)` (1-arg) and `=MCFFee(P35, Q35)` (2-arg) are accepted; the `sentDate` (P col) is silently ignored since the targeted lookup doesn't need a date window.
+> `=MCFFee(Q35)` (1-arg) and `=MCFFee(P35, Q35)` (2-arg) both work. sentDate (P col) narrows the Finances API window for Strategy B.
 
 - On 429 QuotaExceeded: returns blank and retries after 90 seconds automatically.
 - Tries EU endpoint first, falls back to FE.
