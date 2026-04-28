@@ -956,6 +956,39 @@ function debugMcfFeeManual() {
 }
 
 /**
+ * SERVER-SIDE diagnostic — run from GAS editor.
+ * Fetches ONE 60-day Finances API window and dumps the first 30 SellerOrderIds
+ * that have a non-zero MCF fee. Use this to see what format SP-API uses for
+ * MCF order identifiers so we can fix the matching logic.
+ *
+ * HOW TO USE:
+ *   1. Set WINDOW_START to the sent date of one of the failing rows (yyyy-mm-dd)
+ *   2. Run this function from the GAS editor
+ *   3. Check View → Logs
+ */
+function debugFeeMapSample() {
+  var WINDOW_START = '2025-04-01';   // ← set to a date where you have unmatched rows
+  var EP           = 'EU';           // 'EU' or 'FE'
+
+  var after  = new Date(WINDOW_START + 'T00:00:00Z');
+  var before = new Date(after.getTime() + 60 * 24 * 3600 * 1000);
+  var now    = new Date(Date.now() - 5 * 60 * 1000);
+  if (before > now) before = now;
+
+  Logger.log('=== debugFeeMapSample [%s] %s → %s ===', EP,
+    after.toISOString().slice(0,10), before.toISOString().slice(0,10));
+
+  var feeMap = _buildFeeMapForWindow(EP, after, before);
+  var keys   = Object.keys(feeMap);
+  Logger.log('Total SellerOrderIds with non-zero MCF fee: %s', keys.length);
+  Logger.log('First 30 samples:');
+  keys.slice(0, 30).forEach(function(k, i) {
+    Logger.log('  [%s] SellerOrderId="%s"  fee=%s', i, k, feeMap[k]);
+  });
+  Logger.log('=== done ===');
+}
+
+/**
  * getFulfillmentPreview method — estimated MCF fee (instant, may differ from actual).
  * Currency: GBP for UK orders, EUR for other EU orders.
  */
