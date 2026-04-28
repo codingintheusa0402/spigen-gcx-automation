@@ -758,86 +758,108 @@ function _sumMcfFeeFromShipments(shipments, targetOrderId) {
 }
 
 /**
- * Debug: shows SellerOrderIds found in Finances API around this order's date window.
- * Also resolves displayableOrderId so you can see if the fee settled under a different ID.
+ * Diagnoses why =MCFFee(P,Q) returns blank for a given order.
+ * Fast: 1-attempt calls only (completes in ~2-3 s, no timeout).
+ *
+ * Runs 3 checks and returns results as a table:
+ *   Step A  – getFulfillmentOrderRaw → displayableOrderId
+ *   Step B  – listFinancialEventsByOrderId(displayableOrderId) → targeted events
+ *   Step C  – listFinancialEvents date-range page 1 → first 100 events, match check
+ *
+ * Usage: =MCFFeeDebug(Q35, P35)
+ *
  * @customfunction
- * @param {string} orderId The sellerFulfillmentOrderId to debug
- * @param {string} [sentDate] Optional yyyy-mm-dd sent date from col P.
- * @return {Array} SellerOrderId_in_API | Input_orderId | Exact_match | FeeTypes | Total
+ * @param {string} orderId  sellerFulfillmentOrderId (col Q)
+ * @param {string} sentDate sent date (col P, yyyy-mm-dd or date cell)
+ * @return {Array} diagnostic rows
  */
 function MCFFeeDebug(orderId, sentDate) {
   if (!orderId) return [['orderId is required']];
+  orderId = String(orderId).trim();
+
+  var rows = [['Step', 'Key', 'Value']];
+
   try {
-    var postedAfter, postedBefore, dateSource;
-
-    var parsedSent = _toSafeDate(sentDate);
-    if (parsedSent) {
-      postedAfter  = parsedSent;
-      postedBefore = new Date(parsedSent.getTime());
-      postedBefore.setDate(postedBefore.getDate() + 90);
-      dateSource = 'sentDate (P col): ' + parsedSent.toISOString().slice(0, 10);
-    } else {
-      var result = getFulfillmentOrderRaw(String(orderId), 'EU');
-      var fo = result.fulfillmentOrder || {};
-      if (!fo.receivedDate) return [['Order found but no receivedDate — check order ID']];
-      postedAfter  = new Date(fo.receivedDate);
-      postedBefore = new Date(fo.receivedDate);
-      postedBefore.setDate(postedBefore.getDate() + 90);
-      dateSource = 'receivedDate (API): ' + fo.receivedDate;
-    }
-
-    var now = new Date(Date.now() - 5 * 60 * 1000);
-    if (postedBefore > now) postedBefore = now;
-
-    var shipments = _collectShipmentEvents('EU', postedAfter, postedBefore, 5);
-
-    // Resolve displayableOrderId for fallback matching info
-    var displayableId = '';
+    // ── Step A: getFulfillmentOrderRaw ──────────────────────────────────
+    var displayableId = '', foStatus = '';
     try {
-      var foResult  = getFulfillmentOrderRaw(String(orderId), 'EU');
-      var candidate = ((foResult.fulfillmentOrder || {}).displayableOrderId || '').trim();
-      if (candidate && candidate !== String(orderId).trim()) displayableId = candidate;
-    } catch (e) { /* ignore */ }
-
-    var rows = [['SellerOrderId_in_API', 'Input_orderId', 'Exact_match', 'FeeTypes', 'Total']];
-
-    if (!shipments.length) {
-      rows.push(['(no ShipmentEvents in window)', orderId, '', '', '']);
-      rows.push([dateSource, 'window end: ' + postedBefore.toISOString(), '', '', '']);
-      return rows;
+      var foResult = getFulfillmentOrderRaw(orderId, 'EU', 1);
+      var fo = foResult.fulfillmentOrder || {};
+      displayableId = (fo.displayableOrderId || '').trim();
+      foStatus = 'OK';
+      rows.push(['A: FBA Outbound (EU)', 'displayableOrderId', displayableId || '(empty)']);
+      rows.push(['A: FBA Outbound (EU)', 'receivedDate',       fo.receivedDate || '(empty)']);
+      rows.push(['A: FBA Outbound (EU)', 'marketplaceId',      fo.marketplaceId || '(empty)']);
+    } catch (e) {
+      foStatus = 'ERR: ' + (e.message || e);
+      rows.push(['A: FBA Outbound (EU)', 'error', foStatus]);
     }
 
-    shipments.forEach(function(ev) {
-      var sid = String(ev.SellerOrderId || '');
-      var aid = String(ev.AmazonOrderId || '');
-      var displayKey = sid + (aid && aid !== sid ? ' / AmazonOrderId:' + aid : '');
-      var match = sid.trim().toUpperCase() === String(orderId).trim().toUpperCase()         ? 'YES'
-                : aid.trim().toUpperCase() === String(orderId).trim().toUpperCase()         ? 'YES (AmazonOrderId)'
-                : (displayableId && sid.trim().toUpperCase() === displayableId.toUpperCase()) ? 'YES (displayableOrderId)'
-                : (displayableId && aid.trim().toUpperCase() === displayableId.toUpperCase()) ? 'YES (AmazonOrderId=displayable)'
-                : 'no';
-      var feeTypes = [], total = 0;
-      (ev.OrderFeeList || []).forEach(function(f) {
-        feeTypes.push('ORDER:' + f.FeeType);
-        total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0);
-      });
-      (ev.ShipmentFeeList || []).forEach(function(f) {
-        feeTypes.push(f.FeeType);
-        total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0);
-      });
-      (ev.ShipmentItemList || []).forEach(function(item) {
-        (item.ItemFeeList || []).forEach(function(f) {
-          feeTypes.push(f.FeeType);
-          total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0);
+    // ── Step B: listFinancialEventsByOrderId (targeted) ─────────────────
+    var isAmazonFmt = /^\w{3}-\d{7}-\d{7}$/.test(displayableId);
+    rows.push(['B: Targeted endpoint', 'displayableId Amazon-format?', isAmazonFmt ? 'YES → querying' : 'NO → skipped']);
+    if (isAmazonFmt) {
+      try {
+        var targeted = _listFinancialEventsByOrderId(displayableId, 'EU', 1);
+        rows.push(['B: Targeted endpoint', 'ShipmentEvents returned', String(targeted.length)]);
+        targeted.slice(0, 5).forEach(function(ev, i) {
+          var sid = ev.SellerOrderId || '';
+          var aid = ev.AmazonOrderId || '';
+          var fee = _sumAllMcfFees([ev]);
+          rows.push(['B: event ' + i, 'SellerOrderId / AmazonOrderId', sid + ' / ' + aid]);
+          rows.push(['B: event ' + i, 'MCF fee sum', String(fee)]);
         });
-      });
-      rows.push([displayKey, orderId, match, feeTypes.join(', '), Math.abs(total)]);
-    });
+      } catch (e) {
+        rows.push(['B: Targeted endpoint', 'error', String(e.message || e)]);
+      }
+    }
 
-    rows.push([dateSource, 'window end: ' + postedBefore.toISOString(), 'Total events: ' + shipments.length, '', '']);
-    if (displayableId) rows.push(['displayableOrderId fallback', displayableId, '', '', '']);
+    // ── Step C: date-range scan page 1 ─────────────────────────────────
+    var parsedSentDate = _toSafeDate(sentDate);
+    var postedAfter, postedBefore;
+    if (parsedSentDate) {
+      postedAfter  = parsedSentDate;
+      postedBefore = new Date(parsedSentDate.getTime());
+      postedBefore.setDate(postedBefore.getDate() + 60);
+    } else {
+      var _ref = new Date(Date.now() - 5 * 60 * 1000);
+      postedAfter  = new Date(_ref.getTime() - 30 * 24 * 3600 * 1000);
+      postedBefore = new Date(_ref);
+    }
+    var _now = new Date(Date.now() - 5 * 60 * 1000);
+    if (postedBefore > _now) postedBefore = _now;
+
+    rows.push(['C: Date-range scan', 'window', postedAfter.toISOString().slice(0,10) + ' → ' + postedBefore.toISOString().slice(0,10)]);
+
+    try {
+      var page1 = _collectShipmentEvents('EU', postedAfter, postedBefore, 1, 1); // 1 page, 1 attempt
+      rows.push(['C: Date-range scan', 'events on page 1', String(page1.length)]);
+
+      var matchFound = false;
+      page1.forEach(function(ev) {
+        var sid = (ev.SellerOrderId || '').trim().toUpperCase();
+        var aid = (ev.AmazonOrderId || '').trim().toUpperCase();
+        var target = orderId.toUpperCase();
+        if (sid === target || aid === target) {
+          matchFound = true;
+          rows.push(['C: MATCH FOUND', 'SellerOrderId', ev.SellerOrderId || '']);
+          rows.push(['C: MATCH FOUND', 'AmazonOrderId', ev.AmazonOrderId || '']);
+          rows.push(['C: MATCH FOUND', 'MCF fee sum',   String(_sumMcfFeeFromShipments([ev], orderId))]);
+        }
+      });
+
+      if (!matchFound) {
+        rows.push(['C: NO MATCH on page 1', 'sample SellerOrderIds (first 5)',
+          page1.slice(0, 5).map(function(e) { return e.SellerOrderId || ''; }).join(' | ')]);
+      }
+    } catch (e) {
+      rows.push(['C: Date-range scan', 'error', String(e.message || e)]);
+    }
+
     return rows;
-  } catch(e) { return [['ERR: ' + (e.message || e)]]; }
+  } catch (e) {
+    return [['ERR', '', String(e.message || e)]];
+  }
 }
 
 /**
