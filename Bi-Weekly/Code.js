@@ -75,85 +75,81 @@ function updateSlideTextBoxes() {
     replacements[placeholder] = count.toLocaleString();
   });
 
+  // Top-product placeholders (Title / Count / Legend) for each chart card
+  const topProducts = buildTopProductsData(sheet, rowCount);
+  for (let n = 1; n <= 3; n++) {
+    const p = topProducts[n - 1];
+    replacements['{{Defect_Model_Chart_Title_' + n + '}}']  = p ? p.productName : '';
+    replacements['{{Defect_Model_Chart_Count_' + n + '}}']  = p ? p.total.toLocaleString() : '';
+    replacements['{{Defect_Model_Chart_Legend_' + n + '}}'] = p ? buildLegendText(p) : '';
+  }
+
   Object.keys(replacements).forEach(function(key) {
     presentation.replaceAllText(key, replacements[key]);
   });
 
-  updateDefectModelCharts(presentation, sheet, rowCount);
+  updateDefectModelCharts(presentation, topProducts);
 
   refreshLinkedCharts(presentation);
 
   presentation.saveAndClose();
 }
 
-function updateDefectModelCharts(presentation, sheet, rowCount) {
+// Extracts top-3 defect products from the sheet. Returns array of:
+//   { productName, total, reasons: [[name, count], ...] (top 3), other: remainderCount }
+function buildTopProductsData(sheet, rowCount) {
   const categoryCol = getColumnIndexByHeader(sheet, 'Category');
-  const productCol = getColumnIndexByHeader(sheet, 'Product Name');
-  const reasonCol = getColumnIndexByHeader(sheet, '인입사유');
+  const productCol  = getColumnIndexByHeader(sheet, 'Product Name');
+  const reasonCol   = getColumnIndexByHeader(sheet, '인입사유');
 
   const categories = sheet.getRange(2, categoryCol, rowCount, 1).getDisplayValues().flat();
-  const products = sheet.getRange(2, productCol, rowCount, 1).getDisplayValues().flat();
-  const reasons = sheet.getRange(2, reasonCol, rowCount, 1).getDisplayValues().flat();
+  const products   = sheet.getRange(2, productCol,  rowCount, 1).getDisplayValues().flat();
+  const reasons    = sheet.getRange(2, reasonCol,   rowCount, 1).getDisplayValues().flat();
 
   const productMap = {};
-
   for (let i = 0; i < rowCount; i++) {
     const category = String(categories[i]).trim();
-    const product = String(products[i]).trim();
-    const reason = String(reasons[i]).trim();
-
-    if (category !== '4. Product Issue') continue;
-    if (!product || !reason) continue;
-
-    if (!productMap[product]) {
-      productMap[product] = {
-        total: 0,
-        reasons: {}
-      };
-    }
-
+    const product  = String(products[i]).trim();
+    const reason   = String(reasons[i]).trim();
+    if (category !== '4. Product Issue' || !product || !reason) continue;
+    if (!productMap[product]) productMap[product] = { total: 0, reasons: {} };
     productMap[product].total++;
     productMap[product].reasons[reason] = (productMap[product].reasons[reason] || 0) + 1;
   }
 
-  const topProducts = Object.entries(productMap)
-    .sort(function(a, b) {
-      return b[1].total - a[1].total;
-    })
-    .slice(0, 3);
+  return Object.entries(productMap)
+    .sort(function(a, b) { return b[1].total - a[1].total; })
+    .slice(0, 3)
+    .map(function(entry) {
+      const productName = entry[0];
+      const total       = entry[1].total;
+      const topReasons  = Object.entries(entry[1].reasons)
+        .sort(function(a, b) { return b[1] - a[1]; })
+        .slice(0, 3);
+      const topTotal = topReasons.reduce(function(s, r) { return s + r[1]; }, 0);
+      return { productName: productName, total: total, reasons: topReasons, other: total - topTotal };
+    });
+}
 
+// Formats legend text for one chart card.
+// Each line: "<reason>\t<count>" — use a right-aligned tab stop in the Slides text box
+// for the counts to stick to the right edge.
+function buildLegendText(item) {
+  const lines = item.reasons.map(function(r) { return r[0] + '\t' + r[1]; });
+  if (item.other > 0) lines.push('그 외\t' + item.other);
+  return lines.join('\n');
+}
+
+function updateDefectModelCharts(presentation, topProducts) {
   removeOldAutoCharts(presentation);
 
-  topProducts.forEach(function(item, index) {
+  topProducts.forEach(function(p, index) {
     const rank = index + 1;
-    const productName = item[0];
-    const total = item[1].total;
-    const reasonCounts = item[1].reasons;
-
-    const topReasons = Object.entries(reasonCounts)
-      .sort(function(a, b) {
-        return b[1] - a[1];
-      })
-      .slice(0, 3);
-
-    const topReasonTotal = topReasons.reduce(function(sum, reasonItem) {
-      return sum + reasonItem[1];
-    }, 0);
-
-    const otherCount = total - topReasonTotal;
-
-    const chartData = {
-      productName: productName,
-      total: total,
-      reasons: topReasons,
-      other: otherCount
-    };
-
     insertChartAtPlaceholder(
       presentation,
-      `{{Defect_Model_Chart_${rank}}}`,
-      chartData,
-      `AUTO_Defect_Model_Chart_${rank}`
+      '{{Defect_Model_Chart_' + rank + '}}',
+      p,
+      'AUTO_Defect_Model_Chart_' + rank
     );
   });
 }
@@ -187,44 +183,7 @@ function buildDefectModelChartBlob(data, title) {
     values.push(data.other);
   }
 
-  function jsEsc(s) {
-    return String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  }
-
-  const totalText  = jsEsc(data.total + '건');
-  const prodText   = jsEsc(data.productName);
-
-  // afterDraw:
-  //   1) center text: total count (large white) + product name (small grey)
-  //      → meta.data[0].{x,y} is the exact circle center for Chart.js 3 half-donuts
-  //   2) legend rows: colored dot · reason label (left) · count (right)
-  //      → drawn manually so we control font/layout (built-in legend ignores string callbacks)
-  const afterDraw = 'function(chart) {'
-    + ' var meta = chart.getDatasetMeta(0);'
-    + ' if (!meta.data || !meta.data[0]) return;'
-    + ' var ctx = chart.ctx; var cx = meta.data[0].x; var cy = meta.data[0].y;'
-    // center: count
-    + ' ctx.save(); ctx.textAlign = "center";'
-    + ' ctx.fillStyle = "#ffffff"; ctx.font = "bold 36px Arial";'
-    + ' ctx.textBaseline = "bottom"; ctx.fillText("' + totalText + '", cx, cy - 4);'
-    // center: product name
-    + ' ctx.fillStyle = "#9097bb"; ctx.font = "16px Arial";'
-    + ' ctx.textBaseline = "top"; ctx.fillText("' + prodText + '", cx, cy + 6);'
-    // legend rows below arc
-    + ' var lbs = chart.data.labels; var clrs = chart.data.datasets[0].backgroundColor;'
-    + ' var vals = chart.data.datasets[0].data; var rH = 26; var sY = cy + 42;'
-    + ' for (var i = 0; i < lbs.length; i++) {'
-    + '   var rY = sY + i * rH;'
-    + '   ctx.beginPath(); ctx.arc(26, rY, 5, 0, Math.PI * 2);'
-    + '   ctx.fillStyle = clrs[i]; ctx.fill();'
-    + '   ctx.fillStyle = "#c3c9e6"; ctx.font = "14px Arial";'
-    + '   ctx.textAlign = "left"; ctx.textBaseline = "middle";'
-    + '   ctx.fillText(lbs[i], 38, rY);'
-    + '   ctx.fillStyle = "#d9def5"; ctx.font = "bold 14px Arial";'
-    + '   ctx.textAlign = "right"; ctx.fillText(vals[i], chart.width - 20, rY);'
-    + ' }'
-    + ' ctx.restore(); }';
-
+  // Arc-only chart — no text, no legend (handled by separate {{}} placeholders on the slide).
   const config = {
     type: 'doughnut',
     data: {
@@ -236,16 +195,15 @@ function buildDefectModelChartBlob(data, title) {
       }]
     },
     options: {
-      rotation: 270,      // Chart.js 3: 270° = 9 o'clock; sweeps clockwise → ∩ (rotation:180 was bottom → C-shape)
+      rotation: 270,      // 9 o'clock → sweeps clockwise through 12 → 3 = ∩
       circumference: 180,
-      cutout: '90%',      // very thin ring (original 65% → ring was 35%R; -70% → ~10.5%R → cutout 90%)
-      layout: { padding: { top: 10, bottom: 140 } },  // 140px reserved below arc for legend rows
+      cutout: '90%',
+      layout: { padding: 4 },
       plugins: {
-        legend: { display: false },  // drawn manually in afterDraw
+        legend: { display: false },
         datalabels: { display: false }
       }
-    },
-    plugins: [{ afterDraw: afterDraw }]
+    }
   };
 
   const payload = JSON.stringify({
