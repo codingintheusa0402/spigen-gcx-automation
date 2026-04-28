@@ -191,28 +191,39 @@ function buildDefectModelChartBlob(data, title) {
     return String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   }
 
-  // afterDraw: draws total count + product name inside the half-donut hole.
-  // Uses meta.data[0].{x,y} for the exact circle center, which is more reliable
-  // than chart.chartArea.bottom for half-donut layouts in Chart.js 3.
+  const totalText  = jsEsc(data.total + '건');
+  const prodText   = jsEsc(data.productName);
+
+  // afterDraw:
+  //   1) center text: total count (large white) + product name (small grey)
+  //      → meta.data[0].{x,y} is the exact circle center for Chart.js 3 half-donuts
+  //   2) legend rows: colored dot · reason label (left) · count (right)
+  //      → drawn manually so we control font/layout (built-in legend ignores string callbacks)
   const afterDraw = 'function(chart) {'
     + ' var meta = chart.getDatasetMeta(0);'
     + ' if (!meta.data || !meta.data[0]) return;'
     + ' var ctx = chart.ctx; var cx = meta.data[0].x; var cy = meta.data[0].y;'
-    + ' ctx.save(); ctx.textAlign = "center"; ctx.textBaseline = "middle";'
-    + ' ctx.fillStyle = "#ffffff"; ctx.font = "bold 28px Arial";'
-    + ' ctx.fillText("' + jsEsc(data.total + '건') + '", cx, cy - 18);'
-    + ' ctx.fillStyle = "#9097bb"; ctx.font = "14px Arial";'
-    + ' ctx.fillText("' + jsEsc(data.productName) + '", cx, cy - 2);'
+    // center: count
+    + ' ctx.save(); ctx.textAlign = "center";'
+    + ' ctx.fillStyle = "#ffffff"; ctx.font = "bold 36px Arial";'
+    + ' ctx.textBaseline = "bottom"; ctx.fillText("' + totalText + '", cx, cy - 4);'
+    // center: product name
+    + ' ctx.fillStyle = "#9097bb"; ctx.font = "16px Arial";'
+    + ' ctx.textBaseline = "top"; ctx.fillText("' + prodText + '", cx, cy + 6);'
+    // legend rows below arc
+    + ' var lbs = chart.data.labels; var clrs = chart.data.datasets[0].backgroundColor;'
+    + ' var vals = chart.data.datasets[0].data; var rH = 26; var sY = cy + 42;'
+    + ' for (var i = 0; i < lbs.length; i++) {'
+    + '   var rY = sY + i * rH;'
+    + '   ctx.beginPath(); ctx.arc(26, rY, 5, 0, Math.PI * 2);'
+    + '   ctx.fillStyle = clrs[i]; ctx.fill();'
+    + '   ctx.fillStyle = "#c3c9e6"; ctx.font = "14px Arial";'
+    + '   ctx.textAlign = "left"; ctx.textBaseline = "middle";'
+    + '   ctx.fillText(lbs[i], 38, rY);'
+    + '   ctx.fillStyle = "#d9def5"; ctx.font = "bold 14px Arial";'
+    + '   ctx.textAlign = "right"; ctx.fillText(vals[i], chart.width - 20, rY);'
+    + ' }'
     + ' ctx.restore(); }';
-
-  // generateLabels: appends the raw count to each legend entry.
-  const generateLabels = 'function(chart) {'
-    + ' return chart.data.labels.map(function(label, i) {'
-    + '   var ds = chart.data.datasets[0];'
-    + '   return { text: label + "   " + ds.data[i],'
-    + '            fillStyle: ds.backgroundColor[i],'
-    + '            strokeStyle: "transparent", hidden: false, index: i };'
-    + ' }); }';
 
   const config = {
     type: 'doughnut',
@@ -225,16 +236,12 @@ function buildDefectModelChartBlob(data, title) {
       }]
     },
     options: {
-      rotation: 180,       // degrees (Chart.js 3): start at 9-o'clock
-      circumference: 180,  // sweep clockwise → upward arch (∩)
-      cutout: '65%',
-      layout: { padding: { top: 10, bottom: 10 } },
+      rotation: 270,      // Chart.js 3: 270° = 9 o'clock; sweeps clockwise → ∩ (rotation:180 was bottom → C-shape)
+      circumference: 180,
+      cutout: '90%',      // very thin ring (original 65% → ring was 35%R; -70% → ~10.5%R → cutout 90%)
+      layout: { padding: { top: 10, bottom: 140 } },  // 140px reserved below arc for legend rows
       plugins: {
-        legend: {
-          display: true,
-          position: 'bottom',
-          labels: { color: '#c3c9e6', font: { size: 13 }, padding: 16, generateLabels: generateLabels }
-        },
+        legend: { display: false },  // drawn manually in afterDraw
         datalabels: { display: false }
       }
     },
