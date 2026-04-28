@@ -547,8 +547,7 @@ function _fetchMcfFeeFinancesApi(orderId, ep, sentDate) {
 
   if (sentDate) {
     // Use the caller-supplied sent date (P col) — skip getFulfillmentOrderRaw entirely
-    // Handle both JS Date objects (from date-formatted cells) and yyyy-mm-dd strings
-    postedAfter  = sentDate instanceof Date ? new Date(sentDate) : new Date(String(sentDate).trim());
+    postedAfter  = new Date(String(sentDate).trim());
     postedBefore = new Date(postedAfter);
     postedBefore.setDate(postedBefore.getDate() + 60);
   } else {
@@ -570,20 +569,18 @@ function _fetchMcfFeeFinancesApi(orderId, ep, sentDate) {
   var fee = _sumMcfFeeFromShipments(shipments, orderId);
   if (fee !== '') return fee;
 
-  // Fallback: MCF orders linked to a marketplace order settle under displayableOrderId
-  // (e.g. GCX-IT-260318-1755 → S02-8195898-8998356 in the Finances API).
-  // Only call getFulfillmentOrderRaw when sentDate was provided — one extra API call
-  // per unmatched cell is acceptable; skipped in the 180-day rolling path (no sentDate)
-  // to stay within the GAS URL-fetch bandwidth budget.
-  if (sentDate) {
+  // Fallback: some MCF orders settle in the Finances API under displayableOrderId
+  // (e.g. when fulfilling a linked Amazon marketplace order).
+  // Only run when sentDate was provided — foCache is only populated in that path.
+  // Without sentDate, getFulfillmentOrderRaw was already skipped to save bandwidth.
+  if (foCache !== null) {
     try {
-      var foResult     = getFulfillmentOrderRaw(String(orderId), ep);
-      var displayableId = ((foResult.fulfillmentOrder || {}).displayableOrderId || '').trim();
-      if (displayableId && displayableId !== String(orderId).trim()) {
+      var displayableId = (foCache.displayableOrderId || '').trim();
+      if (displayableId && displayableId !== orderId) {
         var fee2 = _sumMcfFeeFromShipments(shipments, displayableId);
         if (fee2 !== '') return fee2;
       }
-    } catch (e) { /* order not yet settled or not found */ }
+    } catch (e) { /* fallback failed — order not yet settled */ }
   }
 
   return ''; // order not yet settled — caller caches as __EMPTY__ for 10min and retries
