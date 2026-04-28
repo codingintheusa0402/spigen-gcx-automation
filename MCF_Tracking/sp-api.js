@@ -863,6 +863,99 @@ function MCFFeeDebug(orderId, sentDate) {
 }
 
 /**
+ * SERVER-SIDE diagnostic — run from GAS editor, NOT as a sheet formula.
+ * No 30s timeout. Results appear in View → Logs.
+ *
+ * HOW TO USE:
+ *   1. Open Apps Script editor
+ *   2. Paste a real order ID into the variable below
+ *   3. Select this function and click Run
+ *   4. Check View → Logs
+ */
+function debugMcfFeeManual() {
+  var ORDER_ID  = 'PASTE-YOUR-ORDER-ID-HERE';   // ← replace with Q col value, e.g. GCX-IT-250404-24
+  var SENT_DATE = '2025-04-04';                  // ← replace with P col value (yyyy-mm-dd)
+  var EP        = 'EU';                          // 'EU' or 'FE' (use 'FE' for JP orders)
+
+  Logger.log('=== debugMcfFeeManual ===');
+  Logger.log('orderId=%s  sentDate=%s  ep=%s', ORDER_ID, SENT_DATE, EP);
+
+  // ── Step 0: LWA token ──────────────────────────────────────────────
+  try {
+    var tok = getLwaAccessToken(EP);
+    Logger.log('[0] LWA token OK (length=%s)', tok.length);
+  } catch (e) {
+    Logger.log('[0] LWA token FAILED: %s', e.message || e);
+    return;
+  }
+
+  // ── Step A: getFulfillmentOrderRaw ─────────────────────────────────
+  var displayableId = '';
+  try {
+    var foResult = getFulfillmentOrderRaw(ORDER_ID, EP, 1);
+    var fo = foResult.fulfillmentOrder || {};
+    displayableId = (fo.displayableOrderId || '').trim();
+    Logger.log('[A] FBA Outbound OK');
+    Logger.log('    displayableOrderId : %s', displayableId || '(empty)');
+    Logger.log('    receivedDate       : %s', fo.receivedDate || '(empty)');
+    Logger.log('    marketplaceId      : %s', fo.marketplaceId || '(empty)');
+    Logger.log('    sellerFulfillmentOrderId : %s', fo.sellerFulfillmentOrderId || '(empty)');
+  } catch (e) {
+    Logger.log('[A] FBA Outbound FAILED: %s', e.message || e);
+  }
+
+  // ── Step B: targeted Finances endpoint (only if Amazon 3-7-7 format) ──
+  var isAmazonFmt = /^\w{3}-\d{7}-\d{7}$/.test(displayableId);
+  Logger.log('[B] displayableId Amazon-format? %s', isAmazonFmt ? 'YES' : 'NO → skipping targeted call');
+  if (isAmazonFmt) {
+    try {
+      var targeted = _listFinancialEventsByOrderId(displayableId, EP, 1);
+      Logger.log('[B] ShipmentEvents returned: %s', targeted.length);
+      targeted.slice(0, 3).forEach(function(ev, i) {
+        Logger.log('    [B.%s] SellerOrderId=%s  AmazonOrderId=%s  feeSum=%s',
+          i, ev.SellerOrderId || '', ev.AmazonOrderId || '', _sumAllMcfFees([ev]));
+      });
+    } catch (e) {
+      Logger.log('[B] targeted call FAILED: %s', e.message || e);
+    }
+  }
+
+  // ── Step C: date-range scan (full 3 pages, 3 attempts — server-side has 6 min timeout) ──
+  var postedAfter  = new Date(SENT_DATE + 'T00:00:00Z');
+  var postedBefore = new Date(postedAfter.getTime() + 60 * 24 * 3600 * 1000); // +60 days
+  var now = new Date(Date.now() - 5 * 60 * 1000);
+  if (postedBefore > now) postedBefore = now;
+
+  Logger.log('[C] date-range scan %s → %s', postedAfter.toISOString().slice(0,10), postedBefore.toISOString().slice(0,10));
+  try {
+    var events = _collectShipmentEvents(EP, postedAfter, postedBefore, 3, 3); // 3 pages, 3 attempts
+    Logger.log('[C] total ShipmentEvents fetched: %s', events.length);
+
+    var matchFound = false;
+    events.forEach(function(ev) {
+      var sid = (ev.SellerOrderId || '').trim();
+      var aid = (ev.AmazonOrderId || '').trim();
+      if (sid.toUpperCase() === ORDER_ID.toUpperCase() || aid.toUpperCase() === ORDER_ID.toUpperCase()) {
+        matchFound = true;
+        Logger.log('[C] *** MATCH *** SellerOrderId=%s  AmazonOrderId=%s  feeSum=%s',
+          sid, aid, _sumMcfFeeFromShipments([ev], ORDER_ID));
+      }
+    });
+
+    if (!matchFound) {
+      Logger.log('[C] No match found. Sample SellerOrderIds (first 10):');
+      events.slice(0, 10).forEach(function(ev, i) {
+        Logger.log('    [%s] %s / %s', i, ev.SellerOrderId || '', ev.AmazonOrderId || '');
+      });
+    }
+  } catch (e) {
+    Logger.log('[C] date-range scan FAILED: %s', e.message || e);
+  }
+
+  Logger.log('=== done ===');
+}
+
+/**
  * getFulfillmentPreview method — estimated MCF fee (instant, may differ from actual).
  * Currency: GBP for UK orders, EUR for other EU orders.
  */
