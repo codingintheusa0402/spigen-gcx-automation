@@ -449,18 +449,22 @@ function getMcfStockByAsin(asin, marketplaceId) {
 function MCFFee(arg1, arg2) {
   // MCFFee(orderId)           → 1-arg: orderId only, uses 180-day window
   // MCFFee(sentDate, orderId) → 2-arg: sentDate (P col) + orderId (Q col)
+  // sentDate is kept as the raw GAS value (may be a Date object) — _toSafeDate handles both
   var orderId, sentDate;
   if (arg2 !== undefined && arg2 !== null && String(arg2).trim() !== '') {
-    sentDate = String(arg1 || '').trim();
+    sentDate = arg1;                // raw — Date object or string from sheet cell
     orderId  = String(arg2).trim();
   } else {
     orderId  = String(arg1 || '').trim();
-    sentDate = '';
+    sentDate = null;
   }
   if (!orderId) return '';
 
   var cache = CacheService.getScriptCache();
-  var key = 'MCFFEE_' + orderId + (sentDate ? '_' + sentDate : '');
+  var sentDateStr = sentDate ? (sentDate instanceof Date
+    ? Utilities.formatDate(sentDate, 'UTC', 'yyyy-MM-dd')
+    : String(sentDate).trim()) : '';
+  var key = 'MCFFEE_' + orderId + (sentDateStr ? '_' + sentDateStr : '');
   var cached = cache.get(key);
   if (cached !== null) return cached === '__EMPTY__' ? '' : parseFloat(cached);
 
@@ -506,16 +510,19 @@ function MCFFee(arg1, arg2) {
 function MCFFee_JP(arg1, arg2) {
   var orderId, sentDate;
   if (arg2 !== undefined && arg2 !== null && String(arg2).trim() !== '') {
-    sentDate = String(arg1 || '').trim();
+    sentDate = arg1;                // raw — Date object or string from sheet cell
     orderId  = String(arg2).trim();
   } else {
     orderId  = String(arg1 || '').trim();
-    sentDate = '';
+    sentDate = null;
   }
   if (!orderId) return '';
 
   var cache = CacheService.getScriptCache();
-  var key = 'MCFFEE_JP_' + orderId + (sentDate ? '_' + sentDate : '');
+  var sentDateStr = sentDate ? (sentDate instanceof Date
+    ? Utilities.formatDate(sentDate, 'UTC', 'yyyy-MM-dd')
+    : String(sentDate).trim()) : '';
+  var key = 'MCFFEE_JP_' + orderId + (sentDateStr ? '_' + sentDateStr : '');
   var cached = cache.get(key);
   if (cached !== null) return cached === '__EMPTY__' ? '' : parseFloat(cached);
 
@@ -595,6 +602,29 @@ function _sumAllMcfFees(shipments) {
  * Fees are stored as negative in Finances API; returns Math.abs(total).
  * Returns '' if the order has not yet settled.
  */
+
+/**
+ * Safely converts a value from a sheet cell (may be a Date object, a number serial, or a
+ * yyyy-mm-dd string) to a JavaScript Date. Returns null when the value is absent or invalid.
+ * GAS custom functions receive date cells as Date objects, NOT strings — so we must handle both.
+ */
+function _toSafeDate(val) {
+  if (val == null || val === '') return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : new Date(val.getTime());
+  // Numeric: Google Sheets date serial (days since 1899-12-30)
+  var n = Number(val);
+  if (!isNaN(n) && n > 0) {
+    var d = new Date((n - 25569) * 86400000); // convert serial → Unix ms (UTC)
+    return isNaN(d.getTime()) ? null : d;
+  }
+  // String: try ISO format first (yyyy-mm-dd), then generic parse
+  var s = String(val).trim();
+  var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return new Date(Date.UTC(+iso[1], +iso[2] - 1, +iso[3]));
+  var d2 = new Date(s);
+  return isNaN(d2.getTime()) ? null : d2;
+}
+
 function _fetchMcfFeeFinancesApi(orderId, ep, sentDate) {
   // Step 1: Resolve fulfillment order metadata (displayableOrderId, receivedDate).
   var foResult = null, displayableId = '', receivedDate = '';
@@ -619,14 +649,16 @@ function _fetchMcfFeeFinancesApi(orderId, ep, sentDate) {
   }
 
   // Step 3: Date-range scan fallback.
+  // _toSafeDate handles Date objects passed by GAS from date-formatted cells (P col).
   var postedAfter, postedBefore;
-  if (sentDate && String(sentDate).trim()) {
-    postedAfter  = new Date(String(sentDate).trim());
-    postedBefore = new Date(postedAfter);
+  var parsedSentDate = _toSafeDate(sentDate);
+  if (parsedSentDate) {
+    postedAfter  = parsedSentDate;
+    postedBefore = new Date(parsedSentDate.getTime());
     postedBefore.setDate(postedBefore.getDate() + 60);
   } else if (receivedDate) {
-    postedAfter  = new Date(receivedDate);
-    postedBefore = new Date(postedAfter);
+    postedAfter  = new Date(receivedDate); // ISO string from API — always valid
+    postedBefore = new Date(postedAfter.getTime());
     postedBefore.setDate(postedBefore.getDate() + 60);
   } else {
     var _ref = new Date(Date.now() - 5 * 60 * 1000);
@@ -774,11 +806,12 @@ function MCFFeeDebug(orderId, sentDate) {
   try {
     var postedAfter, postedBefore, dateSource;
 
-    if (sentDate) {
-      postedAfter  = new Date(String(sentDate).trim());
-      postedBefore = new Date(postedAfter);
+    var parsedSent = _toSafeDate(sentDate);
+    if (parsedSent) {
+      postedAfter  = parsedSent;
+      postedBefore = new Date(parsedSent.getTime());
       postedBefore.setDate(postedBefore.getDate() + 90);
-      dateSource = 'sentDate (P col): ' + String(sentDate).trim();
+      dateSource = 'sentDate (P col): ' + parsedSent.toISOString().slice(0, 10);
     } else {
       var result = getFulfillmentOrderRaw(String(orderId), 'EU');
       var fo = result.fulfillmentOrder || {};
