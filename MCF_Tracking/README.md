@@ -29,25 +29,32 @@ Returns the tracking number for an EU MCF order. Tries EU endpoint first, falls 
 ### `=AMZTK_JP(orderId)`
 Same as `AMZTK` but tries FE (Japan/AU/SG) first.
 
-### `=MCFFee(method, orderId, sentDate)`
-Returns the MCF fulfillment fee for an existing order. **For bulk use, prefer `backfillMCFFees()` over this formula** — ARRAYFORMULA is not supported and many simultaneous formula calls will queue indefinitely.
+### `=MCFFee(orderId)` / `=MCFFee(sentDate, orderId)`
+Returns the actual settled MCF fulfillment fee via the Finances API. Always uses the actual charged amount (not an estimate). Returns blank until the order settles (usually a few days after shipment) — retries automatically on the next sheet recalculation.
 
-| method | Source | Timing | Accuracy |
-|--------|--------|--------|----------|
-| `"getFulfillmentPreview"` | `getFulfillmentPreview` SP-API | Instant | Estimate only — may differ from actual. **Currency depends on marketplace: GBP for UK, EUR for other EU.** |
-| `"FinancesAPI"` | `listFinancialEvents` SP-API | Available ~days after shipment settles | Actual charged amount |
+**For bulk use, prefer `backfillMCFFees()` over this formula** — ARRAYFORMULA is not supported and many simultaneous formula calls will queue indefinitely.
+
+| Usage | Example | Notes |
+|-------|---------|-------|
+| 1-arg | `=MCFFee(Q2)` | Searches last 180 days |
+| 2-arg | `=MCFFee(P2, Q2)` | `P2` = sent date (yyyy-mm-dd), `Q2` = orderId — faster, less bandwidth |
 
 ```
-=IF(Q2<>"", MCFFee("FinancesAPI", Q2, P2), "")
+=IF(Q2<>"", MCFFee(P2, Q2), "")
 ```
 
-- `sentDate` (optional, col P): pass the yyyy-mm-dd sent date to skip the fulfillment order lookup and use it directly as `PostedAfter`. Faster and more reliable for recent orders.
-- `FinancesAPI`: searches `ShipmentEventList` for `SellerOrderId` matching the order, sums all FBA/fulfillment fee components. Returns `''` until the order settles (retries automatically on next recalculation).
+**Lookup strategy (ordered by bandwidth cost):**
+1. Calls `getFulfillmentOrderRaw` once to get `displayableOrderId` + `receivedDate`
+2. If `displayableOrderId` is Amazon 3-7-7 format (e.g. `S02-XXXXXXX-XXXXXXX`), uses the targeted `/finances/v0/orders/{id}/financialEvents` endpoint — returns only that order's events
+3. Falls back to date-range scan (sentDate±60d, receivedDate±60d, or last 180d) if targeted lookup yields nothing
+4. Matches events by both `SellerOrderId` and `displayableOrderId` (Amazon marketplace order ID)
+5. Sums `OrderFeeList` (MCF order-level fees) + `ShipmentFeeList` + `ItemFeeList`
+
 - On 429 QuotaExceeded: returns blank and retries after 90 seconds automatically.
 - Tries EU endpoint first, falls back to FE.
-- Required SP-API roles: **Amazon Fulfillment** (both methods) + **Finance and Accounting** (`FinancesAPI` method).
+- Required SP-API roles: **Amazon Fulfillment** + **Finance and Accounting**.
 
-### `=MCFFee_JP(method, orderId, sentDate)`
+### `=MCFFee_JP(orderId)` / `=MCFFee_JP(sentDate, orderId)`
 Same as `MCFFee` but tries FE (Japan/AU/SG) first.
 
 ### `getMcfStockByAsin(asin, marketplaceId)`
