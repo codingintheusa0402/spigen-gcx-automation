@@ -240,10 +240,10 @@ function spapiFetchWithRetry(method, path, opts, attempts, waitMs) {
 }
 
 /***** ========= FBA OUTBOUND HELPERS (with 429 retry) ========= *****/
-function getFulfillmentOrderRaw(sellerFulfillmentOrderId, endpoint) {
+// maxAttempts: default 3 (server-side batch); pass 1 for formula cells to avoid 5s sleep × retries → timeout
+function getFulfillmentOrderRaw(sellerFulfillmentOrderId, endpoint, maxAttempts) {
   var path = '/fba/outbound/2020-07-01/fulfillmentOrders/' + encodeURIComponent(sellerFulfillmentOrderId);
-  // 3 attempts, 5s apart
-  var res = spapiFetchWithRetry('GET', path, { endpoint: endpoint }, 3, 5000);
+  var res = spapiFetchWithRetry('GET', path, { endpoint: endpoint }, maxAttempts != null ? maxAttempts : 3, 5000);
   return res.payload || res;
 }
 
@@ -431,40 +431,31 @@ function getMcfStockByAsin(asin, marketplaceId) {
 
 /**
  * Returns the actual settled MCF fulfillment fee for an EU/UK/DE/FR/IT/ES order.
- * Uses the Finances API (actual charged amount, available days after shipment).
- * Returns blank until settled — retries automatically on the next sheet recalculation.
- * Currency matches the marketplace: GBP for UK, EUR for other EU marketplaces.
+ * Uses the targeted Finances API: getFulfillmentOrderRaw → displayableOrderId →
+ * listFinancialEventsByOrderId. Two fast calls, no date-range scan, no retry sleep.
+ * Returns blank until settled — retries automatically on next recalculation (90 s on 429).
  *
  * Usage:
- *   =MCFFee(Q35)        — orderId only, searches last 180 days
- *   =MCFFee(P35, Q35)   — sentDate (col P, yyyy-mm-dd) + orderId (col Q), faster & less bandwidth
+ *   =MCFFee(Q35)        — orderId only
+ *   =MCFFee(P35, Q35)   — 2-arg form accepted for backwards compat; sentDate (P) is ignored,
+ *                          orderId is taken from Q
  *
  * Required roles: Amazon Fulfillment + Finance and Accounting.
  *
  * @customfunction
- * @param {string} arg1  orderId when called with 1 arg; sentDate (yyyy-mm-dd, col P) when called with 2 args
+ * @param {string} arg1  orderId when called with 1 arg; ignored sentDate when called with 2 args
  * @param {string} [arg2] orderId (col Q) when called with 2 args
  * @return {number} Fee amount in the order's marketplace currency.
  */
 function MCFFee(arg1, arg2) {
-  // MCFFee(orderId)           → 1-arg: orderId only, uses 180-day window
-  // MCFFee(sentDate, orderId) → 2-arg: sentDate (P col) + orderId (Q col)
-  // sentDate is kept as the raw GAS value (may be a Date object) — _toSafeDate handles both
-  var orderId, sentDate;
-  if (arg2 !== undefined && arg2 !== null && String(arg2).trim() !== '') {
-    sentDate = arg1;                // raw — Date object or string from sheet cell
-    orderId  = String(arg2).trim();
-  } else {
-    orderId  = String(arg1 || '').trim();
-    sentDate = null;
-  }
+  // Accept both MCFFee(Q) and MCFFee(P, Q) — sentDate (P) is no longer used by the lookup
+  var orderId = (arg2 !== undefined && arg2 !== null && String(arg2).trim() !== '')
+    ? String(arg2).trim()
+    : String(arg1 || '').trim();
   if (!orderId) return '';
 
   var cache = CacheService.getScriptCache();
-  var sentDateStr = sentDate ? (sentDate instanceof Date
-    ? Utilities.formatDate(sentDate, 'UTC', 'yyyy-MM-dd')
-    : String(sentDate).trim()) : '';
-  var key = 'MCFFEE_' + orderId + (sentDateStr ? '_' + sentDateStr : '');
+  var key = 'MCFFEE2_' + orderId;
   var cached = cache.get(key);
   if (cached !== null) return cached === '__EMPTY__' ? '' : parseFloat(cached);
 
@@ -473,7 +464,7 @@ function MCFFee(arg1, arg2) {
 
   for (var i = 0; i < endpoints.length; i++) {
     try {
-      var fee = _fetchMcfFeeFinancesApi(orderId, endpoints[i], sentDate);
+      var fee = _fetchMcfFeeFinancesApi(orderId, endpoints[i]);
       cache.put(key, fee === '' ? '__EMPTY__' : String(fee), fee === '' ? 600 : 21600);
       return fee;
     } catch (err) {
@@ -498,31 +489,21 @@ function MCFFee(arg1, arg2) {
  * Returns the actual settled MCF fulfillment fee for a Japan / AU / SG order.
  * Same as MCFFee but tries the FE (Far East) endpoint first.
  *
- * Usage:
- *   =MCFFee_JP(Q35)        — orderId only
- *   =MCFFee_JP(P35, Q35)   — sentDate (col P) + orderId (col Q)
+ * Usage: =MCFFee_JP(Q35) or =MCFFee_JP(P35, Q35)
  *
  * @customfunction
- * @param {string} arg1  orderId when called with 1 arg; sentDate (yyyy-mm-dd, col P) when called with 2 args
+ * @param {string} arg1  orderId when called with 1 arg; ignored sentDate when called with 2 args
  * @param {string} [arg2] orderId (col Q) when called with 2 args
  * @return {number} Fee amount in the order's marketplace currency.
  */
 function MCFFee_JP(arg1, arg2) {
-  var orderId, sentDate;
-  if (arg2 !== undefined && arg2 !== null && String(arg2).trim() !== '') {
-    sentDate = arg1;                // raw — Date object or string from sheet cell
-    orderId  = String(arg2).trim();
-  } else {
-    orderId  = String(arg1 || '').trim();
-    sentDate = null;
-  }
+  var orderId = (arg2 !== undefined && arg2 !== null && String(arg2).trim() !== '')
+    ? String(arg2).trim()
+    : String(arg1 || '').trim();
   if (!orderId) return '';
 
   var cache = CacheService.getScriptCache();
-  var sentDateStr = sentDate ? (sentDate instanceof Date
-    ? Utilities.formatDate(sentDate, 'UTC', 'yyyy-MM-dd')
-    : String(sentDate).trim()) : '';
-  var key = 'MCFFEE_JP_' + orderId + (sentDateStr ? '_' + sentDateStr : '');
+  var key = 'MCFFEE2_JP_' + orderId;
   var cached = cache.get(key);
   if (cached !== null) return cached === '__EMPTY__' ? '' : parseFloat(cached);
 
@@ -531,7 +512,7 @@ function MCFFee_JP(arg1, arg2) {
 
   for (var i = 0; i < endpoints.length; i++) {
     try {
-      var fee = _fetchMcfFeeFinancesApi(orderId, endpoints[i], sentDate);
+      var fee = _fetchMcfFeeFinancesApi(orderId, endpoints[i]);
       cache.put(key, fee === '' ? '__EMPTY__' : String(fee), fee === '' ? 600 : 21600);
       return fee;
     } catch (err) {
@@ -576,35 +557,61 @@ function _toSafeDate(val) {
 }
 
 /**
- * Finances API method — actual settled MCF fee.
- *
- * Does a single Finances API date-range scan (no FBA Outbound call).
- * Calling getFulfillmentOrderRaw per-cell with 15+ concurrent formula cells hits SP-API
- * rate limits and causes 30s GAS timeout — the date-range scan alone is fast enough.
- *
- * Returns '' if the order has not yet settled. Caller caches '' for 10 min and retries.
- * For orders that settle under a different ID (Amazon 3-7-7 format), run backfillMCFFees()
- * which does the getFulfillmentOrderRaw + displayableOrderId fallback in a single batch call.
+ * Targeted Finances API lookup by Amazon order ID (displayableOrderId).
+ * GET /finances/v0/orders/{orderId}/financialEvents
+ * Returns only that order's ShipmentEvents — tiny response, no pagination needed.
+ * maxAttempts: pass 1 for formula cells (no retry sleep → no timeout risk).
  */
-function _fetchMcfFeeFinancesApi(orderId, ep, sentDate) {
-  // Build the date window — _toSafeDate handles Date objects from date-formatted cells (P col)
-  var postedAfter, postedBefore;
-  var parsedSentDate = _toSafeDate(sentDate);
-  if (parsedSentDate) {
-    postedAfter  = parsedSentDate;
-    postedBefore = new Date(parsedSentDate.getTime());
-    postedBefore.setDate(postedBefore.getDate() + 60);
-  } else {
-    var _ref = new Date(Date.now() - 5 * 60 * 1000);
-    postedAfter  = new Date(_ref.getTime() - 180 * 24 * 3600 * 1000);
-    postedBefore = new Date(_ref);
+function _listFinancialEventsByOrderId(amazonOrderId, ep, maxAttempts) {
+  var path = '/finances/v0/orders/' + encodeURIComponent(amazonOrderId) + '/financialEvents';
+  var res = spapiFetchWithRetry('GET', path, { endpoint: ep }, maxAttempts != null ? maxAttempts : 3, 5000);
+  var payload = res.payload || res;
+  return (payload.FinancialEvents || {}).ShipmentEventList || [];
+}
+
+/**
+ * Sums MCF fees across all shipment events (OrderFeeList + ShipmentFeeList + ItemFeeList).
+ * Use when all events in the array already belong to one order (targeted endpoint result).
+ */
+function _sumAllMcfFees(shipments) {
+  var total = 0;
+  for (var i = 0; i < shipments.length; i++) {
+    var ev = shipments[i];
+    (ev.OrderFeeList    || []).forEach(function(f) { if (_isMcfFeeType(f.FeeType)) total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0); });
+    (ev.ShipmentFeeList || []).forEach(function(f) { if (_isMcfFeeType(f.FeeType)) total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0); });
+    (ev.ShipmentItemList || []).forEach(function(item) {
+      (item.ItemFeeList || []).forEach(function(f) { if (_isMcfFeeType(f.FeeType)) total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0); });
+    });
+  }
+  return total !== 0 ? Math.abs(total) : '';
+}
+
+/**
+ * Finances API — actual settled MCF fee, formula-safe.
+ *
+ * Strategy (2 fast SP-API calls per cell, no retries → no timeout risk):
+ * 1. getFulfillmentOrderRaw (1 attempt) → get displayableOrderId (Amazon 3-7-7 format)
+ * 2. listFinancialEventsByOrderId(displayableOrderId) (1 attempt) → targeted single-order events
+ * 3. Sum fees from the targeted response
+ *
+ * No retries in this path — on 429, the error propagates to MCFFee which caches ''
+ * for 90 s and lets the cell retry on the next recalculation with fewer concurrent peers.
+ * For bulk backfill use backfillMCFFees() which runs sequentially with full retries.
+ */
+function _fetchMcfFeeFinancesApi(orderId, ep) {
+  // Step 1: get displayableOrderId — 1 attempt, no retry sleep to avoid timeout
+  var foResult = getFulfillmentOrderRaw(orderId, ep, 1);
+  var fo = foResult.fulfillmentOrder || {};
+  var displayableId = (fo.displayableOrderId || '').trim();
+
+  // Step 2: targeted lookup (requires Amazon 3-7-7 format like S02-XXXXXXX-XXXXXXX)
+  if (/^\w{3}-\d{7}-\d{7}$/.test(displayableId)) {
+    var targeted = _listFinancialEventsByOrderId(displayableId, ep, 1); // 1 attempt
+    var fee = _sumAllMcfFees(targeted);
+    if (fee !== '') return fee;
   }
 
-  var _now = new Date(Date.now() - 5 * 60 * 1000); // 5-min buffer for clock drift
-  if (postedBefore > _now) postedBefore = _now;    // API rejects future dates
-
-  var shipments = _collectShipmentEvents(ep, postedAfter, postedBefore, 5);
-  return _sumMcfFeeFromShipments(shipments, orderId);
+  return ''; // order not yet settled — caller caches '' for 10 min and retries
 }
 
 // Matches FBA / fulfillment fee type names used in Finances API ShipmentEvent

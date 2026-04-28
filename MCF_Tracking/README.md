@@ -43,13 +43,14 @@ Returns the actual settled MCF fulfillment fee via the Finances API. Always uses
 =IF(Q2<>"", MCFFee(P2, Q2), "")
 ```
 
-**Lookup strategy:** single Finances API date-range scan — no FBA Outbound call.
-1. Builds date window: `sentDate → sentDate+60d` (or last 180d if no sentDate)
-2. Calls `listFinancialEvents` for the window (up to 5 pages × 100 events)
-3. Matches `SellerOrderId` / `AmazonOrderId` against the GCX order ID
-4. Sums `OrderFeeList` (MCF order-level fees) + `ShipmentFeeList` + `ItemFeeList`
+**Lookup strategy:** 2 fast targeted API calls per cell — no date-range scan.
+1. `getFulfillmentOrderRaw` (1 attempt, no retry) → get `displayableOrderId` (Amazon 3-7-7 format like `S02-XXXXXXX-XXXXXXX`)
+2. `GET /finances/v0/orders/{displayableOrderId}/financialEvents` (1 attempt) → single-order events, tiny response
+3. Sums `OrderFeeList` + `ShipmentFeeList` + `ItemFeeList`
 
-> **Why no FBA Outbound call?** Calling `getFulfillmentOrderRaw` per-cell with 15+ concurrent formulas hits SP-API rate limits and causes 30s GAS timeout. The Finances API scan alone is fast enough (~1-2s per cell). For orders that settle under a different Amazon-format ID (`S02-XXXXXXX-XXXXXXX`), run **`backfillMCFFees()`** — it resolves `displayableOrderId` in a single batch call.
+> **Why no retry / no date-range scan?** With 15+ concurrent formula cells, retry sleeps (5s × 3 = 15s per cell) cause GAS 30s timeout. Instead: on 429, the cell immediately returns `''` cached for 90 s, then retries automatically on the next recalculation with fewer concurrent peers. Date-range scans (`listFinancialEvents`) download hundreds of events across multiple pages — too slow for concurrent cells.
+>
+> Both `=MCFFee(Q35)` (1-arg) and `=MCFFee(P35, Q35)` (2-arg) are accepted; the `sentDate` (P col) is silently ignored since the targeted lookup doesn't need a date window.
 
 - On 429 QuotaExceeded: returns blank and retries after 90 seconds automatically.
 - Tries EU endpoint first, falls back to FE.
