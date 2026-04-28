@@ -180,6 +180,92 @@ function insertChartAtPlaceholder(presentation, placeholder, chartData, title) {
 }
 
 function buildDefectModelChartBlob(data, title) {
+  const labels = data.reasons.map(function(r) { return r[0] || '기타'; });
+  const values = data.reasons.map(function(r) { return r[1]; });
+  if (data.other > 0) {
+    labels.push('그 외');
+    values.push(data.other);
+  }
+
+  function jsEsc(s) {
+    return String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  }
+
+  // afterDraw: draws total count + product name inside the half-donut hole.
+  // Uses meta.data[0].{x,y} for the exact circle center, which is more reliable
+  // than chart.chartArea.bottom for half-donut layouts in Chart.js 3.
+  const afterDraw = 'function(chart) {'
+    + ' var meta = chart.getDatasetMeta(0);'
+    + ' if (!meta.data || !meta.data[0]) return;'
+    + ' var ctx = chart.ctx; var cx = meta.data[0].x; var cy = meta.data[0].y;'
+    + ' ctx.save(); ctx.textAlign = "center"; ctx.textBaseline = "middle";'
+    + ' ctx.fillStyle = "#ffffff"; ctx.font = "bold 28px Arial";'
+    + ' ctx.fillText("' + jsEsc(data.total + '건') + '", cx, cy - 18);'
+    + ' ctx.fillStyle = "#9097bb"; ctx.font = "14px Arial";'
+    + ' ctx.fillText("' + jsEsc(data.productName) + '", cx, cy - 2);'
+    + ' ctx.restore(); }';
+
+  // generateLabels: appends the raw count to each legend entry.
+  const generateLabels = 'function(chart) {'
+    + ' return chart.data.labels.map(function(label, i) {'
+    + '   var ds = chart.data.datasets[0];'
+    + '   return { text: label + "   " + ds.data[i],'
+    + '            fillStyle: ds.backgroundColor[i],'
+    + '            strokeStyle: "transparent", hidden: false, index: i };'
+    + ' }); }';
+
+  const config = {
+    type: 'doughnut',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: values,
+        backgroundColor: ['#d336f4', '#1554ff', '#19c7f3', '#8790b5'],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      rotation: 180,       // degrees (Chart.js 3): start at 9-o'clock
+      circumference: 180,  // sweep clockwise → upward arch (∩)
+      cutout: '65%',
+      layout: { padding: { top: 10, bottom: 10 } },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'bottom',
+          labels: { color: '#c3c9e6', font: { size: 13 }, padding: 16, generateLabels: generateLabels }
+        },
+        datalabels: { display: false }
+      }
+    },
+    plugins: [{ afterDraw: afterDraw }]
+  };
+
+  const payload = JSON.stringify({
+    version: '3',
+    backgroundColor: '#11162d',
+    width: 500,
+    height: 400,
+    chart: config
+  });
+
+  const response = UrlFetchApp.fetch('https://quickchart.io/chart', {
+    method: 'post',
+    contentType: 'application/json',
+    payload: payload,
+    muteHttpExceptions: true
+  });
+
+  if (response.getResponseCode() !== 200) {
+    Logger.log('QuickChart ' + response.getResponseCode() + ': ' + response.getContentText().slice(0, 300));
+    return buildChartsFallback_(data, title);
+  }
+
+  return response.getBlob().setName(title + '.png');
+}
+
+// Fallback used when QuickChart is unreachable — full donut via built-in Charts service.
+function buildChartsFallback_(data, title) {
   const rows = data.reasons.map(function(r) { return [r[0] || '기타', r[1]]; });
   if (data.other > 0) rows.push(['그 외', data.other]);
 
@@ -188,18 +274,19 @@ function buildDefectModelChartBlob(data, title) {
     .addColumn(Charts.ColumnType.NUMBER, 'Count');
   rows.forEach(function(r) { dt.addRow(r); });
 
-  const chart = Charts.newPieChart()
+  return Charts.newPieChart()
     .setDataTable(dt.build())
     .setTitle(data.productName + '  |  ' + data.total + '건')
-    .setDimensions(620, 360)
+    .setDimensions(500, 400)
     .setColors(['#d336f4', '#1554ff', '#19c7f3', '#8790b5'])
-    .setOption('pieHole', 0.5)
+    .setOption('pieHole', 0.65)
+    .setOption('pieSliceText', 'value')
     .setOption('backgroundColor', '#11162d')
-    .setOption('titleTextStyle', { color: '#ffffff', fontSize: 16 })
+    .setOption('titleTextStyle', { color: '#ffffff', fontSize: 14 })
     .setOption('legend', { textStyle: { color: '#c3c9e6' } })
-    .build();
-
-  return chart.getBlob().setName(title + '.png');
+    .build()
+    .getBlob()
+    .setName(title + '.png');
 }
 
 function refreshLinkedCharts(presentation) {
@@ -286,10 +373,3 @@ function extractKeywordPlaceholders(presentation, prefix) {
   return Array.from(placeholders);
 }
 
-function escapeSvg(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
