@@ -183,72 +183,38 @@ function buildDefectModelChartBlob(data, title) {
     values.push(data.other);
   }
 
-  // Arc-only chart — no text, no legend (handled by separate {{}} placeholders on the slide).
-  const config = {
-    type: 'doughnut',
-    data: {
-      labels: labels,
-      datasets: [{
-        data: values,
-        backgroundColor: ['#d336f4', '#1554ff', '#19c7f3', '#8790b5'],
-        borderWidth: 0
-      }]
-    },
-    options: {
-      rotation: 270,      // 9 o'clock → sweeps clockwise through 12 → 3 = ∩
-      circumference: 180,
-      cutout: '90%',
-      layout: { padding: 4 },
-      plugins: {
-        legend: { display: false },
-        datalabels: { display: false }
-      }
-    }
-  };
-
-  const payload = JSON.stringify({
-    version: '3',
-    backgroundColor: '#11162d',
-    width: 500,
-    height: 400,
-    chart: config
-  });
-
-  const response = UrlFetchApp.fetch('https://quickchart.io/chart', {
-    method: 'post',
-    contentType: 'application/json',
-    payload: payload,
-    muteHttpExceptions: true
-  });
-
-  if (response.getResponseCode() !== 200) {
-    Logger.log('QuickChart ' + response.getResponseCode() + ': ' + response.getContentText().slice(0, 300));
-    return buildChartsFallback_(data, title);
-  }
-
-  return response.getBlob().setName(title + '.png');
-}
-
-// Fallback used when QuickChart is unreachable — full donut via built-in Charts service.
-function buildChartsFallback_(data, title) {
-  const rows = data.reasons.map(function(r) { return [r[0] || '기타', r[1]]; });
-  if (data.other > 0) rows.push(['그 외', data.other]);
+  // Half-donut trick (no external API needed):
+  // Add a spacer slice equal to the total of all visible slices.
+  // Total becomes 2× visible sum → each half = 180° exactly.
+  // The spacer is colored to match the background, making it invisible.
+  // pieStartAngle: -90 positions visible data at 9 o'clock → sweeps through
+  // 12 o'clock to 3 o'clock = ∩ upward arch.
+  const visibleSum = values.reduce(function(a, b) { return a + b; }, 0);
+  labels.push('');        // no label for spacer
+  values.push(visibleSum);
 
   const dt = Charts.newDataTable()
-    .addColumn(Charts.ColumnType.STRING, 'Reason')
-    .addColumn(Charts.ColumnType.NUMBER, 'Count');
-  rows.forEach(function(r) { dt.addRow(r); });
+    .addColumn(Charts.ColumnType.STRING, 'Label')
+    .addColumn(Charts.ColumnType.NUMBER, 'Value');
+  for (let i = 0; i < labels.length; i++) {
+    dt.addRow([labels[i], values[i]]);
+  }
+
+  const spacerOpt = {};
+  spacerOpt[labels.length - 1] = { color: '#11162d' };  // spacer = background color
 
   return Charts.newPieChart()
     .setDataTable(dt.build())
-    .setTitle(data.productName + '  |  ' + data.total + '건')
-    .setDimensions(500, 400)
+    .setDimensions(500, 300)
     .setColors(['#d336f4', '#1554ff', '#19c7f3', '#8790b5'])
-    .setOption('pieHole', 0.65)
-    .setOption('pieSliceText', 'value')
+    .setOption('pieHole', 0.9)
+    .setOption('pieStartAngle', -90)
+    .setOption('slices', spacerOpt)
+    .setOption('pieSliceBorderColor', '#11162d')
     .setOption('backgroundColor', '#11162d')
-    .setOption('titleTextStyle', { color: '#ffffff', fontSize: 14 })
-    .setOption('legend', { textStyle: { color: '#c3c9e6' } })
+    .setOption('chartArea', { width: '90%', height: '90%' })
+    .setOption('pieSliceText', 'none')
+    .setOption('legend', { position: 'none' })
     .build()
     .getBlob()
     .setName(title + '.png');
