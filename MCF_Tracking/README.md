@@ -43,12 +43,13 @@ Returns the actual settled MCF fulfillment fee via the Finances API. Always uses
 =IF(Q2<>"", MCFFee(P2, Q2), "")
 ```
 
-**Lookup strategy (ordered by bandwidth cost):**
-1. Calls `getFulfillmentOrderRaw` once to get `displayableOrderId` + `receivedDate`
-2. If `displayableOrderId` is Amazon 3-7-7 format (e.g. `S02-XXXXXXX-XXXXXXX`), uses the targeted `/finances/v0/orders/{id}/financialEvents` endpoint — returns only that order's events
-3. Falls back to date-range scan (sentDate±60d, receivedDate±60d, or last 180d) if targeted lookup yields nothing
-4. Matches events by both `SellerOrderId` and `displayableOrderId` (Amazon marketplace order ID)
-5. Sums `OrderFeeList` (MCF order-level fees) + `ShipmentFeeList` + `ItemFeeList`
+**Lookup strategy:** single Finances API date-range scan — no FBA Outbound call.
+1. Builds date window: `sentDate → sentDate+60d` (or last 180d if no sentDate)
+2. Calls `listFinancialEvents` for the window (up to 5 pages × 100 events)
+3. Matches `SellerOrderId` / `AmazonOrderId` against the GCX order ID
+4. Sums `OrderFeeList` (MCF order-level fees) + `ShipmentFeeList` + `ItemFeeList`
+
+> **Why no FBA Outbound call?** Calling `getFulfillmentOrderRaw` per-cell with 15+ concurrent formulas hits SP-API rate limits and causes 30s GAS timeout. The Finances API scan alone is fast enough (~1-2s per cell). For orders that settle under a different Amazon-format ID (`S02-XXXXXXX-XXXXXXX`), run **`backfillMCFFees()`** — it resolves `displayableOrderId` in a single batch call.
 
 - On 429 QuotaExceeded: returns blank and retries after 90 seconds automatically.
 - Tries EU endpoint first, falls back to FE.

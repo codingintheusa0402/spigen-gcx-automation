@@ -552,61 +552,11 @@ function MCFFee_JP(arg1, arg2) {
   return '';
 }
 
-/**
- * Targeted Finances API lookup by Amazon order ID (displayableOrderId).
- * GET /finances/v0/orders/{orderId}/financialEvents
- * Much more bandwidth-efficient than a date-range scan — returns only that order's events.
- * Returns array of ShipmentEvent objects (may be empty if not yet settled).
- */
-function _listFinancialEventsByOrderId(amazonOrderId, ep) {
-  var path = '/finances/v0/orders/' + encodeURIComponent(amazonOrderId) + '/financialEvents';
-  var res = spapiFetchWithRetry('GET', path, { endpoint: ep }, 3, 5000);
-  var payload = res.payload || res;
-  return (payload.FinancialEvents || {}).ShipmentEventList || [];
-}
 
 /**
- * Sums MCF fees (ShipmentFeeList + OrderFeeList + ItemFeeList) across all shipment events.
- * Used when all events in the array already belong to the target order (targeted endpoint).
- * Returns Math.abs(total) or '' if total is 0 / array is empty.
- */
-function _sumAllMcfFees(shipments) {
-  var total = 0;
-  for (var i = 0; i < shipments.length; i++) {
-    var ev = shipments[i];
-    (ev.OrderFeeList || []).forEach(function(f) {
-      if (_isMcfFeeType(f.FeeType)) total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0);
-    });
-    (ev.ShipmentFeeList || []).forEach(function(f) {
-      if (_isMcfFeeType(f.FeeType)) total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0);
-    });
-    (ev.ShipmentItemList || []).forEach(function(item) {
-      (item.ItemFeeList || []).forEach(function(f) {
-        if (_isMcfFeeType(f.FeeType)) total += parseFloat((f.FeeAmount || {}).CurrencyAmount || 0);
-      });
-    });
-  }
-  return total !== 0 ? Math.abs(total) : '';
-}
-
-/**
- * Finances API method — actual settled MCF fee.
- *
- * Strategy (ordered by bandwidth cost, lowest first):
- * 1. Call getFulfillmentOrderRaw to get displayableOrderId + receivedDate (one small API call).
- * 2. If displayableOrderId is Amazon 3-7-7 format (e.g. S02-XXXXXXX-XXXXXXX), use the targeted
- *    listFinancialEventsByOrderId endpoint — returns only that order's events, very small response.
- * 3. Fall back to date-range scan (sentDate±60d, or receivedDate±60d, or last 180d) and match
- *    by both SellerOrderId and displayableOrderId.
- *
- * Fees are stored as negative in Finances API; returns Math.abs(total).
- * Returns '' if the order has not yet settled.
- */
-
-/**
- * Safely converts a value from a sheet cell (may be a Date object, a number serial, or a
- * yyyy-mm-dd string) to a JavaScript Date. Returns null when the value is absent or invalid.
- * GAS custom functions receive date cells as Date objects, NOT strings — so we must handle both.
+ * Safely converts a value from a sheet cell (may be a Date object, a numeric serial, or a
+ * yyyy-mm-dd string) into a JS Date. Returns null when absent or invalid.
+ * GAS custom functions receive date-formatted cells as Date objects, NOT strings.
  */
 function _toSafeDate(val) {
   if (val == null || val === '') return null;
@@ -614,10 +564,10 @@ function _toSafeDate(val) {
   // Numeric: Google Sheets date serial (days since 1899-12-30)
   var n = Number(val);
   if (!isNaN(n) && n > 0) {
-    var d = new Date((n - 25569) * 86400000); // convert serial → Unix ms (UTC)
+    var d = new Date((n - 25569) * 86400000); // serial → Unix ms (UTC)
     return isNaN(d.getTime()) ? null : d;
   }
-  // String: try ISO format first (yyyy-mm-dd), then generic parse
+  // String: ISO yyyy-mm-dd first, then generic parse
   var s = String(val).trim();
   var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return new Date(Date.UTC(+iso[1], +iso[2] - 1, +iso[3]));
@@ -625,40 +575,24 @@ function _toSafeDate(val) {
   return isNaN(d2.getTime()) ? null : d2;
 }
 
+/**
+ * Finances API method — actual settled MCF fee.
+ *
+ * Does a single Finances API date-range scan (no FBA Outbound call).
+ * Calling getFulfillmentOrderRaw per-cell with 15+ concurrent formula cells hits SP-API
+ * rate limits and causes 30s GAS timeout — the date-range scan alone is fast enough.
+ *
+ * Returns '' if the order has not yet settled. Caller caches '' for 10 min and retries.
+ * For orders that settle under a different ID (Amazon 3-7-7 format), run backfillMCFFees()
+ * which does the getFulfillmentOrderRaw + displayableOrderId fallback in a single batch call.
+ */
 function _fetchMcfFeeFinancesApi(orderId, ep, sentDate) {
-  // Step 1: Resolve fulfillment order metadata (displayableOrderId, receivedDate).
-  var foResult = null, displayableId = '', receivedDate = '';
-  try {
-    foResult = getFulfillmentOrderRaw(orderId, ep);
-    var fo = foResult.fulfillmentOrder || {};
-    displayableId = (fo.displayableOrderId || '').trim();
-    receivedDate  = (fo.receivedDate       || '').trim();
-  } catch (e) { /* FO not found on this endpoint — proceed without metadata */ }
-
-  // Step 2: Targeted lookup via listFinancialEventsByOrderId (requires Amazon 3-7-7 format ID).
-  // Amazon order IDs look like "S02-1234567-1234567" or "114-1234567-1234567".
-  var isAmazonFmt = /^\w{3}-\d{7}-\d{7}$/.test(displayableId);
-  if (isAmazonFmt) {
-    try {
-      var targeted = _listFinancialEventsByOrderId(displayableId, ep);
-      if (targeted.length) {
-        var fee0 = _sumAllMcfFees(targeted);
-        if (fee0 !== '') return fee0;
-      }
-    } catch (e) { /* targeted lookup failed — fall through to date-range */ }
-  }
-
-  // Step 3: Date-range scan fallback.
-  // _toSafeDate handles Date objects passed by GAS from date-formatted cells (P col).
+  // Build the date window — _toSafeDate handles Date objects from date-formatted cells (P col)
   var postedAfter, postedBefore;
   var parsedSentDate = _toSafeDate(sentDate);
   if (parsedSentDate) {
     postedAfter  = parsedSentDate;
     postedBefore = new Date(parsedSentDate.getTime());
-    postedBefore.setDate(postedBefore.getDate() + 60);
-  } else if (receivedDate) {
-    postedAfter  = new Date(receivedDate); // ISO string from API — always valid
-    postedBefore = new Date(postedAfter.getTime());
     postedBefore.setDate(postedBefore.getDate() + 60);
   } else {
     var _ref = new Date(Date.now() - 5 * 60 * 1000);
@@ -666,23 +600,11 @@ function _fetchMcfFeeFinancesApi(orderId, ep, sentDate) {
     postedBefore = new Date(_ref);
   }
 
-  var _now = new Date(Date.now() - 5 * 60 * 1000);
-  if (postedBefore > _now) postedBefore = _now;
+  var _now = new Date(Date.now() - 5 * 60 * 1000); // 5-min buffer for clock drift
+  if (postedBefore > _now) postedBefore = _now;    // API rejects future dates
 
   var shipments = _collectShipmentEvents(ep, postedAfter, postedBefore, 5);
-
-  // Match by GCX order ID first
-  var fee = _sumMcfFeeFromShipments(shipments, orderId);
-  if (fee !== '') return fee;
-
-  // Fallback match by displayableOrderId (MCF orders linked to Amazon marketplace orders
-  // settle in Finances API under the Amazon order ID, not the GCX order ID)
-  if (displayableId && displayableId !== orderId) {
-    var fee2 = _sumMcfFeeFromShipments(shipments, displayableId);
-    if (fee2 !== '') return fee2;
-  }
-
-  return ''; // order not yet settled — caller caches as __EMPTY__ for 10min and retries
+  return _sumMcfFeeFromShipments(shipments, orderId);
 }
 
 // Matches FBA / fulfillment fee type names used in Finances API ShipmentEvent
