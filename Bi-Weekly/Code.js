@@ -174,45 +174,32 @@ function insertChartAtPlaceholder(presentation, placeholder, chartData, title) {
 
   shape.getText().setText('');
 
-  const svg = buildDefectModelChartSvg(chartData);
-  const blob = Utilities.newBlob(svg, 'image/svg+xml', title + '.svg');
-
+  const blob = buildDefectModelChartBlob(chartData, title);
   const image = slide.insertImage(blob, left, top, width, height);
   image.setTitle(title);
 }
 
-function buildDefectModelChartSvg(data) {
-  const width = 620;
-  const height = 360;
+function buildDefectModelChartBlob(data, title) {
+  const rows = data.reasons.map(function(r) { return [r[0] || '기타', r[1]]; });
+  if (data.other > 0) rows.push(['그 외', data.other]);
 
-  const r1 = data.reasons[0] || ['', 0];
-  const r2 = data.reasons[1] || ['', 0];
-  const r3 = data.reasons[2] || ['', 0];
+  const dt = Charts.newDataTable()
+    .addColumn(Charts.ColumnType.STRING, 'Reason')
+    .addColumn(Charts.ColumnType.NUMBER, 'Count');
+  rows.forEach(function(r) { dt.addRow(r); });
 
-  return `
-<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-  <rect x="8" y="8" width="604" height="344" rx="16" fill="#11162d" stroke="#ff4b4b" stroke-width="3"/>
+  const chart = Charts.newPieChart()
+    .setDataTable(dt.build())
+    .setTitle(data.productName + '  |  ' + data.total + '건')
+    .setDimensions(620, 360)
+    .setColors(['#d336f4', '#1554ff', '#19c7f3', '#8790b5'])
+    .setOption('pieHole', 0.5)
+    .setOption('backgroundColor', '#11162d')
+    .setOption('titleTextStyle', { color: '#ffffff', fontSize: 16 })
+    .setOption('legend', { textStyle: { color: '#c3c9e6' } })
+    .build();
 
-  <text x="310" y="120" text-anchor="middle" font-family="Arial" font-size="42" fill="#ffffff">${escapeSvg(data.total)}건</text>
-  <text x="310" y="158" text-anchor="middle" font-family="Arial" font-size="26" fill="#9097bb">${escapeSvg(data.productName)}</text>
-
-  <path d="M 190 125 A 120 120 0 0 1 430 125" fill="none" stroke="#8790b5" stroke-width="14"/>
-  <path d="M 190 125 A 120 120 0 0 1 270 18" fill="none" stroke="#d336f4" stroke-width="14"/>
-  <path d="M 270 18 A 120 120 0 0 1 392 60" fill="none" stroke="#1554ff" stroke-width="14"/>
-  <path d="M 392 60 A 120 120 0 0 1 430 125" fill="none" stroke="#19c7f3" stroke-width="14"/>
-
-  ${reasonRow(70, 210, '#d336f4', r1[0], r1[1])}
-  ${reasonRow(70, 255, '#1554ff', r2[0], r2[1])}
-  ${reasonRow(70, 300, '#19c7f3', r3[0], r3[1])}
-  ${reasonRow(70, 340, '#8790b5', '그 외', data.other)}
-</svg>`;
-}
-
-function reasonRow(x, y, color, label, count) {
-  return `
-  <circle cx="${x}" cy="${y}" r="7" fill="${color}"/>
-  <text x="${x + 18}" y="${y + 8}" font-family="Arial" font-size="24" fill="#c3c9e6">${escapeSvg(label)}</text>
-  <text x="570" y="${y + 8}" text-anchor="end" font-family="Arial" font-size="24" font-weight="bold" fill="#d9def5">${escapeSvg(count)}</text>`;
+  return chart.getBlob().setName(title + '.png');
 }
 
 function refreshLinkedCharts(presentation) {
