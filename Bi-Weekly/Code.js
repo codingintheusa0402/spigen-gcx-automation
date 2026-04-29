@@ -46,6 +46,7 @@ function updateSlideTextBoxes() {
   });
 
   const presentation = SlidesApp.getActivePresentation();
+  const activeSlide = presentation.getSelection().getCurrentPage().asSlide();
 
   const replacements = {
     '{{TOTAL_INQUIRIES}}': rowCount.toLocaleString()
@@ -58,7 +59,7 @@ function updateSlideTextBoxes() {
     replacements[`{{Defect_Reason_${i}_Count}}`] = item ? item[1].toLocaleString() : '';
   }
 
-  const keywordPlaceholders = extractKeywordPlaceholders(presentation, 'Defect_Reason_');
+  const keywordPlaceholders = extractKeywordPlaceholders(activeSlide, 'Defect_Reason_');
 
   keywordPlaceholders.forEach(function(placeholder) {
     const keyword = placeholder
@@ -95,16 +96,36 @@ function updateSlideTextBoxes() {
     replacements['{{Model_Defect_Chart_Legend_Value_' + n + '}}'] = r ? buildModelLegendValues(r) : '';
   }
 
-  Object.keys(replacements).forEach(function(key) {
-    presentation.replaceAllText(key, replacements[key]);
-  });
+  replaceTextOnSlide(activeSlide, replacements);
 
-  updateDefectModelCharts(presentation, topProducts);
-  updateModelDefectCharts(presentation, topReasons);
+  updateDefectModelCharts(activeSlide, topProducts);
+  updateModelDefectCharts(activeSlide, topReasons);
 
-  refreshLinkedCharts(presentation);
+  refreshLinkedCharts(activeSlide);
 
   presentation.saveAndClose();
+}
+
+function replaceTextOnSlide(slide, replacements) {
+  slide.getPageElements().forEach(function(element) {
+    if (element.getPageElementType() !== SlidesApp.PageElementType.SHAPE) return;
+
+    const shape = element.asShape();
+    const textRange = shape.getText();
+    let text = textRange.asString();
+
+    let changed = false;
+    Object.keys(replacements).forEach(function(key) {
+      if (text.indexOf(key) !== -1) {
+        text = text.split(key).join(replacements[key]);
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      textRange.setText(text);
+    }
+  });
 }
 
 // Extracts top-3 defect products from the sheet. Returns array of:
@@ -208,11 +229,11 @@ function buildModelLegendValues(item) {
 }
 
 // Inserts {{Model_Defect_Chart_N}} arc images (top-3 models per reason).
-function updateModelDefectCharts(presentation, topReasons) {
+function updateModelDefectCharts(slide, topReasons) {
   topReasons.forEach(function(r, index) {
     const rank = index + 1;
     insertChartAtPlaceholder(
-      presentation,
+      slide,
       '{{Model_Defect_Chart_' + rank + '}}',
       { reasons: r.models, other: r.other },
       'AUTO_Model_Defect_Chart_' + rank
@@ -220,13 +241,11 @@ function updateModelDefectCharts(presentation, topReasons) {
   });
 }
 
-function updateDefectModelCharts(presentation, topProducts) {
-  // Do NOT call removeOldAutoCharts() here — preservation logic lives inside
-  // insertChartAtPlaceholder: if the {{}} text box is gone the image is kept as-is.
+function updateDefectModelCharts(slide, topProducts) {
   topProducts.forEach(function(p, index) {
     const rank = index + 1;
     insertChartAtPlaceholder(
-      presentation,
+      slide,
       '{{Defect_Model_Chart_' + rank + '}}',
       p,
       'AUTO_Defect_Model_Chart_' + rank
@@ -234,23 +253,18 @@ function updateDefectModelCharts(presentation, topProducts) {
   });
 }
 
-function insertChartAtPlaceholder(presentation, placeholder, chartData, title) {
-  const anchors = findPlaceholderShapes(presentation, placeholder);
+function insertChartAtPlaceholder(slide, placeholder, chartData, title) {
+  const anchor = findPlaceholderShape(slide, placeholder);
 
   // Placeholder already replaced by an image on a prior run → preserve it.
-  if (anchors.length === 0) return;
+  if (!anchor) return;
 
   // Remove only this slot's previous auto-chart (if any) before inserting the new one.
-  presentation.getSlides().forEach(function(slide) {
-    slide.getPageElements().forEach(function(el) {
-      if ((el.getTitle ? el.getTitle() : '') === title) el.remove();
-    });
+  slide.getPageElements().forEach(function(el) {
+    if ((el.getTitle ? el.getTitle() : '') === title) el.remove();
   });
 
-  const anchor = anchors[0];
-  const slide = anchor.slide;
-  const shape = anchor.shape;
-
+  const shape = anchor;
   const left = shape.getLeft();
   const top = shape.getTop();
   const width = shape.getWidth();
@@ -315,16 +329,28 @@ function buildDefectModelChartBlob(data, title) {
     .setName(title + '.png');
 }
 
-function refreshLinkedCharts(presentation) {
-  presentation.getSlides().forEach(function(slide) {
-    slide.getPageElements().forEach(function(element) {
-      if (element.getPageElementType() === SlidesApp.PageElementType.SHEETS_CHART) {
-        element.asSheetsChart().refresh();
-      }
-    });
+function refreshLinkedCharts(slide) {
+  slide.getPageElements().forEach(function(element) {
+    if (element.getPageElementType() === SlidesApp.PageElementType.SHEETS_CHART) {
+      element.asSheetsChart().refresh();
+    }
   });
 }
 
+function findPlaceholderShape(slide, placeholder) {
+  const elements = slide.getPageElements();
+  for (let i = 0; i < elements.length; i++) {
+    const element = elements[i];
+    if (element.getPageElementType() !== SlidesApp.PageElementType.SHAPE) continue;
+    const shape = element.asShape();
+    if (shape.getText().asString().indexOf(placeholder) !== -1) {
+      return shape;
+    }
+  }
+  return null;
+}
+
+// Legacy multi-slide version kept for manual use if needed.
 function findPlaceholderShapes(presentation, placeholder) {
   const results = [];
 
@@ -376,26 +402,23 @@ function getColumnIndexByHeader(sheet, headerName) {
   return index + 1;
 }
 
-function extractKeywordPlaceholders(presentation, prefix) {
+function extractKeywordPlaceholders(slide, prefix) {
   const placeholders = new Set();
   const pattern = new RegExp('{{' + prefix + '[^}]+}}', 'g');
 
-  presentation.getSlides().forEach(function(slide) {
-    slide.getPageElements().forEach(function(element) {
-      if (element.getPageElementType() !== SlidesApp.PageElementType.SHAPE) return;
+  slide.getPageElements().forEach(function(element) {
+    if (element.getPageElementType() !== SlidesApp.PageElementType.SHAPE) return;
 
-      const shape = element.asShape();
-      const text = shape.getText().asString();
-      const matches = text.match(pattern);
+    const shape = element.asShape();
+    const text = shape.getText().asString();
+    const matches = text.match(pattern);
 
-      if (matches) {
-        matches.forEach(function(match) {
-          placeholders.add(match);
-        });
-      }
-    });
+    if (matches) {
+      matches.forEach(function(match) {
+        placeholders.add(match);
+      });
+    }
   });
 
   return Array.from(placeholders);
 }
-
