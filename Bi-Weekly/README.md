@@ -16,7 +16,7 @@ in the slide deck — no manual copy-paste needed.
 | `{{Defect_Reason_1}}` ~ `{{Defect_Reason_5}}` | Top 5 `인입사유` values under `Category = 4. Product Issue` |
 | `{{Defect_Reason_1_Count}}` ~ `{{Defect_Reason_5_Count}}` | Corresponding counts |
 | `{{Defect_Reason_<keyword>}}` | Count of rows whose `인입사유` contains `<keyword>` |
-| `{{Defect_Model_Chart_1}}` ~ `{{Defect_Model_Chart_3}}` | Half-donut arc image for top 3 defect products (arc only, no text) |
+| `{{Defect_Model_Chart_1}}` ~ `{{Defect_Model_Chart_3}}` | Half-donut arc image (440×340 px) for top-3 defect products — **preserved on re-run** (see below) |
 | `{{Defect_Model_Chart_Title_1}}` ~ `{{Defect_Model_Chart_Title_3}}` | Product name of top-N defect product |
 | `{{Defect_Model_Chart_Count_1}}` ~ `{{Defect_Model_Chart_Count_3}}` | Total defect count with `건` suffix (e.g. `689건`) |
 | `{{Defect_Model_Chart_Legend_1}}` ~ `{{Defect_Model_Chart_Legend_3}}` | 인입사유 names only, one per line (top 3 + 그 외) — put in a left-aligned text box |
@@ -24,16 +24,23 @@ in the slide deck — no manual copy-paste needed.
 
 ### Chart placeholders (`{{Defect_Model_Chart_N}}`)
 
-Place a text box with exactly `{{Defect_Model_Chart_1}}` (or `_2`, `_3`) on a slide.
-The script reads the text box's position/size, removes it, and inserts a PNG arc image
-in its place — sized to match the original text box.
+Place a text box containing exactly `{{Defect_Model_Chart_1}}` (or `_2`, `_3`) on a slide.
+The script reads its position/size, clears its text, and inserts a 440×340 px PNG arc image
+at the same position — sized to match the original text box.
 
-The arc is a **∩ half-donut** (upward arch) rendered entirely by the built-in GAS
-`Charts` service — no external API calls. Technique: a hidden spacer slice equal to
-the visible data sum forces the real segments into exactly 180°; the spacer is
-colored `#11162d` (background) so it disappears.
+**Preserve behavior**: once the placeholder text is cleared (i.e. the chart has been placed),
+the script skips that slot on all subsequent runs — the image is preserved. To force a
+refresh, retype `{{Defect_Model_Chart_N}}` into the (now empty) text box.
 
-Arc colors: `#d336f4` / `#1554ff` / `#19c7f3` / `#8790b5` (reason 1–3 + 그 외)
+**Arc spec**
+- Canvas: `440×340 px`
+- Visible arc (half-circle): `220×110 px`, horizontally centered, `top = 45 px`
+- Full circle chart area: `220×220`, `left = 110, top = 45`
+- Invisible spacer half extends below the arc (y 155–265), same background color
+- Shape: ∩ upward arch (`pieStartAngle: -90`, `circumference: 180°`)
+- Rendered by built-in GAS `Charts` service — no external API calls
+- Technique: spacer slice equal to visible data sum → forces data into exactly 180°; spacer colored `#11162d` (background)
+- Colors: `#d336f4` / `#1554ff` / `#19c7f3` / `#8790b5` (reason 1–3 + 그 외)
 
 ### Legend placeholders
 
@@ -44,7 +51,7 @@ Use two side-by-side text boxes on the slide:
 | `{{Defect_Model_Chart_Legend_N}}` | Left-aligned | `황변`<br>`분리/이탈`<br>`자석탈락`<br>`그 외` |
 | `{{Defect_Model_Chart_Legend_Value_N}}` | Right-aligned | `422`<br>`36`<br>`16`<br>`125` |
 
-Each placeholder produces one line per entry (same line count), so the two text boxes stay in sync.
+Both placeholders always produce the same number of lines so the two text boxes stay in sync.
 
 ## Source data
 
@@ -79,13 +86,14 @@ Alternatively add a time-based trigger on `updateSlideTextBoxes` for fully autom
 |---|---|
 | `onOpen()` | Adds **Slide Updater → Update Slide Text** menu to the Slides UI |
 | `updateSlideTextBoxes()` | Main entry point — orchestrates all text replacements and chart insertions |
-| `buildTopProductsData(sheet, rowCount)` | Computes top-3 defect products with per-reason counts; shared by both text replacements and chart rendering |
-| `buildLegendText(item)` | Formats a 4-line tab-separated legend string for one product |
-| `updateDefectModelCharts(presentation, topProducts)` | Inserts arc chart images for the top-3 products |
-| `insertChartAtPlaceholder(...)` | Finds a placeholder text box, removes it, inserts the PNG chart at the same position/size |
-| `buildDefectModelChartBlob(data, title)` | Builds half-donut arc PNG via GAS `Charts` service (spacer-slice technique) |
+| `buildTopProductsData(sheet, rowCount)` | Computes top-3 defect products with per-reason counts; result shared by text replacements and chart rendering |
+| `buildLegendText(item)` | Returns reason names only, one per line (for `Legend_N` placeholder) |
+| `buildLegendValues(item)` | Returns counts only, one per line (for `Legend_Value_N` placeholder) — mirrors `buildLegendText` line-for-line |
+| `updateDefectModelCharts(presentation, topProducts)` | Iterates top-3 products and calls `insertChartAtPlaceholder` for each |
+| `insertChartAtPlaceholder(...)` | If `{{}}` placeholder text box still exists: removes any prior auto-chart for that slot, inserts new PNG, clears placeholder text. If placeholder is already gone (chart preserved): no-op |
+| `buildDefectModelChartBlob(data, title)` | Builds 440×340 half-donut arc PNG via GAS `Charts` service using the spacer-slice technique |
 | `refreshLinkedCharts(presentation)` | Refreshes any Sheets-linked charts already embedded in the deck |
 | `getColumnIndexByHeader(sheet, headerName)` | Looks up a column index by header name (1-based) |
-| `extractKeywordPlaceholders(presentation, prefix)` | Scans slides for `{{Defect_Reason_<keyword>}}` patterns |
-| `findPlaceholderShapes(presentation, placeholder)` | Returns all Shape elements whose text contains the given placeholder |
-| `removeOldAutoCharts(presentation)` | Deletes previously inserted `AUTO_Defect_Model_Chart_*` images before re-inserting |
+| `extractKeywordPlaceholders(presentation, prefix)` | Scans all slides for `{{Defect_Reason_<keyword>}}` patterns |
+| `findPlaceholderShapes(presentation, placeholder)` | Returns all Shape elements whose text contains the given placeholder string |
+| `removeOldAutoCharts(presentation)` | Utility — removes all `AUTO_Defect_Model_Chart_*` images (not called automatically; use manually to wipe all charts at once) |
