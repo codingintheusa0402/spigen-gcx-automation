@@ -18,8 +18,9 @@ in the slide deck — no manual copy-paste needed.
 | `{{Defect_Reason_<keyword>}}` | Count of rows whose `인입사유` contains `<keyword>` |
 | `{{Defect_Model_Chart_1}}` ~ `{{Defect_Model_Chart_3}}` | Half-donut arc image for top 3 defect products (arc only, no text) |
 | `{{Defect_Model_Chart_Title_1}}` ~ `{{Defect_Model_Chart_Title_3}}` | Product name of top-N defect product |
-| `{{Defect_Model_Chart_Count_1}}` ~ `{{Defect_Model_Chart_Count_3}}` | Total defect row count for that product |
-| `{{Defect_Model_Chart_Legend_1}}` ~ `{{Defect_Model_Chart_Legend_3}}` | 4-line legend: top-3 `인입사유` + 그 외, tab-separated (see note below) |
+| `{{Defect_Model_Chart_Count_1}}` ~ `{{Defect_Model_Chart_Count_3}}` | Total defect count with `건` suffix (e.g. `689건`) |
+| `{{Defect_Model_Chart_Legend_1}}` ~ `{{Defect_Model_Chart_Legend_3}}` | 인입사유 names only, one per line (top 3 + 그 외) — put in a left-aligned text box |
+| `{{Defect_Model_Chart_Legend_Value_1}}` ~ `{{Defect_Model_Chart_Legend_Value_3}}` | Corresponding counts, one per line — put in a right-aligned text box next to Legend |
 
 ### Chart placeholders (`{{Defect_Model_Chart_N}}`)
 
@@ -34,21 +35,16 @@ colored `#11162d` (background) so it disappears.
 
 Arc colors: `#d336f4` / `#1554ff` / `#19c7f3` / `#8790b5` (reason 1–3 + 그 외)
 
-### Legend placeholders (`{{Defect_Model_Chart_Legend_N}}`)
+### Legend placeholders
 
-Produces 4 lines (3 top reasons + 그 외) in the format:
+Use two side-by-side text boxes on the slide:
 
-```
-이유1\t75
-이유2\t22
-이유3\t13
-그 외\t42
-```
+| Placeholder | Text box style | Example output |
+|---|---|---|
+| `{{Defect_Model_Chart_Legend_N}}` | Left-aligned | `황변`<br>`분리/이탈`<br>`자석탈락`<br>`그 외` |
+| `{{Defect_Model_Chart_Legend_Value_N}}` | Right-aligned | `422`<br>`36`<br>`16`<br>`125` |
 
-The `\t` tab character separates the reason name from the count. For the counts to
-**right-align** at the edge of the text box, set a **right-aligned tab stop** at the
-right edge of that text box in Google Slides:
-*Select text box → Format → Bullets & numbering → set a right tab stop*.
+Each placeholder produces one line per entry (same line count), so the two text boxes stay in sync.
 
 ## Source data
 

@@ -75,13 +75,14 @@ function updateSlideTextBoxes() {
     replacements[placeholder] = count.toLocaleString();
   });
 
-  // Top-product placeholders (Title / Count / Legend) for each chart card
+  // Top-product placeholders (Title / Count / Legend / Legend_Value) for each chart card
   const topProducts = buildTopProductsData(sheet, rowCount);
   for (let n = 1; n <= 3; n++) {
     const p = topProducts[n - 1];
-    replacements['{{Defect_Model_Chart_Title_' + n + '}}']  = p ? p.productName : '';
-    replacements['{{Defect_Model_Chart_Count_' + n + '}}']  = p ? p.total.toLocaleString() : '';
-    replacements['{{Defect_Model_Chart_Legend_' + n + '}}'] = p ? buildLegendText(p) : '';
+    replacements['{{Defect_Model_Chart_Title_' + n + '}}']        = p ? p.productName : '';
+    replacements['{{Defect_Model_Chart_Count_' + n + '}}']        = p ? p.total.toLocaleString() + '건' : '';
+    replacements['{{Defect_Model_Chart_Legend_' + n + '}}']       = p ? buildLegendText(p) : '';
+    replacements['{{Defect_Model_Chart_Legend_Value_' + n + '}}'] = p ? buildLegendValues(p) : '';
   }
 
   Object.keys(replacements).forEach(function(key) {
@@ -131,12 +132,17 @@ function buildTopProductsData(sheet, rowCount) {
     });
 }
 
-// Formats legend text for one chart card.
-// Each line: "<reason>\t<count>" — use a right-aligned tab stop in the Slides text box
-// for the counts to stick to the right edge.
+// Returns reason names only, one per line (pair with buildLegendValues for left/right text boxes).
 function buildLegendText(item) {
-  const lines = item.reasons.map(function(r) { return r[0] + '\t' + r[1]; });
-  if (item.other > 0) lines.push('그 외\t' + item.other);
+  const lines = item.reasons.map(function(r) { return r[0]; });
+  if (item.other > 0) lines.push('그 외');
+  return lines.join('\n');
+}
+
+// Returns counts only, one per line — mirrors buildLegendText line-for-line.
+function buildLegendValues(item) {
+  const lines = item.reasons.map(function(r) { return String(r[1]); });
+  if (item.other > 0) lines.push(String(item.other));
   return lines.join('\n');
 }
 
