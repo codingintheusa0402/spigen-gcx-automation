@@ -75,7 +75,7 @@ function updateSlideTextBoxes() {
     replacements[placeholder] = count.toLocaleString();
   });
 
-  // Top-product placeholders (Title / Count / Legend / Legend_Value) for each chart card
+  // {Defect_Model_}: group by Product Name → top-3 products, each showing top-3 reasons
   const topProducts = buildTopProductsData(sheet, rowCount);
   for (let n = 1; n <= 3; n++) {
     const p = topProducts[n - 1];
@@ -85,11 +85,22 @@ function updateSlideTextBoxes() {
     replacements['{{Defect_Model_Chart_Legend_Value_' + n + '}}'] = p ? buildLegendValues(p) : '';
   }
 
+  // {Model_Defect_}: group by 인입사유 → top-3 reasons, each showing top-3 Product Names
+  const topReasons = buildTopReasonsData(sheet, rowCount);
+  for (let n = 1; n <= 3; n++) {
+    const r = topReasons[n - 1];
+    replacements['{{Model_Defect_Chart_Title_' + n + '}}']        = r ? r.reasonName : '';
+    replacements['{{Model_Defect_Chart_Count_' + n + '}}']        = r ? r.total.toLocaleString() + '건' : '';
+    replacements['{{Model_Defect_Chart_Legend_' + n + '}}']       = r ? buildModelLegendText(r) : '';
+    replacements['{{Model_Defect_Chart_Legend_Value_' + n + '}}'] = r ? buildModelLegendValues(r) : '';
+  }
+
   Object.keys(replacements).forEach(function(key) {
     presentation.replaceAllText(key, replacements[key]);
   });
 
   updateDefectModelCharts(presentation, topProducts);
+  updateModelDefectCharts(presentation, topReasons);
 
   refreshLinkedCharts(presentation);
 
@@ -144,6 +155,69 @@ function buildLegendValues(item) {
   const lines = item.reasons.map(function(r) { return String(r[1]); });
   if (item.other > 0) lines.push(String(item.other));
   return lines.join('\n');
+}
+
+// Extracts top-3 인입사유 from the sheet. Returns array of:
+//   { reasonName, total, models: [[name, count], ...] (top 3 Product Names), other: remainderCount }
+function buildTopReasonsData(sheet, rowCount) {
+  const categoryCol = getColumnIndexByHeader(sheet, 'Category');
+  const productCol  = getColumnIndexByHeader(sheet, 'Product Name');
+  const reasonCol   = getColumnIndexByHeader(sheet, '인입사유');
+
+  const categories = sheet.getRange(2, categoryCol, rowCount, 1).getDisplayValues().flat();
+  const products   = sheet.getRange(2, productCol,  rowCount, 1).getDisplayValues().flat();
+  const reasons    = sheet.getRange(2, reasonCol,   rowCount, 1).getDisplayValues().flat();
+
+  const reasonMap = {};
+  for (let i = 0; i < rowCount; i++) {
+    const category = String(categories[i]).trim();
+    const product  = String(products[i]).trim();
+    const reason   = String(reasons[i]).trim();
+    if (category !== '4. Product Issue' || !product || !reason) continue;
+    if (!reasonMap[reason]) reasonMap[reason] = { total: 0, models: {} };
+    reasonMap[reason].total++;
+    reasonMap[reason].models[product] = (reasonMap[reason].models[product] || 0) + 1;
+  }
+
+  return Object.entries(reasonMap)
+    .sort(function(a, b) { return b[1].total - a[1].total; })
+    .slice(0, 3)
+    .map(function(entry) {
+      const reasonName = entry[0];
+      const total      = entry[1].total;
+      const topModels  = Object.entries(entry[1].models)
+        .sort(function(a, b) { return b[1] - a[1]; })
+        .slice(0, 3);
+      const topTotal = topModels.reduce(function(s, m) { return s + m[1]; }, 0);
+      return { reasonName: reasonName, total: total, models: topModels, other: total - topTotal };
+    });
+}
+
+// Product names only, one per line (for {{Model_Defect_Chart_Legend_N}}).
+function buildModelLegendText(item) {
+  const lines = item.models.map(function(m) { return m[0]; });
+  if (item.other > 0) lines.push('그 외');
+  return lines.join('\n');
+}
+
+// Counts only, one per line — mirrors buildModelLegendText line-for-line.
+function buildModelLegendValues(item) {
+  const lines = item.models.map(function(m) { return String(m[1]); });
+  if (item.other > 0) lines.push(String(item.other));
+  return lines.join('\n');
+}
+
+// Inserts {{Model_Defect_Chart_N}} arc images (top-3 models per reason).
+function updateModelDefectCharts(presentation, topReasons) {
+  topReasons.forEach(function(r, index) {
+    const rank = index + 1;
+    insertChartAtPlaceholder(
+      presentation,
+      '{{Model_Defect_Chart_' + rank + '}}',
+      { reasons: r.models, other: r.other },
+      'AUTO_Model_Defect_Chart_' + rank
+    );
+  });
 }
 
 function updateDefectModelCharts(presentation, topProducts) {
