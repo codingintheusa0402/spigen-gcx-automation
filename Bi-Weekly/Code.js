@@ -147,8 +147,8 @@ function buildLegendValues(item) {
 }
 
 function updateDefectModelCharts(presentation, topProducts) {
-  removeOldAutoCharts(presentation);
-
+  // Do NOT call removeOldAutoCharts() here — preservation logic lives inside
+  // insertChartAtPlaceholder: if the {{}} text box is gone the image is kept as-is.
   topProducts.forEach(function(p, index) {
     const rank = index + 1;
     insertChartAtPlaceholder(
@@ -163,7 +163,15 @@ function updateDefectModelCharts(presentation, topProducts) {
 function insertChartAtPlaceholder(presentation, placeholder, chartData, title) {
   const anchors = findPlaceholderShapes(presentation, placeholder);
 
+  // Placeholder already replaced by an image on a prior run → preserve it.
   if (anchors.length === 0) return;
+
+  // Remove only this slot's previous auto-chart (if any) before inserting the new one.
+  presentation.getSlides().forEach(function(slide) {
+    slide.getPageElements().forEach(function(el) {
+      if ((el.getTitle ? el.getTitle() : '') === title) el.remove();
+    });
+  });
 
   const anchor = anchors[0];
   const slide = anchor.slide;
@@ -174,7 +182,7 @@ function insertChartAtPlaceholder(presentation, placeholder, chartData, title) {
   const width = shape.getWidth();
   const height = shape.getHeight();
 
-  shape.getText().setText('');
+  shape.getText().setText('');  // clear placeholder text → marks slot as "placed"
 
   const blob = buildDefectModelChartBlob(chartData, title);
   const image = slide.insertImage(blob, left, top, width, height);
@@ -209,25 +217,23 @@ function buildDefectModelChartBlob(data, title) {
   const spacerOpt = {};
   spacerOpt[labels.length - 1] = { color: '#11162d' };  // spacer = background color
 
-  // Canvas: 297×228 logical → rendered at 3× (891×684) for high resolution.
-  // Half-donut arc: 150×75 logical → 450×225 at 3×.
-  // Full circle chart area = 450×450 (diameter), centered horizontally in 891px canvas.
-  //   left  = (891 - 450) / 2 = 220.5 → 221
-  //   top   = 15  (small top gap)
-  //   width = 450, height = 450
-  // Visible arc (top 225px of the 450px circle) sits in the top ~33% of the canvas,
-  // matching the 150×75 proportion. The invisible spacer half falls below y=240,
-  // still within the 684px canvas but colored background so it disappears.
+  // Canvas: 440×340 px.
+  // Half-donut arc: 220×110 (2:1 semicircle), centered horizontally.
+  //   Full circle chart area = 220×220.
+  //   left = (440 - 220) / 2 = 110
+  //   top  = 45  (pushed down a bit so the arc sits lower in the card)
+  // Visible arc = top half of the 220px circle → y: 45 to 155 (110px tall).
+  // Invisible spacer half → y: 155 to 265, still within canvas, background color.
   return Charts.newPieChart()
     .setDataTable(dt.build())
-    .setDimensions(891, 684)
+    .setDimensions(440, 340)
     .setColors(['#d336f4', '#1554ff', '#19c7f3', '#8790b5'])
     .setOption('pieHole', 0.9)
     .setOption('pieStartAngle', -90)
     .setOption('slices', spacerOpt)
     .setOption('pieSliceBorderColor', '#11162d')
     .setOption('backgroundColor', '#11162d')
-    .setOption('chartArea', { left: 221, top: 15, width: 450, height: 450 })
+    .setOption('chartArea', { left: 110, top: 45, width: 220, height: 220 })
     .setOption('pieSliceText', 'none')
     .setOption('legend', { position: 'none' })
     .build()
