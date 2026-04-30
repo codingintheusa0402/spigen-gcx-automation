@@ -69,6 +69,29 @@ Covers Galaxy S26, S26+, S26 Ultra, etc. (substring match on the `Device` column
 | `{{Model_Defect_Chart_Legend_Glx26_1}}` ~ `{{Model_Defect_Chart_Legend_Glx26_3}}` | Product names, one per line (top 3 + 그 외) |
 | `{{Model_Defect_Chart_Legend_Value_Glx26_1}}` ~ `{{Model_Defect_Chart_Legend_Value_Glx26_3}}` | Corresponding counts, one per line |
 
+#### AMZ_Defect_Model_Glx26 family — Glx26 Amazon `1-3점` sheet, grouped by `모델명` → top-3 reasons
+
+Source: spreadsheet `1fpv9TEDPGR8D6QRRc0ll-WzF7sOkfxe9UNBCmdBSE9g`, sheet `1-3점`.
+Columns: `모델명` (product name), `인입사유` (reason). No additional filter — sheet is already scoped to Glx26 Amazon reviews.
+
+| Placeholder | Value inserted |
+|---|---|
+| `{{AMZ_Defect_Model_Chart_Glx26_1}}` ~ `{{AMZ_Defect_Model_Chart_Glx26_3}}` | Half-donut arc image for top-3 products — **preserved on re-run** |
+| `{{AMZ_Defect_Model_Chart_Title_Glx26_1}}` ~ `{{AMZ_Defect_Model_Chart_Title_Glx26_3}}` | `모델명` value |
+| `{{AMZ_Defect_Model_Chart_Count_Glx26_1}}` ~ `{{AMZ_Defect_Model_Chart_Count_Glx26_3}}` | Total count with `건` suffix |
+| `{{AMZ_Defect_Model_Chart_Legend_Glx26_1}}` ~ `{{AMZ_Defect_Model_Chart_Legend_Glx26_3}}` | 인입사유 names, one per line (top 3 + 그 외) |
+| `{{AMZ_Defect_Model_Chart_Legend_Value_Glx26_1}}` ~ `{{AMZ_Defect_Model_Chart_Legend_Value_Glx26_3}}` | Corresponding counts, one per line |
+
+#### AMZ_Model_Defect_Glx26 family — Glx26 Amazon `1-3점` sheet, grouped by `인입사유` → top-3 products
+
+| Placeholder | Value inserted |
+|---|---|
+| `{{AMZ_Model_Defect_Chart_Glx26_1}}` ~ `{{AMZ_Model_Defect_Chart_Glx26_3}}` | Half-donut arc image for top-3 reasons — **preserved on re-run** |
+| `{{AMZ_Model_Defect_Chart_Title_Glx26_1}}` ~ `{{AMZ_Model_Defect_Chart_Title_Glx26_3}}` | 인입사유 name |
+| `{{AMZ_Model_Defect_Chart_Count_Glx26_1}}` ~ `{{AMZ_Model_Defect_Chart_Count_Glx26_3}}` | Total count with `건` suffix |
+| `{{AMZ_Model_Defect_Chart_Legend_Glx26_1}}` ~ `{{AMZ_Model_Defect_Chart_Legend_Glx26_3}}` | `모델명` values, one per line (top 3 + 그 외) |
+| `{{AMZ_Model_Defect_Chart_Legend_Value_Glx26_1}}` ~ `{{AMZ_Model_Defect_Chart_Legend_Value_Glx26_3}}` | Corresponding counts, one per line |
+
 ### Chart placeholders (`{{Defect_Model_Chart_N}}` / `{{Model_Defect_Chart_N}}`)
 
 Place a text box containing exactly `{{Defect_Model_Chart_1}}` (or `_2`, `_3`, or the
@@ -162,6 +185,10 @@ updates (note: trigger runs may not have a user-selected slide context — test 
 | `updateModelDefectCharts(slide, topReasons)` | Calls `insertChartAtPlaceholder` for each of top-3 reasons on the active slide |
 | `updateDefectModelChartsGlx26(slide, topProducts)` | Same as `updateDefectModelCharts` but uses `{{Defect_Model_Chart_Glx26_N}}` placeholders (Galaxy S26-filtered data) |
 | `updateModelDefectChartsGlx26(slide, topReasons)` | Same as `updateModelDefectCharts` but uses `{{Model_Defect_Chart_Glx26_N}}` placeholders (Galaxy S26-filtered data) |
+| `buildAmzTopProductsData(sheet, rowCount)` | Computes top-3 products by defect count from the Amazon 1-3점 sheet using `모델명` / `인입사유`; no category or device filter |
+| `buildAmzTopReasonsData(sheet, rowCount)` | Computes top-3 reasons with per-product counts from the Amazon 1-3점 sheet |
+| `updateDefectModelChartsAmzGlx26(slide, topProducts)` | Inserts `{{AMZ_Defect_Model_Chart_Glx26_N}}` arc charts (Amazon 1-3점 data) |
+| `updateModelDefectChartsAmzGlx26(slide, topReasons)` | Inserts `{{AMZ_Model_Defect_Chart_Glx26_N}}` arc charts (Amazon 1-3점 data) |
 | `insertChartAtPlaceholder(slide, placeholder, chartData, title)` | If `{{}}` placeholder text box still exists on the slide: removes prior auto-chart for that slot, inserts new PNG, clears placeholder text. If placeholder is already gone (chart preserved): no-op |
 | `buildDefectModelChartBlob(data, title)` | Builds 440×340 half-donut arc PNG via GAS `Charts` service using the spacer-slice technique |
 | `refreshLinkedCharts(slide)` | Refreshes any Sheets-linked charts already embedded on the active slide |

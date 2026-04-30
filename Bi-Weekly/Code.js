@@ -116,12 +116,39 @@ function updateSlideTextBoxes() {
     replacements['{{Model_Defect_Chart_Legend_Value_Glx26_' + n + '}}'] = r ? buildModelLegendValues(r) : '';
   }
 
+  // {AMZ_Defect_Model_Glx26_} / {AMZ_Model_Defect_Glx26_}: same chart families but data pulled
+  // from the Glx26 Amazon 1-3점 sheet (모델명 = product, 인입사유 = reason, no extra filter).
+  let topProductsAmzGlx26 = [];
+  let topReasonsAmzGlx26 = [];
+  const amzSheet = SpreadsheetApp.openById('1fpv9TEDPGR8D6QRRc0ll-WzF7sOkfxe9UNBCmdBSE9g').getSheetByName('1-3점');
+  if (amzSheet) {
+    const amzRowCount = Math.max(amzSheet.getLastRow() - 1, 0);
+    topProductsAmzGlx26 = buildAmzTopProductsData(amzSheet, amzRowCount);
+    topReasonsAmzGlx26  = buildAmzTopReasonsData(amzSheet, amzRowCount);
+  }
+  for (let n = 1; n <= 3; n++) {
+    const p = topProductsAmzGlx26[n - 1];
+    replacements['{{AMZ_Defect_Model_Chart_Title_Glx26_' + n + '}}']        = p ? p.productName : '';
+    replacements['{{AMZ_Defect_Model_Chart_Count_Glx26_' + n + '}}']        = p ? p.total.toLocaleString() + '건' : '';
+    replacements['{{AMZ_Defect_Model_Chart_Legend_Glx26_' + n + '}}']       = p ? buildLegendText(p) : '';
+    replacements['{{AMZ_Defect_Model_Chart_Legend_Value_Glx26_' + n + '}}'] = p ? buildLegendValues(p) : '';
+  }
+  for (let n = 1; n <= 3; n++) {
+    const r = topReasonsAmzGlx26[n - 1];
+    replacements['{{AMZ_Model_Defect_Chart_Title_Glx26_' + n + '}}']        = r ? r.reasonName : '';
+    replacements['{{AMZ_Model_Defect_Chart_Count_Glx26_' + n + '}}']        = r ? r.total.toLocaleString() + '건' : '';
+    replacements['{{AMZ_Model_Defect_Chart_Legend_Glx26_' + n + '}}']       = r ? buildModelLegendText(r) : '';
+    replacements['{{AMZ_Model_Defect_Chart_Legend_Value_Glx26_' + n + '}}'] = r ? buildModelLegendValues(r) : '';
+  }
+
   replaceTextOnSlide(activeSlide, replacements);
 
   updateDefectModelCharts(activeSlide, topProducts);
   updateModelDefectCharts(activeSlide, topReasons);
   updateDefectModelChartsGlx26(activeSlide, topProductsGlx26);
   updateModelDefectChartsGlx26(activeSlide, topReasonsGlx26);
+  updateDefectModelChartsAmzGlx26(activeSlide, topProductsAmzGlx26);
+  updateModelDefectChartsAmzGlx26(activeSlide, topReasonsAmzGlx26);
 
   refreshLinkedCharts(activeSlide);
 
@@ -303,6 +330,97 @@ function updateModelDefectChartsGlx26(slide, topReasons) {
       'AUTO_Model_Defect_Chart_Glx26_' + rank
     );
   });
+}
+
+// Inserts {{AMZ_Defect_Model_Chart_Glx26_N}} arc images (Amazon 1-3점 sheet, top-3 products).
+function updateDefectModelChartsAmzGlx26(slide, topProducts) {
+  topProducts.forEach(function(p, index) {
+    const rank = index + 1;
+    insertChartAtPlaceholder(
+      slide,
+      '{{AMZ_Defect_Model_Chart_Glx26_' + rank + '}}',
+      p,
+      'AUTO_AMZ_Defect_Model_Chart_Glx26_' + rank
+    );
+  });
+}
+
+// Inserts {{AMZ_Model_Defect_Chart_Glx26_N}} arc images (Amazon 1-3점 sheet, top-3 reasons).
+function updateModelDefectChartsAmzGlx26(slide, topReasons) {
+  topReasons.forEach(function(r, index) {
+    const rank = index + 1;
+    insertChartAtPlaceholder(
+      slide,
+      '{{AMZ_Model_Defect_Chart_Glx26_' + rank + '}}',
+      { reasons: r.models, other: r.other },
+      'AUTO_AMZ_Model_Defect_Chart_Glx26_' + rank
+    );
+  });
+}
+
+// Computes top-3 products (모델명) by 인입사유 count from the Amazon 1-3점 sheet.
+// No category or device filter — the source sheet is already scoped to Glx26 reviews.
+function buildAmzTopProductsData(sheet, rowCount) {
+  const productCol = getColumnIndexByHeader(sheet, '모델명');
+  const reasonCol  = getColumnIndexByHeader(sheet, '인입사유');
+
+  const products = sheet.getRange(2, productCol, rowCount, 1).getDisplayValues().flat();
+  const reasons  = sheet.getRange(2, reasonCol,  rowCount, 1).getDisplayValues().flat();
+
+  const productMap = {};
+  for (let i = 0; i < rowCount; i++) {
+    const product = String(products[i]).trim();
+    const reason  = String(reasons[i]).trim();
+    if (!product || !reason) continue;
+    if (!productMap[product]) productMap[product] = { total: 0, reasons: {} };
+    productMap[product].total++;
+    productMap[product].reasons[reason] = (productMap[product].reasons[reason] || 0) + 1;
+  }
+
+  return Object.entries(productMap)
+    .sort(function(a, b) { return b[1].total - a[1].total; })
+    .slice(0, 3)
+    .map(function(entry) {
+      const productName = entry[0];
+      const total       = entry[1].total;
+      const topReasons  = Object.entries(entry[1].reasons)
+        .sort(function(a, b) { return b[1] - a[1]; })
+        .slice(0, 3);
+      const topTotal = topReasons.reduce(function(s, r) { return s + r[1]; }, 0);
+      return { productName: productName, total: total, reasons: topReasons, other: total - topTotal };
+    });
+}
+
+// Computes top-3 인입사유 reasons with per-product (모델명) counts from the Amazon 1-3점 sheet.
+function buildAmzTopReasonsData(sheet, rowCount) {
+  const productCol = getColumnIndexByHeader(sheet, '모델명');
+  const reasonCol  = getColumnIndexByHeader(sheet, '인입사유');
+
+  const products = sheet.getRange(2, productCol, rowCount, 1).getDisplayValues().flat();
+  const reasons  = sheet.getRange(2, reasonCol,  rowCount, 1).getDisplayValues().flat();
+
+  const reasonMap = {};
+  for (let i = 0; i < rowCount; i++) {
+    const product = String(products[i]).trim();
+    const reason  = String(reasons[i]).trim();
+    if (!product || !reason) continue;
+    if (!reasonMap[reason]) reasonMap[reason] = { total: 0, models: {} };
+    reasonMap[reason].total++;
+    reasonMap[reason].models[product] = (reasonMap[reason].models[product] || 0) + 1;
+  }
+
+  return Object.entries(reasonMap)
+    .sort(function(a, b) { return b[1].total - a[1].total; })
+    .slice(0, 3)
+    .map(function(entry) {
+      const reasonName = entry[0];
+      const total      = entry[1].total;
+      const topModels  = Object.entries(entry[1].models)
+        .sort(function(a, b) { return b[1] - a[1]; })
+        .slice(0, 3);
+      const topTotal = topModels.reduce(function(s, m) { return s + m[1]; }, 0);
+      return { reasonName: reasonName, total: total, models: topModels, other: total - topTotal };
+    });
 }
 
 function updateDefectModelCharts(slide, topProducts) {
