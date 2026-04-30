@@ -47,6 +47,28 @@ in the slide deck — no manual copy-paste needed.
 | `{{Model_Defect_Chart_Legend_1}}` ~ `{{Model_Defect_Chart_Legend_3}}` | Product names only, one per line (top 3 + 그 외) |
 | `{{Model_Defect_Chart_Legend_Value_1}}` ~ `{{Model_Defect_Chart_Legend_Value_3}}` | Corresponding counts, one per line |
 
+#### Defect_Model_Glx26 family — same as Defect_Model, filtered to `Device` contains `'Galaxy S26'`
+
+Covers Galaxy S26, S26+, S26 Ultra, etc. (substring match on the `Device` column).
+
+| Placeholder | Value inserted |
+|---|---|
+| `{{Defect_Model_Chart_Glx26_1}}` ~ `{{Defect_Model_Chart_Glx26_3}}` | Half-donut arc image for top-3 defect products (Galaxy S26 rows only) — **preserved on re-run** |
+| `{{Defect_Model_Chart_Title_Glx26_1}}` ~ `{{Defect_Model_Chart_Title_Glx26_3}}` | Product name |
+| `{{Defect_Model_Chart_Count_Glx26_1}}` ~ `{{Defect_Model_Chart_Count_Glx26_3}}` | Total count with `건` suffix |
+| `{{Defect_Model_Chart_Legend_Glx26_1}}` ~ `{{Defect_Model_Chart_Legend_Glx26_3}}` | 인입사유 names, one per line (top 3 + 그 외) |
+| `{{Defect_Model_Chart_Legend_Value_Glx26_1}}` ~ `{{Defect_Model_Chart_Legend_Value_Glx26_3}}` | Corresponding counts, one per line |
+
+#### Model_Defect_Glx26 family — same as Model_Defect, filtered to `Device` contains `'Galaxy S26'`
+
+| Placeholder | Value inserted |
+|---|---|
+| `{{Model_Defect_Chart_Glx26_1}}` ~ `{{Model_Defect_Chart_Glx26_3}}` | Half-donut arc image for top-3 defect reasons (Galaxy S26 rows only) — **preserved on re-run** |
+| `{{Model_Defect_Chart_Title_Glx26_1}}` ~ `{{Model_Defect_Chart_Title_Glx26_3}}` | 인입사유 name |
+| `{{Model_Defect_Chart_Count_Glx26_1}}` ~ `{{Model_Defect_Chart_Count_Glx26_3}}` | Total count with `건` suffix |
+| `{{Model_Defect_Chart_Legend_Glx26_1}}` ~ `{{Model_Defect_Chart_Legend_Glx26_3}}` | Product names, one per line (top 3 + 그 외) |
+| `{{Model_Defect_Chart_Legend_Value_Glx26_1}}` ~ `{{Model_Defect_Chart_Legend_Value_Glx26_3}}` | Corresponding counts, one per line |
+
 ### Chart placeholders (`{{Defect_Model_Chart_N}}` / `{{Model_Defect_Chart_N}}`)
 
 Place a text box containing exactly `{{Defect_Model_Chart_1}}` (or `_2`, `_3`, or the
@@ -96,8 +118,9 @@ two text boxes stay in sync.
 |---|---|
 | Spreadsheet ID | `1sjcCj_P4DRD8rywkmYJhbsrzwFfgiJQuF9nIKwCiKlc` |
 | Sheet name | `26년 전체문의` |
-| Key columns | `Category`, `인입사유`, `Product Name` |
+| Key columns | `Category`, `인입사유`, `Product Name`, `Device` |
 | Defect filter | `Category == "4. Product Issue"` |
+| Glx26 filter | `Device` contains `"Galaxy S26"` (applied on top of defect filter) |
 
 ## How to run
 
@@ -129,14 +152,16 @@ updates (note: trigger runs may not have a user-selected slide context — test 
 | `onOpen()` | Adds **Slide Updater → Update Slide Text** menu to the Slides UI |
 | `updateSlideTextBoxes()` | Main entry point — gets active slide, orchestrates all replacements and chart insertions on that slide only |
 | `replaceTextOnSlide(slide, replacements)` | Iterates shapes on a single slide and applies all `{{key}} → value` substitutions in-place |
-| `buildTopProductsData(sheet, rowCount)` | Computes top-3 defect products with per-reason counts |
-| `buildTopReasonsData(sheet, rowCount)` | Computes top-3 defect reasons with per-product counts |
+| `buildTopProductsData(sheet, rowCount, deviceFilter?)` | Computes top-3 defect products with per-reason counts; optional `deviceFilter` string restricts to rows whose `Device` col contains that text |
+| `buildTopReasonsData(sheet, rowCount, deviceFilter?)` | Computes top-3 defect reasons with per-product counts; same optional `deviceFilter` |
 | `buildLegendText(item)` | Returns reason names only, one per line (for `Defect_Model_Chart_Legend_N`) |
 | `buildLegendValues(item)` | Returns counts only, one per line (for `Defect_Model_Chart_Legend_Value_N`) |
 | `buildModelLegendText(item)` | Returns product names only, one per line (for `Model_Defect_Chart_Legend_N`) |
 | `buildModelLegendValues(item)` | Returns counts only, one per line (for `Model_Defect_Chart_Legend_Value_N`) |
 | `updateDefectModelCharts(slide, topProducts)` | Calls `insertChartAtPlaceholder` for each of top-3 products on the active slide |
 | `updateModelDefectCharts(slide, topReasons)` | Calls `insertChartAtPlaceholder` for each of top-3 reasons on the active slide |
+| `updateDefectModelChartsGlx26(slide, topProducts)` | Same as `updateDefectModelCharts` but uses `{{Defect_Model_Chart_Glx26_N}}` placeholders (Galaxy S26-filtered data) |
+| `updateModelDefectChartsGlx26(slide, topReasons)` | Same as `updateModelDefectCharts` but uses `{{Model_Defect_Chart_Glx26_N}}` placeholders (Galaxy S26-filtered data) |
 | `insertChartAtPlaceholder(slide, placeholder, chartData, title)` | If `{{}}` placeholder text box still exists on the slide: removes prior auto-chart for that slot, inserts new PNG, clears placeholder text. If placeholder is already gone (chart preserved): no-op |
 | `buildDefectModelChartBlob(data, title)` | Builds 440×340 half-donut arc PNG via GAS `Charts` service using the spacer-slice technique |
 | `refreshLinkedCharts(slide)` | Refreshes any Sheets-linked charts already embedded on the active slide |
