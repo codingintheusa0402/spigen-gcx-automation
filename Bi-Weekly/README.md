@@ -72,7 +72,7 @@ Covers Galaxy S26, S26+, S26 Ultra, etc. (substring match on the `Device` column
 #### AMZ_Defect_Model_Glx26 family — Glx26 Amazon `1-3점` sheet, grouped by `모델명` → top-3 reasons
 
 Source: spreadsheet `1fpv9TEDPGR8D6QRRc0ll-WzF7sOkfxe9UNBCmdBSE9g`, sheet `1-3점`.
-Columns: `모델명` (product name), `인입사유` (reason). No additional filter — sheet is already scoped to Glx26 Amazon reviews.
+Columns: `모델명` (product name), `인입사유(tag)` (reason). No additional filter — sheet is already scoped to Glx26 Amazon reviews.
 
 | Placeholder | Value inserted |
 |---|---|

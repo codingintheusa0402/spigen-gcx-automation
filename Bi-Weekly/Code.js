@@ -358,11 +358,11 @@ function updateModelDefectChartsAmzGlx26(slide, topReasons) {
   });
 }
 
-// Computes top-3 products (모델명) by 인입사유 count from the Amazon 1-3점 sheet.
+// Computes top-3 products (모델명) by 인입사유(tag) count from the Amazon 1-3점 sheet.
 // No category or device filter — the source sheet is already scoped to Glx26 reviews.
 function buildAmzTopProductsData(sheet, rowCount) {
   const productCol = getColumnIndexByHeader(sheet, '모델명');
-  const reasonCol  = getColumnIndexByHeader(sheet, '인입사유');
+  const reasonCol  = getColumnIndexByHeader(sheet, '인입사유(tag)');
 
   const products = sheet.getRange(2, productCol, rowCount, 1).getDisplayValues().flat();
   const reasons  = sheet.getRange(2, reasonCol,  rowCount, 1).getDisplayValues().flat();
@@ -391,10 +391,10 @@ function buildAmzTopProductsData(sheet, rowCount) {
     });
 }
 
-// Computes top-3 인입사유 reasons with per-product (모델명) counts from the Amazon 1-3점 sheet.
+// Computes top-3 인입사유(tag) reasons with per-product (모델명) counts from the Amazon 1-3점 sheet.
 function buildAmzTopReasonsData(sheet, rowCount) {
   const productCol = getColumnIndexByHeader(sheet, '모델명');
-  const reasonCol  = getColumnIndexByHeader(sheet, '인입사유');
+  const reasonCol  = getColumnIndexByHeader(sheet, '인입사유(tag)');
 
   const products = sheet.getRange(2, productCol, rowCount, 1).getDisplayValues().flat();
   const reasons  = sheet.getRange(2, reasonCol,  rowCount, 1).getDisplayValues().flat();
