@@ -96,10 +96,32 @@ function updateSlideTextBoxes() {
     replacements['{{Model_Defect_Chart_Legend_Value_' + n + '}}'] = r ? buildModelLegendValues(r) : '';
   }
 
+  // {Defect_Model_Glx26_}: same as Defect_Model_ but filtered to Device containing 'Galaxy S26'
+  const topProductsGlx26 = buildTopProductsData(sheet, rowCount, 'Galaxy S26');
+  for (let n = 1; n <= 3; n++) {
+    const p = topProductsGlx26[n - 1];
+    replacements['{{Defect_Model_Chart_Title_Glx26_' + n + '}}']        = p ? p.productName : '';
+    replacements['{{Defect_Model_Chart_Count_Glx26_' + n + '}}']        = p ? p.total.toLocaleString() + '건' : '';
+    replacements['{{Defect_Model_Chart_Legend_Glx26_' + n + '}}']       = p ? buildLegendText(p) : '';
+    replacements['{{Defect_Model_Chart_Legend_Value_Glx26_' + n + '}}'] = p ? buildLegendValues(p) : '';
+  }
+
+  // {Model_Defect_Glx26_}: same as Model_Defect_ but filtered to Device containing 'Galaxy S26'
+  const topReasonsGlx26 = buildTopReasonsData(sheet, rowCount, 'Galaxy S26');
+  for (let n = 1; n <= 3; n++) {
+    const r = topReasonsGlx26[n - 1];
+    replacements['{{Model_Defect_Chart_Title_Glx26_' + n + '}}']        = r ? r.reasonName : '';
+    replacements['{{Model_Defect_Chart_Count_Glx26_' + n + '}}']        = r ? r.total.toLocaleString() + '건' : '';
+    replacements['{{Model_Defect_Chart_Legend_Glx26_' + n + '}}']       = r ? buildModelLegendText(r) : '';
+    replacements['{{Model_Defect_Chart_Legend_Value_Glx26_' + n + '}}'] = r ? buildModelLegendValues(r) : '';
+  }
+
   replaceTextOnSlide(activeSlide, replacements);
 
   updateDefectModelCharts(activeSlide, topProducts);
   updateModelDefectCharts(activeSlide, topReasons);
+  updateDefectModelChartsGlx26(activeSlide, topProductsGlx26);
+  updateModelDefectChartsGlx26(activeSlide, topReasonsGlx26);
 
   refreshLinkedCharts(activeSlide);
 
@@ -130,7 +152,8 @@ function replaceTextOnSlide(slide, replacements) {
 
 // Extracts top-3 defect products from the sheet. Returns array of:
 //   { productName, total, reasons: [[name, count], ...] (top 3), other: remainderCount }
-function buildTopProductsData(sheet, rowCount) {
+// Optional deviceFilter: if provided, only rows whose 'Device' col contains this string are included.
+function buildTopProductsData(sheet, rowCount, deviceFilter) {
   const categoryCol = getColumnIndexByHeader(sheet, 'Category');
   const productCol  = getColumnIndexByHeader(sheet, 'Product Name');
   const reasonCol   = getColumnIndexByHeader(sheet, '인입사유');
@@ -139,12 +162,19 @@ function buildTopProductsData(sheet, rowCount) {
   const products   = sheet.getRange(2, productCol,  rowCount, 1).getDisplayValues().flat();
   const reasons    = sheet.getRange(2, reasonCol,   rowCount, 1).getDisplayValues().flat();
 
+  let devices = null;
+  if (deviceFilter) {
+    const deviceCol = getColumnIndexByHeader(sheet, 'Device');
+    devices = sheet.getRange(2, deviceCol, rowCount, 1).getDisplayValues().flat();
+  }
+
   const productMap = {};
   for (let i = 0; i < rowCount; i++) {
     const category = String(categories[i]).trim();
     const product  = String(products[i]).trim();
     const reason   = String(reasons[i]).trim();
     if (category !== '4. Product Issue' || !product || !reason) continue;
+    if (deviceFilter && String(devices[i]).indexOf(deviceFilter) === -1) continue;
     if (!productMap[product]) productMap[product] = { total: 0, reasons: {} };
     productMap[product].total++;
     productMap[product].reasons[reason] = (productMap[product].reasons[reason] || 0) + 1;
@@ -180,7 +210,8 @@ function buildLegendValues(item) {
 
 // Extracts top-3 인입사유 from the sheet. Returns array of:
 //   { reasonName, total, models: [[name, count], ...] (top 3 Product Names), other: remainderCount }
-function buildTopReasonsData(sheet, rowCount) {
+// Optional deviceFilter: if provided, only rows whose 'Device' col contains this string are included.
+function buildTopReasonsData(sheet, rowCount, deviceFilter) {
   const categoryCol = getColumnIndexByHeader(sheet, 'Category');
   const productCol  = getColumnIndexByHeader(sheet, 'Product Name');
   const reasonCol   = getColumnIndexByHeader(sheet, '인입사유');
@@ -189,12 +220,19 @@ function buildTopReasonsData(sheet, rowCount) {
   const products   = sheet.getRange(2, productCol,  rowCount, 1).getDisplayValues().flat();
   const reasons    = sheet.getRange(2, reasonCol,   rowCount, 1).getDisplayValues().flat();
 
+  let devices = null;
+  if (deviceFilter) {
+    const deviceCol = getColumnIndexByHeader(sheet, 'Device');
+    devices = sheet.getRange(2, deviceCol, rowCount, 1).getDisplayValues().flat();
+  }
+
   const reasonMap = {};
   for (let i = 0; i < rowCount; i++) {
     const category = String(categories[i]).trim();
     const product  = String(products[i]).trim();
     const reason   = String(reasons[i]).trim();
     if (category !== '4. Product Issue' || !product || !reason) continue;
+    if (deviceFilter && String(devices[i]).indexOf(deviceFilter) === -1) continue;
     if (!reasonMap[reason]) reasonMap[reason] = { total: 0, models: {} };
     reasonMap[reason].total++;
     reasonMap[reason].models[product] = (reasonMap[reason].models[product] || 0) + 1;
@@ -237,6 +275,32 @@ function updateModelDefectCharts(slide, topReasons) {
       '{{Model_Defect_Chart_' + rank + '}}',
       { reasons: r.models, other: r.other },
       'AUTO_Model_Defect_Chart_' + rank
+    );
+  });
+}
+
+// Inserts {{Defect_Model_Chart_Glx26_N}} arc images (Galaxy S26-filtered, top-3 products).
+function updateDefectModelChartsGlx26(slide, topProducts) {
+  topProducts.forEach(function(p, index) {
+    const rank = index + 1;
+    insertChartAtPlaceholder(
+      slide,
+      '{{Defect_Model_Chart_Glx26_' + rank + '}}',
+      p,
+      'AUTO_Defect_Model_Chart_Glx26_' + rank
+    );
+  });
+}
+
+// Inserts {{Model_Defect_Chart_Glx26_N}} arc images (Galaxy S26-filtered, top-3 reasons).
+function updateModelDefectChartsGlx26(slide, topReasons) {
+  topReasons.forEach(function(r, index) {
+    const rank = index + 1;
+    insertChartAtPlaceholder(
+      slide,
+      '{{Model_Defect_Chart_Glx26_' + rank + '}}',
+      { reasons: r.models, other: r.other },
+      'AUTO_Model_Defect_Chart_Glx26_' + rank
     );
   });
 }
