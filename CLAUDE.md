@@ -1,11 +1,21 @@
 # CLAUDE.md
 
-## Session start reminder
+## Session start — always do this first
 
-At the start of every local session, before doing anything else, run:
+At the start of every local (Mac) session, before doing anything else:
 
-```bash
-git pull origin main
-```
+1. Check for changes pushed from remote-control (cloud) sessions:
+   ```bash
+   git fetch origin
+   git log HEAD..origin/main --oneline
+   ```
+2. If there are new commits, pull them:
+   ```bash
+   git pull origin main
+   ```
+3. Also check if any feature branches were created remotely:
+   ```bash
+   git branch -r --no-merged main
+   ```
 
-This syncs any changes pushed from remote (cloud) Claude Code sessions so the local Mac repo stays up to date.
+This ensures work done via `/remote-control` (cloud Claude Code sessions) is synced locally before starting new work.
