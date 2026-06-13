@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GCX Reply
 // @namespace    https://spigen.com/gcx
-// @version      2.8.1
+// @version      2.8.2
 // @description  Amazon order data via GAS web app + Spigen product info + Zendesk auto-fill
 // @author       Spigen GCX
 // @updateURL    https://raw.githubusercontent.com/codingintheusa0402/spigen-gcx-automation/main/tampermonkey_scripts/GCX%20Reply.user.js
@@ -57,7 +57,7 @@
   };
 
   const FULFILLMENT_MAP = { AFN: 'fba', MFN: 'merchant__fbm_' };
-  const SCRIPT_VER = (typeof GM_info !== 'undefined' ? GM_info?.script?.version : null) || '2.8.1';
+  const SCRIPT_VER = (typeof GM_info !== 'undefined' ? GM_info?.script?.version : null) || '2.8.2';
 
   // ── Module state ─────────────────────────────────────────────────────────
   let lastOrderData    = null;
@@ -583,8 +583,19 @@
   function getTicketBodyText_() {
     const m = location.pathname.match(/\/tickets\/(\d+)/);
     const pane = (m && document.querySelector(`[data-test-id="ticket-${m[1]}-standard-layout"]`)) || document.body;
-    const inputText = [...pane.querySelectorAll('input, textarea')].map(el => el.value || '').join('\n');
-    return (pane.innerText || '') + '\n' + inputText;
+    const gcxPanel = document.getElementById(PANEL_ID);
+    // Walk text nodes, skipping the GCX Reply panel so its displayed ASIN/SKU
+    // never contaminates the MCF address/product parse.
+    const parts = [];
+    (function walk(node) {
+      if (node === gcxPanel) return;
+      if (node.nodeType === Node.TEXT_NODE) { parts.push(node.textContent); return; }
+      for (const child of node.childNodes) walk(child);
+    })(pane);
+    const inputText = [...pane.querySelectorAll('input, textarea')]
+      .filter(el => !gcxPanel?.contains(el))
+      .map(el => el.value || '').join('\n');
+    return parts.join('\n') + '\n' + inputText;
   }
 
   // ── MCF: 티켓 본문에서 고객 주소 파싱 (MCF Autofill parseClipboard와 동일 로직) ─
@@ -680,7 +691,7 @@
     const ad = lastOrderData?.address || {};
     const b  = lastOrderData?.buyer   || {};
     const itemAsins = (lastOrderData?.items || []).map(i => i.ASIN).filter(Boolean);
-    const asin    = itemAsins[0] || panelEl?.querySelector('#sp-asin-input')?.value.trim() || '';
+    const asin    = itemAsins[0] || '';
     const orderId = panelEl?.querySelector('#sp-order-input')?.value.trim() || '';
     // 고객이 티켓에 직접 쓴 주소가 주문 API 주소보다 우선 (MCF 배송지이므로)
     const ta = parseTicketAddress_(getTicketBodyText_());
