@@ -139,10 +139,12 @@ FETCH_ORDER_ID = True
 
 UPLOAD_TO_SHEETS = True
 # True  (default) — after scraping, combine all domain CSVs (EU+JP+US+IN, in that
-#         scrape order) into ONE new worksheet on SHEETS_SPREADSHEET_ID, named
-#         SC_{yymmdd} (KST date of the run). If a sheet with that name already
-#         exists (scraper ran more than once today), the next free name is used:
-#         SC_{yymmdd}_1, then _2, etc. Never overwrites an existing dated sheet.
+#         scrape order) and merge them into the SC_{yymmdd} worksheet (KST date
+#         of the run) on SHEETS_SPREADSHEET_ID. If that sheet doesn't exist yet
+#         today, it's created fresh. If it already exists (e.g. an hourly re-run),
+#         only rows whose Review ID isn't already in the sheet are appended —
+#         existing rows are never touched, rewritten, or duplicated. Per-country
+#         (국가) new-vs-already-present counts are printed each run.
 # False — skip upload.
 
 SHEETS_SPREADSHEET_ID = "1tMbA_msRfCRY0KK40GnyZ_h1uNCldlnk9Cg-_MTcbsw"
@@ -1180,8 +1182,11 @@ async def scrape_domain(domain, page, ctx, prof, asin_filter, out_file=None, app
 
 
 def _upload_to_sheets(results, run_date):
-    """Combine all domain CSVs into one new worksheet named SC_{yymmdd}
-    (SC_{yymmdd}_1, _2, ... if the scraper already ran today) on SHEETS_SPREADSHEET_ID."""
+    """Merge all domain CSVs into the SC_{yymmdd} worksheet on SHEETS_SPREADSHEET_ID,
+    creating it fresh if today's sheet doesn't exist yet. On a same-day re-run
+    (e.g. hourly scheduling), only rows whose Review ID isn't already in the sheet
+    get appended — existing rows are never rewritten or duplicated. Prints
+    per-country (국가) new-vs-already-present counts."""
     try:
         from google.oauth2.credentials import Credentials
         from google.auth.transport.requests import Request
@@ -1225,7 +1230,9 @@ def _upload_to_sheets(results, run_date):
     print(f"  Google Sheets upload  (run date: {run_date})")
     print(f"{'═'*60}")
 
-    combined_rows = []
+    header = None
+    per_domain_rows = []  # [(domain, [row, ...]), ...] — header trimming/order
+                          # already applied upstream by _apply_column_filter.
     for domain, n_rows, n_imgs, status in results:
         if status != "OK" or n_rows == 0:
             print(f"  SKIP [{domain}] — {status}")
@@ -1242,35 +1249,80 @@ def _upload_to_sheets(results, run_date):
             print(f"  SKIP [{domain}] — CSV is empty")
             continue
 
-        if not combined_rows:
-            combined_rows.append(data[0])  # header, once
-        combined_rows.extend(data[1:])
-        print(f"  [{domain}] +{len(data) - 1} rows")
+        if header is None:
+            header = data[0]
+        per_domain_rows.append((domain, data[1:]))
 
-    if not combined_rows:
+    if header is None or not per_domain_rows:
         print("  SKIP sheets upload — no data collected from any domain")
-        return combined_rows
+        return []
 
-    # Find the next free SC_{yymmdd}[_n] sheet name so same-day re-runs don't collide.
-    existing_titles = {ws.title for ws in spreadsheet.worksheets()}
-    base_name = f"SC_{run_date}"
-    sheet_name = base_name
-    n = 1
-    while sheet_name in existing_titles:
-        sheet_name = f"{base_name}_{n}"
-        n += 1
+    rid_idx = header.index("Review ID") if "Review ID" in header else None
+    if rid_idx is None:
+        print("  WARNING: no 'Review ID' column in HEADERS_TO_INCLUDE — cannot "
+              "dedup against existing rows, every scraped row will be treated as new.")
+    country_idx = header.index("국가") if "국가" in header else None
+
+    sheet_name = f"SC_{run_date}"
+    existing_ws = next((ws_ for ws_ in spreadsheet.worksheets() if ws_.title == sheet_name), None)
+
+    existing_ids = set()
+    sheet_header = header
+    if existing_ws is not None:
+        existing_values = existing_ws.get_all_values()
+        if existing_values:
+            sheet_header = existing_values[0]
+            if "Review ID" in sheet_header:
+                existing_rid_idx = sheet_header.index("Review ID")
+                existing_ids = {row[existing_rid_idx] for row in existing_values[1:] if len(row) > existing_rid_idx}
+
+    # Reorder each new row into the existing sheet's column order — defensive
+    # against HEADERS_TO_INCLUDE having changed since the sheet was first created.
+    if sheet_header != header:
+        col_map = [header.index(h) if h in header else None for h in sheet_header]
+        _reorder = lambda row: [row[i] if i is not None and i < len(row) else "" for i in col_map]
+    else:
+        _reorder = lambda row: row
+
+    combined_new_rows = []
+    seen_this_run = set()
+    new_by_country, dup_by_country = defaultdict(int), defaultdict(int)
+    for domain, rows in per_domain_rows:
+        for row in rows:
+            rid = row[rid_idx] if rid_idx is not None and rid_idx < len(row) else None
+            country = row[country_idx] if country_idx is not None and country_idx < len(row) else domain
+            if rid is not None and (rid in existing_ids or rid in seen_this_run):
+                dup_by_country[country] += 1
+                continue
+            if rid is not None:
+                seen_this_run.add(rid)
+            combined_new_rows.append(_reorder(row))
+            new_by_country[country] += 1
+
+    print()
+    for country in sorted(set(new_by_country) | set(dup_by_country)):
+        print(f"  [{country}] new {new_by_country.get(country, 0)}  |  already in sheet {dup_by_country.get(country, 0)}")
+
+    if not combined_new_rows:
+        print(f"\n  ✓ no new reviews this run — '{sheet_name}' unchanged")
+        return []
 
     try:
-        ws = spreadsheet.add_worksheet(
-            title=sheet_name,
-            rows=max(len(combined_rows) + 1, 2),
-            cols=max(len(combined_rows[0]), 1),
-        )
-        ws.update(range_name='A1', values=combined_rows, value_input_option='RAW')
-        print(f"  ✓ combined → '{sheet_name}'  ({len(combined_rows) - 1} rows)")
+        if existing_ws is None:
+            ws = spreadsheet.add_worksheet(
+                title=sheet_name,
+                rows=max(len(combined_new_rows) + 1, 2),
+                cols=max(len(sheet_header), 1),
+            )
+            ws.update(range_name='A1', values=[sheet_header] + combined_new_rows, value_input_option='RAW')
+            print(f"\n  ✓ created '{sheet_name}' with {len(combined_new_rows)} rows")
+        else:
+            existing_ws.append_rows(combined_new_rows, value_input_option='RAW')
+            print(f"\n  ✓ appended {len(combined_new_rows)} new rows → '{sheet_name}'")
     except Exception as e:
         print(f"  ✗ upload failed: {e}")
 
+    combined_rows = [sheet_header] + combined_new_rows
     # Returned regardless of whether the Sheets write above succeeded — the
     # scrape itself succeeded either way, and main.py (Apify deployment only)
     # uses this to push the exact same rows to the Actor's default dataset,
