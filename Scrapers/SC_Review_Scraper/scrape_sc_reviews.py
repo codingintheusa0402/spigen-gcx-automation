@@ -61,7 +61,7 @@ DOMAINS = ["EU", "JP", "US", "IN"]
 # "EU" automatically scrapes UK + DE + FR + IT + ES in sequence using each
 # country's marketplaceId and writes all reviews into one EU_*.csv file.
 
-PAGES = 30
+PAGES = 5
 # Default max pages to scrape per domain.
 # Total reviews ≈ PAGES × PAGE_SIZE.
 # Override per-domain with PAGES_OVERRIDE below.
