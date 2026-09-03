@@ -191,12 +191,20 @@ def _pad(lines: list[str], n: int = 5) -> str:
     return "<br>".join(lines)
 
 
-def _rank_lines(rows: list, tot: int) -> str:
+def _rank_widgets(rows: list, tot: int) -> list[dict]:
+    """Top 5 rows as decoratedText widgets so rank / 인입사유 / 건수·% each sit at a
+    fixed left edge and the two 대분류 columns line up."""
     out = []
     for i, (name, c) in enumerate(rows[:5]):
-        pct = f" ({round(c * 100 / tot)}%)" if tot else ""
-        out.append(f"{i + 1}위 &nbsp;<b>{name}</b> &nbsp;{int(c)}건{pct}")
-    return _pad(out, 5)
+        pct = f"{round(c * 100 / tot)}%" if tot else "-"
+        out.append({"decoratedText": {
+            "topLabel": f"{i + 1}위",
+            "text": f"<b>{name}</b>",
+            "bottomLabel": f"{int(c)}건 · {pct}",
+        }})
+    while len(out) < 5:
+        out.append({"decoratedText": {"topLabel": " ", "text": " ", "bottomLabel": " "}})
+    return out
 
 
 def _cat_column(label: str, block: dict) -> dict:
@@ -208,7 +216,7 @@ def _cat_column(label: str, block: dict) -> dict:
         "verticalAlignment": "TOP",
         "widgets": [
             {"textParagraph": {"text": f"<b>{label}</b>  ·  {tot}건"}},
-            {"textParagraph": {"text": _rank_lines(rows, tot)}},
+            *_rank_widgets(rows, tot),
         ],
     }
 
