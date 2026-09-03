@@ -110,23 +110,53 @@ CATEGORIES = ("휴대폰보호필름", "휴대폰케이스")
 KOR_WD = ["월", "화", "수", "목", "금", "토", "일"]
 
 # ------------------------------------------------------------------------- rooms
-TEST_ROOM = ("TEST", "AAQAc9NQmJQ", "Nvngg3UoVU-M7TqqlC48NxP-SXRzXj9zWrIoqd4BJdo")
+# Each room: name, space id, and the default webhook token. `glxz8` is an OPTIONAL
+# per-room override token used ONLY for the Galaxy Z8 card — same room, a separate
+# incoming webhook. Pixel 11 always uses `token`. If a room has no `glxz8` key, the
+# Z8 card goes through `token` too.
+TEST_ROOM = {"name": "TEST", "sid": "AAQAc9NQmJQ",
+             "token": "Nvngg3UoVU-M7TqqlC48NxP-SXRzXj9zWrIoqd4BJdo"}
 
 ROOMS = [
-    ("GCX전략 x SDA (아마존직판)", "AAAAe96DDIs", "fqRQJsNX1O8LDUyjmFsKdBJo5VCPXuFA2KX2OfAuLXk"),
-    ("GCX전략 x ADS1",            "AAAAFjWzr40", "Xv5J3ipKs_mIOem7OMHzhhmPwHcTrC-wDgYlMSZHAzs"),
-    ("GCX전략 x ADS2",            "AAAATOmW7HU", "GsprARTa_2ga2mkdz8lEFe2K4DTTRl7zfpBW6qEvlOU"),
-    ("GCX전략 x ADS3",            "AAAAKwBoZPU", "zW6cEhLwMozY2v3DvH9nvk4eFW8kSpwlx3MFLYbFFBE"),
-    ("GCX전략 x ADS5 (CP)",       "AAAACMOrahk", "sV1IIpqIWGQMZIItCEnHyDObAPAjsEZUvah2NKY4iC8"),
-    ("GCX전략 x JP Sales",        "AAAA9VYH3s4", "HLse4WgYcISsdtHF3zNYIi2I5BtEnR6zuGamlCF0cQY"),
-    ("GCX전략 x IN Sales",        "AAAAhqi-tNo", "OwCl9xRwf3e4b9hFk6Ieu2h3RDMFv82TkfJmBcvSVvE"),
-    ("GCX전략 x 모바일제품개발팀",  "AAAAwixNbdc", "P2vgJp4v0mt1rbAJQmSROlDwmHnf5bKbNryqf_iWDYc"),
-    ("실장님 & GCX",              "AAQAb-u6r7s", "AOJntA_PdElbBaGzQaCQhhr0aBvPAy1k3ImqQK0V9_E"),
-    ("GCX x 클리어프로텍션 개발팀", "AAAAZcIQG8k", "tb4sDPPPaWeP83HPMH0IUnz96T2D6azY1TAoXdiWqGg"),
-    ("[CQ] SPIGEN 국내&해외 CS",  "AAAA45iXDL0", "zh67JI0vK1DIeoet937rQ2byrOin9gV98FQddSSvfmY"),
+    {"name": "GCX전략 x SDA (아마존직판)", "sid": "AAAAe96DDIs",
+     "token": "fqRQJsNX1O8LDUyjmFsKdBJo5VCPXuFA2KX2OfAuLXk"},
+    {"name": "GCX전략 x ADS1", "sid": "AAAAFjWzr40",
+     "token": "Xv5J3ipKs_mIOem7OMHzhhmPwHcTrC-wDgYlMSZHAzs",
+     "glxz8": "O6gHRrVCB3-X31BJgpUTncKObq2tCLEdk4cMXmwLiR0"},
+    {"name": "GCX전략 x ADS2", "sid": "AAAATOmW7HU",
+     "token": "GsprARTa_2ga2mkdz8lEFe2K4DTTRl7zfpBW6qEvlOU",
+     "glxz8": "sgex588AiCc0FqI_XOEEHK-lOsWhRlw8QdVKkcDsM9g"},
+    {"name": "GCX전략 x ADS3", "sid": "AAAAKwBoZPU",
+     "token": "zW6cEhLwMozY2v3DvH9nvk4eFW8kSpwlx3MFLYbFFBE"},
+    {"name": "GCX전략 x ADS5 (CP)", "sid": "AAAACMOrahk",
+     "token": "sV1IIpqIWGQMZIItCEnHyDObAPAjsEZUvah2NKY4iC8",
+     "glxz8": "uG4lD7n5oYOn3smRQo7zGGENRPgpeHSEMr-xU2RXPac"},
+    {"name": "GCX전략 x JP Sales", "sid": "AAAA9VYH3s4",
+     "token": "HLse4WgYcISsdtHF3zNYIi2I5BtEnR6zuGamlCF0cQY",
+     "glxz8": "MzwxfPqlWxKLLI1t-R782YnF5RZco8r6m-NypiUZBeo"},
+    {"name": "GCX전략 x IN Sales", "sid": "AAAAhqi-tNo",
+     "token": "OwCl9xRwf3e4b9hFk6Ieu2h3RDMFv82TkfJmBcvSVvE",
+     "glxz8": "PWEne2_aAL8eyK_VKtf4bdhb2mEjFwHInQxK0Nnnm9g"},
+    {"name": "GCX전략 x 모바일제품개발팀", "sid": "AAAAwixNbdc",
+     "token": "P2vgJp4v0mt1rbAJQmSROlDwmHnf5bKbNryqf_iWDYc",
+     "glxz8": "ujAd5HUFylFysq0zGnTcYmqtb7P9GTLUKdHTUk5YHO8"},
+    {"name": "실장님 & GCX", "sid": "AAQAb-u6r7s",
+     "token": "AOJntA_PdElbBaGzQaCQhhr0aBvPAy1k3ImqQK0V9_E"},
+    {"name": "GCX x 클리어프로텍션 개발팀", "sid": "AAAAZcIQG8k",
+     "token": "tb4sDPPPaWeP83HPMH0IUnz96T2D6azY1TAoXdiWqGg",
+     "glxz8": "0Tw7OvEG60guBwAkLnjRLs6AWm6avHQBoMrewzP6cdE"},
+    {"name": "[CQ] SPIGEN 국내&해외 CS", "sid": "AAAA45iXDL0",
+     "token": "zh67JI0vK1DIeoet937rQ2byrOin9gV98FQddSSvfmY"},
 ]
 
 WEBHOOK = "https://chat.googleapis.com/v1/spaces/{sid}/messages?key=" + KEY + "&token={tok}"
+
+
+def room_url(room: dict, product_key: str) -> str:
+    """Webhook URL for a room + product. Z8 uses the room's `glxz8` override token
+    when present; everything else uses the default `token`."""
+    tok = room["glxz8"] if (product_key == "glxz8" and "glxz8" in room) else room["token"]
+    return WEBHOOK.format(sid=room["sid"], tok=tok)
 
 
 # --------------------------------------------------------------------- crunching
@@ -325,7 +355,7 @@ def main() -> None:
     keys = [args.product] if args.product else list(PRODUCTS)
 
     svc = sheets_service()
-    cards: list[tuple[str, dict]] = []
+    cards: list[tuple[str, str, dict]] = []  # (product_key, product_name, card)
     for key in keys:
         p = PRODUCTS[key]
         values = svc.spreadsheets().values().get(
@@ -339,10 +369,10 @@ def main() -> None:
             print(f"# {key}: {json.dumps(data, ensure_ascii=False)}")
         if data["todayCount"] == 0:
             print(f"!! {key}: todayCount is 0 for {today} — card will say '없음'")
-        cards.append((p["name"], build_card(key, data, today)))
+        cards.append((key, p["name"], build_card(key, data, today)))
 
     if args.dry_run:
-        for name, card in cards:
+        for _key, name, card in cards:
             print(f"\n===== {name} =====\n{json.dumps(card, ensure_ascii=False, indent=2)}")
         return
 
@@ -352,16 +382,15 @@ def main() -> None:
         targets = ROOMS
         if args.only:
             subs = [s.strip() for s in args.only.split(",") if s.strip()]
-            targets = [r for r in targets if any(s in r[0] for s in subs)]
+            targets = [r for r in targets if any(s in r["name"] for s in subs)]
         if not targets:
             ap.error("--only matched no rooms")
 
     print(f"date={today}  mode={'TEST' if args.test else 'BROADCAST'}  "
           f"rooms={len(targets)}  cards/room={len(cards)}\n")
-    for rname, sid, tok in targets:
-        url = WEBHOOK.format(sid=sid, tok=tok)
-        for cname, card in cards:
-            print(f"[{rname}] {cname}: {post(url, card)}")
+    for room in targets:
+        for key, cname, card in cards:
+            print(f"[{room['name']}] {cname}: {post(room_url(room, key), card)}")
             time.sleep(1.0)
 
 
