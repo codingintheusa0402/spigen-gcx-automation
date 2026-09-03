@@ -46,10 +46,10 @@ Columns used: `인입사유(tag)`, `Update 날짜` (falls back to `Exported Date
   deliberately excluded.
 
 **Per-product webhook routing.** Each room has a default `token` (the Pixel 11 card
-always uses it). Seven rooms also carry a `glxz8` override token — a *separate*
+always uses it). Nine rooms also carry a `glxz8` override token — a *separate*
 incoming webhook in the *same* room — used **only for the Galaxy Z8 card**:
-ADS1, ADS2, ADS5 (CP), JP Sales, IN Sales, 모바일제품개발팀, 클리어프로텍션 개발팀.
-The other four rooms (SDA, ADS3, 실장님 & GCX, [CQ] SPIGEN CS) send both cards
+ADS1, ADS2, ADS5 (CP), JP Sales, IN Sales, 모바일제품개발팀, 클리어프로텍션 개발팀,
+실장님 & GCX, [CQ] SPIGEN 국내&해외 CS. Only SDA and ADS3 send both cards
 through the default token. `room_url(room, product_key)` picks the token.
 
 Webhook URLs (space id + token) are inlined in the script. They are Google Chat

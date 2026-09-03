@@ -141,12 +141,14 @@ ROOMS = [
      "token": "P2vgJp4v0mt1rbAJQmSROlDwmHnf5bKbNryqf_iWDYc",
      "glxz8": "ujAd5HUFylFysq0zGnTcYmqtb7P9GTLUKdHTUk5YHO8"},
     {"name": "실장님 & GCX", "sid": "AAQAb-u6r7s",
-     "token": "AOJntA_PdElbBaGzQaCQhhr0aBvPAy1k3ImqQK0V9_E"},
+     "token": "AOJntA_PdElbBaGzQaCQhhr0aBvPAy1k3ImqQK0V9_E",
+     "glxz8": "pyyBw1Gh-X4djUTd2utbHUxs7pVDJu2YCuce1Evf7tk"},
     {"name": "GCX x 클리어프로텍션 개발팀", "sid": "AAAAZcIQG8k",
      "token": "tb4sDPPPaWeP83HPMH0IUnz96T2D6azY1TAoXdiWqGg",
      "glxz8": "0Tw7OvEG60guBwAkLnjRLs6AWm6avHQBoMrewzP6cdE"},
     {"name": "[CQ] SPIGEN 국내&해외 CS", "sid": "AAAA45iXDL0",
-     "token": "zh67JI0vK1DIeoet937rQ2byrOin9gV98FQddSSvfmY"},
+     "token": "zh67JI0vK1DIeoet937rQ2byrOin9gV98FQddSSvfmY",
+     "glxz8": "Bplrki7kUVeXMMCkkpplYn4QK1g-aMR0X-0RPYgqCOs"},
 ]
 
 WEBHOOK = "https://chat.googleapis.com/v1/spaces/{sid}/messages?key=" + KEY + "&token={tok}"
