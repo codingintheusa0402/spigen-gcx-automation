@@ -15,7 +15,7 @@ identical; keep the two in sync when either changes.
 |------|---------|
 | `header.title` | `✔️ M/D(요일) <product> 배드리뷰 (1~3점) (총 N건)` |
 | `header.subtitle` | `고객 리뷰 ★1~3점 · <date range>` + a product thumbnail (`imageType: SQUARE`) |
-| **Top 5 인입사유(누적)** | a 2-column widget: left = Top 5 `인입사유(tag)` where `대분류` = `휴대폰보호필름`, right = `휴대폰케이스`. Each column is headed `<b>대분류</b> · {tot}건` then **5 `decoratedText` rows** — `topLabel` = `n위`, `text` = `<b>이유</b>`, `bottomLabel` = `c건 · p%` — so rank / 인입사유 / 건수·% each sit at a fixed left edge and the two columns line up (`p` = share of that 대분류). Counted over the whole `1-3점` sheet. |
+| **Top 5 인입사유(누적)** | a 2-column widget: left = Top 5 `인입사유(tag)` where `대분류` = `휴대폰보호필름`, right = `휴대폰케이스`. Each column is headed `<b><font color>대분류</font></b> · {tot}건` (red `#EA4335` for 휴대폰보호필름, blue `#4285F4` for 휴대폰케이스, to set it apart from the rows below) then **5 `decoratedText` rows** — `topLabel` = `n위`, `text` = `<b>이유</b>`, `bottomLabel` = `c건 · p%` — so rank / 인입사유 / 건수·% each sit at a fixed left edge and the two columns line up (`p` = share of that 대분류). Counted over the whole `1-3점` sheet. |
 | **오늘 M/D(요일) 최다 인입사유** | biggest `인입사유(tag)` among rows whose `Update 날짜` is today, then a **fixed 5-line** breakdown (`n. 이유 c건`; 6th+ tags collapse into `…외 N건`). |
 | button | **배드리뷰** → the product's `1-3점` sheet |
 

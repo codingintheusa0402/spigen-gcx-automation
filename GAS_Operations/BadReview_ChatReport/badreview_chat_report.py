@@ -207,15 +207,21 @@ def _rank_widgets(rows: list, tot: int) -> list[dict]:
     return out
 
 
+# 대분류 column-header colors (bright enough for Chat light + dark themes) so the
+# header stands out from the 인입사유 rows under it.
+CAT_COLORS = {"휴대폰보호필름": "#EA4335", "휴대폰케이스": "#4285F4"}
+
+
 def _cat_column(label: str, block: dict) -> dict:
     tot = int(block.get("tot", 0))
     rows = [(n, int(c)) for n, c in block.get("top5", [])]
+    color = CAT_COLORS.get(label, "#202124")
     return {
         "horizontalSizeStyle": "FILL_AVAILABLE_SPACE",
         "horizontalAlignment": "START",
         "verticalAlignment": "TOP",
         "widgets": [
-            {"textParagraph": {"text": f"<b>{label}</b>  ·  {tot}건"}},
+            {"textParagraph": {"text": f'<b><font color="{color}">{label}</font></b>  ·  {tot}건'}},
             *_rank_widgets(rows, tot),
         ],
     }
