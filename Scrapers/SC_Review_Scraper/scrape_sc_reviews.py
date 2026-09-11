@@ -54,15 +54,20 @@ LAST_COMBINED_ROWS = None
 # USER CONFIG — edit these before each run
 # ═══════════════════════════════════════════════════════════════════════════════
 
-DOMAINS = ["EU", "JP", "US", "IN"]
+DOMAINS = ([d.strip().upper() for d in os.environ["SC_SCRAPER_DOMAINS"].split(",") if d.strip()]
+           if os.environ.get("SC_SCRAPER_DOMAINS") else ["EU", "JP", "US", "IN"])
 # List of domains to scrape in parallel. Each gets its own CSV file.
+# Overridable via SC_SCRAPER_DOMAINS (comma-separated) for smoke tests.
+# NOTE: use "EU", not a sub-country like "DE" - a bare "DE" is treated as its
+# own login group and looks for a ~/.chrome-scraper-profile_DE that no one has
+# ever signed into. EU sub-countries ride on the shared EU session.
 # Single domain example : DOMAINS = ["US"]
 # Supported             : "US" | "EU" | "UK" | "DE" | "FR" | "IT" | "ES" | "JP" | "IN"
 # "EU" automatically scrapes UK + DE + FR + IT + ES in sequence using each
 # country's marketplaceId and writes all reviews into one EU_*.csv file.
 
-PAGES = 5
-# Default max pages to scrape per domain.
+PAGES = int(os.environ.get("SC_SCRAPER_PAGES", "5"))
+# Default max pages to scrape per domain. Overridable via SC_SCRAPER_PAGES.
 # Total reviews ≈ PAGES × PAGE_SIZE.
 # Override per-domain with PAGES_OVERRIDE below.
 
@@ -118,7 +123,9 @@ MIN_REVIEW_DATE = "2026-07-25"
 # yyyy-mm-dd string, or None to disable. Only reviews with Created 날짜 >= this
 # date are kept (applied after ASIN filtering, before CSV write).
 
-FETCH_IMAGES = True
+FETCH_IMAGES = os.environ.get("SC_SCRAPER_FETCH_IMAGES", "1") == "1"
+# Overridable via SC_SCRAPER_FETCH_IMAGES=0 (smoke tests - image enrichment is
+# the slowest stage). Defaults to the previous hardcoded True.
 # True  — fetch reviewer-attached media URLs after all page scraping is done.
 #         EU fetches images for all countries in one pass after UK→DE→FR→IT→ES.
 # False — skip image fetching entirely (faster runs, Image URL column stays empty).
@@ -128,7 +135,8 @@ FETCH_IMAGES_ONLY = False
 #         Use this to recover after a browser crash that interrupted the image fetch.
 #         DOMAINS and OUT_DIR must match the original run so the right CSVs are found.
 
-FETCH_ORDER_ID = True
+FETCH_ORDER_ID = os.environ.get("SC_SCRAPER_FETCH_ORDER_ID", "1") == "1"
+# Overridable via SC_SCRAPER_FETCH_ORDER_ID=0 for smoke tests.
 # True  — after scraping each domain, call the Seller Central internal API
 #         (brandcustomerreviews/api/reviews) to retrieve the Amazon Order ID for
 #         each verified-purchase review. Adds an 'Order ID' column to the CSV.
@@ -137,7 +145,10 @@ FETCH_ORDER_ID = True
 #         reuses the existing SC cookies.
 # False — skip order ID fetching (default, faster runs).
 
-UPLOAD_TO_SHEETS = True
+UPLOAD_TO_SHEETS = os.environ.get("SC_SCRAPER_UPLOAD", "1") == "1"
+# Overridable via SC_SCRAPER_UPLOAD=0. Set that for any smoke/test run - the
+# default writes a live SC_{yymmdd} tab to the production spreadsheet, which is
+# not something a "does it still work?" check should do as a side effect.
 # True  (default) — after scraping, combine all domain CSVs (EU+JP+US+IN, in that
 #         scrape order) and merge them into the SC_{yymmdd} worksheet (KST date
 #         of the run) on SHEETS_SPREADSHEET_ID. If that sheet doesn't exist yet

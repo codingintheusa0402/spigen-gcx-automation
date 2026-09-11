@@ -12,7 +12,7 @@ Monday.com **Pixel 11 Case+CP** 보드(`18425190666`)를 매일 오후 5시(KST)
 | 대상 스프레드시트 | `1iPFNSVo6gQ6FkWUGB-DSL0v-3IGq8frh87XaCWQxaOU` — `[Case+CP] Pixel 11 Series 클레임/배드리뷰_26/8/18-26/11/18_GCX` |
 | 시트 탭 | `해외&국내 리뷰+클레임 데이터` |
 | Monday 보드 | `18425190666` (📌Pixel 11 Case+CP) |
-| Looker Studio | `42b6f915-2ca7-4d58-8f94-e8ef411d7b4b` (Z8 대시보드 `f9eb2a13-…` 복제본) |
+| Looker Studio | [`293263b0-b719-4094-950e-ce63eb499639`](https://datastudio.google.com/u/0/reporting/293263b0-b719-4094-950e-ce63eb499639) — Pixel 11 대시보드 (Z8 대시보드 `f9eb2a13-…` 구조 동일; 2026-09-11 문구·링크 Pixel 11로 교체 완료) |
 
 ---
 
