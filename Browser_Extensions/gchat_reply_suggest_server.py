@@ -16,13 +16,36 @@ Or keep it running via a LaunchAgent if you want it always available.
 """
 
 import json
+import os
 import re
+import shutil
 import subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HOST = "127.0.0.1"
 PORT = 8765
-CLAUDE_BIN = "/Users/kevinkim/.local/bin/claude"
+
+
+def _resolve_claude_bin() -> str:
+    """Locate the Claude CLI on whichever machine this is running on.
+
+    Was hardcoded to the Mac's path, which made the server unusable on the
+    Windows box. Order: explicit override -> PATH -> the per-user native
+    install location used by both platforms.
+    """
+    override = os.environ.get("CLAUDE_BIN")
+    if override:
+        return override
+    found = shutil.which("claude")
+    if found:
+        return found
+    local = os.path.expanduser(
+        "~/.local/bin/claude.exe" if os.name == "nt" else "~/.local/bin/claude"
+    )
+    return local
+
+
+CLAUDE_BIN = _resolve_claude_bin()
 TRANSCRIPT_CHAR_LIMIT = 2000
 
 PROMPT_TEMPLATE = """You are helping a Spigen GCX (Global CX) team member reply quickly in \

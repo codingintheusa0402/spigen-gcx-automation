@@ -1,8 +1,11 @@
 # PurchaseDate_Sync — Zendesk → monday.com "Purchase Date" bridge
 
-Fills the **Purchase Date** date column on the monday board
-[Galaxy Z8 Case+CP (18421346787)](https://spigen.monday.com/boards/18421346787)
+Fills the **Purchase Date** date column on the Case+CP monday boards
+[Galaxy Z8 (18421346787)](https://spigen.monday.com/boards/18421346787) and
+[Pixel 11 (18425190666)](https://spigen.monday.com/boards/18425190666)
 from the Zendesk custom ticket field **Purchase Date** (field id `360019586172`).
+Boards are listed in `MONDAY_BOARD_IDS` in `Code.js` — they share the same
+column ids, so adding a new series board is a one-line change.
 
 ## Why
 
@@ -23,16 +26,17 @@ consumer of the monday.com account's API budget (~tens of thousands of calls
 Time trigger every SYNC_EVERY_MINUTES min (15 → ~96 runs/day)
   └─ scheduledPurchaseDateSync()   (script-lock guarded; overlapping tick = no-op)
        └─ _runPurchaseDateSync_()
-            ├─ ONE board walk (500 items/page) → every item with a linked
-            │  Zendesk ticket + its current Purchase Date cell
+            ├─ ONE walk of each board in MONDAY_BOARD_IDS (500 items/page)
+            │  → every item with a linked Zendesk ticket + its current
+            │  Purchase Date cell
             ├─ Zendesk tickets/show_many (100 ids/call) → Purchase Date per ticket
             └─ change_multiple_column_values → date_mm59ejfp
                ONLY for items where the ticket's date differs from the board
 ```
 
-The board ("📌Galaxy Z8 Case+CP") holds ~960 items = **2 pages**, so a run
-costs **~2 monday reads + only-changed writes** → **~200–300 monday calls/day**
-across 96 runs (was ~40,000/day via the webhook).
+The Z8 board holds ~1,040 items (**3 pages**) and the Pixel 11 board ~300
+(**1 page**), so a run costs **~4 monday reads + only-changed writes** →
+**~400–500 monday calls/day** across 96 runs (was ~40,000/day via the webhook).
 
 `MONDAY_CALLS_MAX_PER_RUN = 50` is a hard ceiling — `mondayGql_` throws once a
 single run passes it (50 × 96 = 4,800/day absolute worst case). A run that hits
@@ -49,7 +53,7 @@ lost; a genuine loop/bug fails loudly instead of repeating the 2026-09 runaway.
 | Time trigger | every 15 min `scheduledPurchaseDateSync` (~96/day) — installed by `setupPurchaseDateTriggers` |
 | Zendesk webhook | "monday Purchase Date Sync" → **deactivate** (endpoint is a no-op now) |
 | Zendesk trigger | "monday Purchase Date Sync" → **deactivate** |
-| monday board | `18421346787`, columns `date_mm59ejfp` (Purchase Date), `integration_mm0fzmv0` (Zendesk Ticket) |
+| monday boards | `18421346787` (Z8), `18425190666` (Pixel 11, added 2026-09-11) — columns `date_mm59ejfp` (Purchase Date), `integration_mm0fzmv0` (Zendesk Ticket) on both |
 
 ## Functions (GAS editor → Run)
 

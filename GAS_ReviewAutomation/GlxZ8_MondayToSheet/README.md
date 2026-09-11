@@ -3,7 +3,9 @@
 Monday.com **Galaxy Z8 Case+CP** 보드(`18421346787`)를 매일 오후 5시(KST) 자동으로 조회해서,
 시트 데이터 전체를 Monday 보드 최신 상태로 **교체**합니다. Monday에서 삭제된 항목은 시트에서도 함께 사라집니다.
 
-**대상 스프레드시트:** `1ojfYyewbRL9hSZWTED-O_BeJ4T4DeP3aHDBOsKzAL7s` (탭: `Sheet1`)
+**대상 스프레드시트:** `1ojfYyewbRL9hSZWTED-O_BeJ4T4DeP3aHDBOsKzAL7s` (탭: `해외&국내 리뷰+클레임 데이터`)
+**Apps Script:** `1u_4_2QI9fEy8vSV9F0Nv9NlvoxtizPoWAVFMd6J3gwK2UpkTxlIfmmb3` (시트 바운드, `.clasp.json` 포함)
+**Pixel 11 버전:** [Pixel11_MondayToSheet](../Pixel11_MondayToSheet/) — 같은 코드, 보드 `18425190666`
 **Monday 보드:** `18421346787` (📌Galaxy Z8 Case+CP)
 
 ---
@@ -39,7 +41,9 @@ Monday.com **Galaxy Z8 Case+CP** 보드(`18421346787`)를 매일 오후 5시(KST
 | 고객 대응 | 고객대응 | `color_mm0fjzar` |
 | Review Link | Review Link | `link_mm0fkspz` |
 | Zendesk Ticket | Zendesk Ticket | `integration_mm0fzmv0` (URL을 `https://spigenhelp.zendesk.com/tickets/{id}` 형식으로 정리) |
-| 데이터 출처 | 데이터 출처 | `text_mm5gms5r` |
+| 데이터 출처 | 데이터 출처 | `formula_mm5hrmzb` |
+| 사진 유무 | 사진 유무 (Clean) | `formula_mm7184wc` |
+| Review Ratings | Review Ratings | `text_mm0fn5c0` |
 
 > 보드에 `ASIN`이라는 이름의 컬럼이 2개(text 타입 / board_relation 연결형) 있는데, 여기서는 **text 타입**(`text_mm0f1q4h`)을 사용합니다.
 

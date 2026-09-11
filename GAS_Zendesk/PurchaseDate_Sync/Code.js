@@ -2,8 +2,9 @@
  * PurchaseDate_Sync — Zendesk → monday.com "Purchase Date" bridge
  *
  * WHY THIS EXISTS
- * The native monday↔Zendesk integration on board 18421346787 (Galaxy Z8
- * Case+CP) cannot map Zendesk CUSTOM fields to board columns — its date
+ * The native monday↔Zendesk integration on the Case+CP boards (Galaxy Z8
+ * 18421346787, Pixel 11 18425190666) cannot map Zendesk CUSTOM fields to
+ * board columns — its date
  * dropdown only offers the system fields (Created at / Due at / Updated at).
  * "Purchase Date" (Zendesk custom field 360019586172) therefore never
  * reaches the board's Purchase Date column.
@@ -15,8 +16,10 @@
  *
  *   scheduledPurchaseDateSync()  — installed by setupPurchaseDateTriggers()
  *   to run every SYNC_EVERY_MINUTES minutes (15 → ~96 runs/day):
- *     1. ONE walk of the board (500 items/page) to collect every item that
- *        has a linked Zendesk ticket, plus its current Purchase Date cell.
+ *     1. ONE walk of EACH board in MONDAY_BOARD_IDS (500 items/page) to
+ *        collect every item that has a linked Zendesk ticket, plus its
+ *        current Purchase Date cell. (2026-09-11: Pixel 11 board added —
+ *        both boards share the same column ids.)
  *     2. Fetch those tickets from Zendesk in bulk (show_many, 100 ids/call).
  *     3. Write the Purchase Date to an item ONLY when it differs from what's
  *        already on the board.
@@ -41,7 +44,12 @@ const ZENDESK_SUBDOMAIN = 'spigenhelp';
 const ZD_PURCHASE_DATE_FIELD = 360019586172; // custom ticket field "Purchase Date" (type: date)
 
 const MONDAY_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjU0ODE3MjIzOSwiYWFpIjoxMSwidWlkIjozMTE0NDEyMSwiaWFkIjoiMjAyNS0wOC0wOFQwNToyMTozNS40ODdaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6MTExNjU5NTcsInJnbiI6InVzZTEifQ._Z9iAbMMY9bvJnCG3jFwdUIHMaw8aihN2pcRNnkFUVM';
-const MONDAY_BOARD_ID = 18421346787;
+// Every Case+CP board to keep in sync. All share the same column ids below
+// (cloned from one template). Add a board here when a new series launches.
+const MONDAY_BOARD_IDS = [
+  18421346787, // 📌Galaxy Z8 Case+CP
+  18425190666, // 📌Pixel 11 Case+CP   (added 2026-09-11)
+];
 const MONDAY_DATE_COL = 'date_mm59ejfp';          // "Purchase Date" (date)
 const MONDAY_TICKET_COL = 'integration_mm0fzmv0'; // "Zendesk Ticket" (integration)
 
@@ -133,17 +141,23 @@ function mondayGql_(query) {
   return body.data;
 }
 
-// ONE walk of the board. Returns [{ itemId, ticketId (Number), dateText }] for
-// every item whose "Zendesk Ticket" integration column holds an entity_id.
+// ONE walk of every board in MONDAY_BOARD_IDS. Returns
+// [{ boardId, itemId, ticketId (Number), dateText }] for every item whose
+// "Zendesk Ticket" integration column holds an entity_id.
 function collectLinkedItems_() {
   const linked = [];
+  MONDAY_BOARD_IDS.forEach(boardId => collectLinkedItemsFromBoard_(boardId, linked));
+  return linked;
+}
+
+function collectLinkedItemsFromBoard_(boardId, linked) {
   let cursor = null;
   do {
     const pageArgs = cursor
       ? `limit: ${BOARD_PAGE_LIMIT}, cursor: "${cursor}"`
       : `limit: ${BOARD_PAGE_LIMIT}`;
     const data = mondayGql_(`query {
-      boards(ids: [${MONDAY_BOARD_ID}]) {
+      boards(ids: [${boardId}]) {
         items_page(${pageArgs}) {
           cursor
           items {
@@ -162,6 +176,7 @@ function collectLinkedItems_() {
       if (!entityId) continue;
       const dateCol = item.column_values.find(c => c.id === MONDAY_DATE_COL);
       linked.push({
+        boardId: boardId,
         itemId: item.id,
         ticketId: Number(entityId),
         dateText: (dateCol && dateCol.text) || '',
@@ -169,14 +184,13 @@ function collectLinkedItems_() {
     }
     cursor = page.cursor;
   } while (cursor);
-  return linked;
 }
 
-function setItemPurchaseDate_(itemId, isoDate) {
+function setItemPurchaseDate_(boardId, itemId, isoDate) {
   const colVals = JSON.stringify({ [MONDAY_DATE_COL]: { date: isoDate } })
     .replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   mondayGql_(`mutation {
-    change_multiple_column_values(board_id: ${MONDAY_BOARD_ID}, item_id: ${itemId}, column_values: "${colVals}") { id }
+    change_multiple_column_values(board_id: ${boardId}, item_id: ${itemId}, column_values: "${colVals}") { id }
   }`);
 }
 
@@ -202,7 +216,7 @@ function _runPurchaseDateSync_(startedAt) {
   _mondayCallCount = 0;
 
   const linked = collectLinkedItems_();
-  Logger.log(`Board walk: ${linked.length} item(s) linked to a Zendesk ticket (${_mondayCallCount} monday read call(s)).`);
+  Logger.log(`Board walk (${MONDAY_BOARD_IDS.length} board(s)): ${linked.length} item(s) linked to a Zendesk ticket (${_mondayCallCount} monday read call(s)).`);
   if (!linked.length) return;
 
   const dateByTicket = zdGetPurchaseDatesForTickets_(linked.map(x => x.ticketId));
@@ -213,9 +227,9 @@ function _runPurchaseDateSync_(startedAt) {
     if (!isoDate) { noDate++; continue; }
     if (isoDate === it.dateText) { unchanged++; continue; }
     try {
-      setItemPurchaseDate_(it.itemId, isoDate);
+      setItemPurchaseDate_(it.boardId, it.itemId, isoDate);
       updated++;
-      Logger.log(`ticket #${it.ticketId} → item ${it.itemId}: Purchase Date ${it.dateText || '(empty)'} → ${isoDate}`);
+      Logger.log(`ticket #${it.ticketId} → board ${it.boardId} item ${it.itemId}: Purchase Date ${it.dateText || '(empty)'} → ${isoDate}`);
     } catch (err) {
       if (String(err).indexOf(MONDAY_BUDGET_ERR) !== -1) {
         cappedAt = updated;

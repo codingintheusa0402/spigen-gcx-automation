@@ -1,0 +1,165 @@
+<style>
+  body { font-family: 'Google Sans', Roboto, Arial, sans-serif; font-size: 13px; color: #202124; padding: 12px; }
+  h2 { font-size: 15px; margin: 0 0 4px; }
+  p.hint { color: #5f6368; margin: 0 0 14px; line-height: 1.4; }
+  label { display: block; font-weight: 600; margin: 12px 0 4px; }
+  input[type="date"], input[type="number"] {
+    width: 100%; box-sizing: border-box; padding: 6px 8px;
+    border: 1px solid #dadce0; border-radius: 4px; font-size: 13px;
+  }
+  .check { display: flex; align-items: center; gap: 6px; font-weight: normal; margin: 4px 0; }
+  .check input { margin: 0; }
+  .field-hint { color: #80868b; font-size: 11px; margin-top: 3px; }
+  button.primary, button.secondary {
+    width: 100%; margin-top: 12px; padding: 9px 0; border-radius: 4px;
+    font-size: 14px; font-weight: 500; cursor: pointer; border: none;
+  }
+  button.secondary { background: #fff; color: #1a73e8; border: 1px solid #dadce0; }
+  button.primary { background: #1a73e8; color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  #preview { margin-top: 12px; font-size: 12px; }
+  #preview table { border-collapse: collapse; width: 100%; margin-top: 6px; }
+  #preview th, #preview td { text-align: left; padding: 3px 4px; border-bottom: 1px solid #eee; vertical-align: top; }
+  #preview th { color: #5f6368; font-weight: 600; }
+  .src-title { font-weight: 600; margin-top: 10px; }
+  .dup { color: #9aa0a6; }
+  .tag { display: inline-block; padding: 0 5px; border-radius: 8px; font-size: 10px; }
+  .tag.claim { background: #e8f0fe; color: #1967d2; }
+  .tag.review { background: #fce8e6; color: #c5221f; }
+  #status { margin-top: 12px; padding: 10px; border-radius: 4px; font-size: 12px; line-height: 1.5; display: none; white-space: pre-wrap; }
+  #status.ok { display: block; background: #e6f4ea; color: #137333; }
+  #status.err { display: block; background: #fce8e6; color: #c5221f; }
+  #status.loading { display: block; background: #f1f3f4; color: #5f6368; }
+</style>
+
+<h2>Claim / Review Slide Maker</h2>
+<p class="hint">
+  Reads the 클레임 및 배드리뷰 고객사진 모음 decks, picks rows whose
+  작성 날짜 falls in the range below, and appends one card per row after the
+  last existing card of that product family — same style as slides 9–34.
+</p>
+
+<label>Source decks</label>
+<label class="check"><input type="checkbox" id="srcGlxZ8" checked> Galaxy Z8 Series (Fold 8 / Flip 8 / Fold 8 Ultra)</label>
+<label class="check"><input type="checkbox" id="srcPixel11" checked> Pixel 11 Series</label>
+
+<label for="startDate">작성 날짜 from</label>
+<input type="date" id="startDate">
+<label for="endDate">to</label>
+<input type="date" id="endDate">
+
+<label for="maxCount">Max cards per deck this run <span style="font-weight:normal;color:#80868b;">(optional)</span></label>
+<input type="number" id="maxCount" min="1" placeholder="all">
+<div class="field-hint">
+  Use a small number (e.g. 2) to check the result first. Re-running is safe:
+  rows already in the deck are skipped, so a run that times out can simply be
+  run again to continue.
+</div>
+
+<button class="secondary" id="previewBtn">Preview</button>
+<div id="preview"></div>
+<button class="primary" id="generateBtn" disabled>Generate slides</button>
+
+<div id="status"></div>
+
+<script>
+  var lastPreview = null;
+
+  function setDefaults() {
+    var end = new Date();
+    var start = new Date(end.getTime() - 13 * 24 * 3600 * 1000);
+    document.getElementById('endDate').value = end.toISOString().slice(0, 10);
+    document.getElementById('startDate').value = start.toISOString().slice(0, 10);
+  }
+
+  function collectOpts() {
+    var sources = [];
+    if (document.getElementById('srcGlxZ8').checked) sources.push('glxZ8');
+    if (document.getElementById('srcPixel11').checked) sources.push('pixel11');
+    return {
+      sources: sources,
+      startDate: document.getElementById('startDate').value,
+      endDate: document.getElementById('endDate').value,
+      maxCount: Number(document.getElementById('maxCount').value) || 0
+    };
+  }
+
+  function showStatus(cls, text) {
+    var el = document.getElementById('status');
+    el.className = cls; el.textContent = text;
+  }
+
+  function esc(s) { return String(s || '').replace(/[&<>"]/g, function(c) { return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]; }); }
+
+  function renderPreview(res) {
+    lastPreview = res;
+    var html = '';
+    var totalNew = 0;
+    res.sources.forEach(function(src) {
+      totalNew += src.newCount;
+      html += '<div class="src-title">' + esc(src.label) + ' — ' + src.newCount + ' new' +
+        (src.rows.length - src.newCount ? ' (' + (src.rows.length - src.newCount) + ' already in deck)' : '') +
+        (src.templateFound ? '' : ' — <span style="color:#c5221f">no existing card to copy from</span>') + '</div>';
+      if (!src.rows.length) { html += '<div class="field-hint">No rows in this date range.</div>'; return; }
+      html += '<table><tr><th>날짜</th><th>SKU / 모델</th><th>국가</th><th>인입사유</th><th></th></tr>';
+      src.rows.forEach(function(r) {
+        html += '<tr class="' + (r.alreadyInDeck ? 'dup' : '') + '">' +
+          '<td>' + esc(r.date) + '</td>' +
+          '<td>' + esc(r.sku) + '<br><span style="color:#5f6368">' + esc(r.model) + '</span></td>' +
+          '<td>' + esc(r.country) + '</td>' +
+          '<td>' + esc(r.reason) + '</td>' +
+          '<td><span class="tag ' + r.type + '">' + r.type + '</span>' +
+          (r.photos ? '' : ' <span title="no photo">📷✕</span>') +
+          (r.alreadyInDeck ? ' <span title="already in deck">✓</span>' : '') + '</td></tr>';
+      });
+      html += '</table>';
+    });
+    document.getElementById('preview').innerHTML = html;
+    document.getElementById('generateBtn').disabled = totalNew === 0;
+  }
+
+  document.getElementById('previewBtn').addEventListener('click', function() {
+    var opts = collectOpts();
+    if (!opts.sources.length) { showStatus('err', 'Pick at least one source deck.'); return; }
+    document.getElementById('previewBtn').disabled = true;
+    document.getElementById('generateBtn').disabled = true;
+    showStatus('loading', 'Reading source decks…');
+    google.script.run
+      .withSuccessHandler(function(res) {
+        document.getElementById('previewBtn').disabled = false;
+        document.getElementById('status').className = '';
+        renderPreview(res);
+      })
+      .withFailureHandler(function(err) {
+        document.getElementById('previewBtn').disabled = false;
+        showStatus('err', err.message || String(err));
+      })
+      .previewClaimSlides(opts);
+  });
+
+  document.getElementById('generateBtn').addEventListener('click', function() {
+    var opts = collectOpts();
+    document.getElementById('generateBtn').disabled = true;
+    document.getElementById('previewBtn').disabled = true;
+    showStatus('loading', 'Generating slides… (this can take a few minutes)');
+    google.script.run
+      .withSuccessHandler(function(res) {
+        document.getElementById('previewBtn').disabled = false;
+        var lines = ['Inserted ' + res.inserted + ' slide(s).'];
+        res.perSource.forEach(function(p) {
+          lines.push('  • ' + p.label + ': +' + p.inserted +
+            (p.skippedExisting ? ', ' + p.skippedExisting + ' already present' : '') +
+            (p.remaining ? ', ' + p.remaining + ' remaining — run again to continue' : ''));
+        });
+        if (res.notes.length) { lines.push(''); lines.push('Notes:'); res.notes.forEach(function(n) { lines.push('  - ' + n); }); }
+        showStatus('ok', lines.join('\n'));
+      })
+      .withFailureHandler(function(err) {
+        document.getElementById('previewBtn').disabled = false;
+        showStatus('err', err.message || String(err));
+      })
+      .generateClaimSlides(opts);
+  });
+
+  setDefaults();
+</script>

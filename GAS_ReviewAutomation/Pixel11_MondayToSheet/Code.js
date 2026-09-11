@@ -1,12 +1,21 @@
 /*************************************************
- * CONFIG — Galaxy Z8 Case+CP (Monday → Sheet, full refresh)
+ * CONFIG — Pixel 11 Case+CP (Monday → Sheet, full refresh)
+ * Sibling of GlxZ8_MondayToSheet (Galaxy Z8). Same sheet layout, different board.
  *************************************************/
-const BOARD_ID = 18421346787;
+const BOARD_ID = 18425190666; // 📌Pixel 11 Case+CP
 const SHEET_NAME = '해외&국내 리뷰+클레임 데이터';
 const PAGE_LIMIT = 500;
 const RUN_TRIGGER_HOUR = 17; // 5PM KST
 
-/** Sheet header (in order) ↔ Monday column id. colId=null → Monday item name (title field). */
+/**
+ * Sheet header (in order) ↔ Monday column id.
+ *   colId=null      → Monday item name (title field).
+ *   transform(v)    → optional post-processing of the display value before it is written.
+ *
+ * NOTE (Pixel 11 board): unlike the Galaxy Z8 board there is no "사진 유무 (Clean)" formula column
+ * (formula_mm7184wc). The same Y/N cleanup is applied here in-script on the "사진 유무" status
+ * column (color_mm0ffgz8) so the sheet output stays identical to the Z8 sheet.
+ */
 const COLUMN_MAP = [
   { header: 'Order ID',       colId: null },
   { header: 'Created 날짜',    colId: 'date_mm0f80th' },
@@ -26,7 +35,7 @@ const COLUMN_MAP = [
   { header: 'Review Link',    colId: 'link_mm0fkspz' },
   { header: 'Zendesk Ticket', colId: 'integration_mm0fzmv0' },
   { header: '데이터 출처',     colId: 'formula_mm5hrmzb' },
-  { header: '사진 유무',       colId: 'formula_mm7184wc' },
+  { header: '사진 유무',       colId: 'color_mm0ffgz8', transform: _photoYN_ },
   { header: 'Review Ratings', colId: 'text_mm0fn5c0' }
 ];
 
@@ -35,6 +44,11 @@ const FORMULA_COL_IDS = COLUMN_MAP
   .map(function(c){ return c.colId; });
 
 const HEADER = ['item_id'].concat(COLUMN_MAP.map(function(c){ return c.header; }));
+
+/** Mirrors the Z8 board formula: SUBSTITUTE(SUBSTITUTE({사진 유무}, "yes", "Y"), "no", "N") */
+function _photoYN_(v){
+  return String(v == null ? '' : v).replace(/yes/g, 'Y').replace(/no/g, 'N');
+}
 
 /** CacheService keys used to pass progress from the running sync to the popup dialog. */
 const SYNC_LOG_CACHE_KEY = 'MONDAY_SYNC_LOG';
@@ -355,7 +369,8 @@ function _buildRow_(item, formulaOverrides){
     if (FORMULA_COL_IDS.indexOf(c.colId) >= 0 && _isEmpty_(cv) && formulaOverrides && formulaOverrides[c.colId]) {
       cv = formulaOverrides[c.colId];
     }
-    return _displayValue_(cv);
+    const v = _displayValue_(cv);
+    return (typeof c.transform === 'function') ? c.transform(v) : v;
   });
   return [String(item.id)].concat(cells);
 }

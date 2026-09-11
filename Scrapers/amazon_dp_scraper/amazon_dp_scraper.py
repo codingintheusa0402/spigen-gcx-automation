@@ -12,7 +12,7 @@ Amazon /dp/ Product Detail Scraper — async Playwright edition
 - Keyboard controls (macOS): ⌥P = pause   ⌥R = resume   ⌥Q = quit
 """
 
-import asyncio, re, sys, argparse, threading, random
+import asyncio, os, re, sys, argparse, threading, random
 from datetime import datetime
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
@@ -615,7 +615,11 @@ async def main():
     total = len(tasks)
 
     ts   = datetime.now().strftime('%Y%m%d_%H%M%S')
-    path = f"/Users/kevinkim/Desktop/amazon_dp_{ts}.xlsx"
+    # AMAZON_DP_OUT_DIR lets the headless server write somewhere real; a server
+    # has no ~/Desktop. Falls back to the Mac's Desktop as before.
+    out_dir = os.environ.get("AMAZON_DP_OUT_DIR", os.path.expanduser("~/Desktop"))
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, f"amazon_dp_{ts}.xlsx")
     sheet_en     = f"amazon_dp_{ts}"          # 25 chars — within Excel's 31-char limit
     sheet_locale = f"amazon_dp_{ts}_loc"      # 29 chars — within limit
 

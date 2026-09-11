@@ -391,7 +391,11 @@ def main():
     driver = make_driver()
 
     ts  = datetime.now().strftime('%Y%m%d_%H%M%S')
-    out = f"/Users/kevinkim/Desktop/asin_reviews_{ts}.csv"
+    # CHILD_ASIN_OUT_DIR lets the headless server write somewhere real; a server
+    # has no ~/Desktop. Falls back to the Mac's Desktop as before.
+    out_dir = os.environ.get("CHILD_ASIN_OUT_DIR", os.path.expanduser("~/Desktop"))
+    os.makedirs(out_dir, exist_ok=True)
+    out = os.path.join(out_dir, f"asin_reviews_{ts}.csv")
     csv_file, csv_writer = open_csv(out)
     print(f"\n  CSV: {out}")
     print(f"  Strategy: parent ASIN = discovery only | child /dp/ page = extraction target")

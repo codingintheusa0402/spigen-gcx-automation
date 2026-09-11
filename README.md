@@ -19,7 +19,8 @@ spigen-gcx-automation/
 ├── GAS_ReviewAutomation/                # GAS — review scraping & distribution
 │   ├── MasterTrigger/                   # Daily review distribution job (all products)
 │   ├── Gemini_DR/                       # Galaxy S26 — Gemini-powered =DR() defect classifier
-│   ├── GlxZ8_MondayToSheet/             # Galaxy Z8 — Monday board → Sheet (new items only, daily)
+│   ├── GlxZ8_MondayToSheet/             # Galaxy Z8 — Monday board → Sheet (full refresh, daily 17:00 KST)
+│   ├── Pixel11_MondayToSheet/           # Pixel 11 — same as above, board 18425190666
 │   └── Apify/
 │       ├── APIFY_Axesso/                # Legacy master Apify/Axesso review scrape + sheet distribution
 │       ├── Glx26_Apify/                 # Galaxy S26 Apify trigger + Monday.com board sync
@@ -84,7 +85,8 @@ spigen-gcx-automation/
 |---------|---------|-------------|--------|
 | [GAS_ReviewAutomation/MasterTrigger](GAS_ReviewAutomation/MasterTrigger/) | All | Daily job that reads the `"finalize"` filter view from each product's source sheet and distributes new reviews into destination spreadsheets. Handles dedup, `=dr()` formula injection, and `tem` sheet refresh. | [README](GAS_ReviewAutomation/MasterTrigger/README.md) |
 | [GAS_ReviewAutomation/Gemini_DR](GAS_ReviewAutomation/Gemini_DR/) | Galaxy S26 | Gemini-powered `=DR()` custom Sheets formula that classifies review text into a defect/issue label, bound to the Galaxy S26 review spreadsheet. | [README](GAS_ReviewAutomation/Gemini_DR/README.md) |
-| [GAS_ReviewAutomation/GlxZ8_MondayToSheet](GAS_ReviewAutomation/GlxZ8_MondayToSheet/) | Galaxy Z8 | Daily (17:00 KST) append-only sync — pulls new items from the Galaxy Z8 Case+CP Monday board into the sheet, never overwrites existing rows. | [README](GAS_ReviewAutomation/GlxZ8_MondayToSheet/README.md) |
+| [GAS_ReviewAutomation/GlxZ8_MondayToSheet](GAS_ReviewAutomation/GlxZ8_MondayToSheet/) | Galaxy Z8 | Daily (17:00 KST) full-refresh sync — replaces the sheet with every item on the Galaxy Z8 Case+CP Monday board (feeds the Z8 Looker Studio dashboard). | [README](GAS_ReviewAutomation/GlxZ8_MondayToSheet/README.md) |
+| [GAS_ReviewAutomation/Pixel11_MondayToSheet](GAS_ReviewAutomation/Pixel11_MondayToSheet/) | Pixel 11 | Sibling of the Z8 sync for the Pixel 11 Case+CP board (18425190666) → Pixel 11 claim/review sheet; identical headers so the Z8 dashboard can be cloned. | [README](GAS_ReviewAutomation/Pixel11_MondayToSheet/README.md) |
 | [GAS_ReviewAutomation/Apify/APIFY_Axesso](GAS_ReviewAutomation/Apify/APIFY_Axesso/) | All | Legacy copy of MasterTrigger's `dailyJob()` logic, plus its own Apify run lifecycle (`Apify.js`) and dedup helper (`Sheet_Automation.js`). Kept for reference — MasterTrigger is canonical. | [README](GAS_ReviewAutomation/Apify/APIFY_Axesso/README.md) |
 | [GAS_ReviewAutomation/Apify/Glx26_Apify](GAS_ReviewAutomation/Apify/Glx26_Apify/) | Galaxy S26 | Per-product Apify trigger + Monday.com board sync for Galaxy S26 review sheet. | [README](GAS_ReviewAutomation/Apify/Glx26_Apify/README.md) |
 | [GAS_ReviewAutomation/Apify/GlxZ8_Apify](GAS_ReviewAutomation/Apify/GlxZ8_Apify/) | Galaxy Z8 | Per-product Apify trigger + Monday.com board sync (board 18421346787, 📌Galaxy Z8 Case+CP) for the Galaxy Z Fold 8 / Flip 8 / Fold 8 Ultra review sheet. Copy of the Glx26 project with Z8 sheet/board/group config. | [README](GAS_ReviewAutomation/Apify/GlxZ8_Apify/README.md) |

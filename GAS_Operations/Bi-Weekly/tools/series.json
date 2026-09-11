@@ -1,0 +1,30 @@
+{
+  "_comment": "Monitoring series for the Bi-Weekly deck. Edit when the monitored line-up changes. key = Slide Maker source key (must match CLAIM_SLIDE_SOURCES / BAD_REVIEW_SOURCES in Code.js).",
+  "series": {
+    "glxZ8": {
+      "label": "Galaxy Z8 Series",
+      "familyMatch": "Galaxy Z8",
+      "sourceDeck": "1VC5WAoiufinAPz9bPn1OrBnAef9JkDZEZxlAGF6DDho",
+      "sheet": "19OhswglYMx_dxSFFDtWI1WYPWq2jONJn6RK84KITwy4",
+      "catalogTab": "신제품 라인업",
+      "badReviewTab": "1-3점",
+      "ratingTab": "DE"
+    },
+    "pixel11": {
+      "label": "Pixel 11 Series",
+      "familyMatch": "Pixel 11",
+      "sourceDeck": "1JJKzzBnm9no89mocr6Xqzwqgz8YWoiU5S44Em7gJYSc",
+      "sheet": "12I6z_FFmDIMHa0rLanltKKFp7kI_yREQj3adkMamPgI",
+      "catalogTab": "신제품 라인업",
+      "badReviewTab": "1-3점",
+      "ratingTab": "DE"
+    }
+  },
+  "zendesk": { "sheet": "1sjcCj_P4DRD8rywkmYJhbsrzwFfgiJQuF9nIKwCiKlc", "tab": "26년 전체문의", "category": "4. Product Issue" },
+  "siren":   { "sheet": "15Jh6ZFDBIbpv4OANVtD3g4wFBJxoof9SHWDUEU3GiXI", "tab": "26년 SIREN", "headerRow": 18 },
+  "euClaimCountries": ["UK", "DE", "FR", "IT", "ES", "NL", "BE", "SE", "PL", "IE", "AT"],
+  "euReviewCountries": ["DE", "FR", "IT", "ES", "UK"],
+  "caspiTable": "S3.AMAZON_SELLER.VAT_TRANSACTION_DATA",
+  "minSold": 20,
+  "topN": 7
+}

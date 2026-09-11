@@ -197,3 +197,24 @@ updates (note: trigger runs may not have a user-selected slide context — test 
 | `extractKeywordPlaceholders(slide, prefix)` | Scans active slide for `{{Defect_Reason_<keyword>}}` patterns |
 | `getColumnIndexByHeader(sheet, headerName)` | Looks up a column index by header name (1-based) |
 | `removeOldAutoCharts(presentation)` | Utility — removes all `AUTO_Defect_Model_Chart_*` images across all slides (not called automatically; use manually to wipe all charts at once) |
+
+---
+
+## Claim / Review Slide Maker + Bi-Weekly builder (2026-09)
+
+Skill: `~/.claude/skills/bi-weekly-builder/SKILL.md` ("run bi-weekly builder"). It asks for the
+date range, the monitored series, and this period's deck / Apps Script URL, then:
+
+1. **Card slides** — deck menu *Claim / Review Slide Maker…* (`SlideMaker.html` + the
+   `_generateClaimSlides` module in `Code.js`). Reads the 고객사진 모음 source decks
+   (`CLAIM_SLIDE_SOURCES`), duplicates each family's last card and fills it by position
+   (`CLAIM_CARD_FIELDS`, `CLAIM_PHOTO_AREA`). ASIN from the 1-3점 sheet (DE tab fallback),
+   평점/갯수 from the series sheet's `DE` tab, photos re-cropped via the Slides API after
+   `saveAndClose()`, Drive-video thumbnails, `SIREN 등록됨` chip from the `26년 SIREN` sheet
+   (menu *Apply SIREN badges to existing cards* for the archive). Idempotent re-runs.
+2. **TOP-7 slides** — `tools/rate_pipeline.py prep → (Caspi MCP query) → aggregate → slides`.
+   Series config in `tools/series.json`. Sales = Caspi LM `S3.AMAZON_SELLER.VAT_TRANSACTION_DATA`
+   (Amazon EU+UK); claims = Zendesk `4. Product Issue` (EU); bad reviews = 1-3점 (DE/FR/IT/ES/UK).
+
+`tools/repair_cards.py`, `fill_ratings.py`, `siren_badges.py` are one-off Slides-API repair
+twins of logic that now lives in `Code.js`; keep for emergencies.

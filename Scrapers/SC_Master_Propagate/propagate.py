@@ -40,13 +40,20 @@ See memory gws_shim_sheets_token / gws_shim_gcp_project.
 import argparse
 import datetime
 import json
+import os
 import sys
 
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
-TOKEN = "/Users/kevinkim/.config/gws_shim/token.json"
+# Resolved rather than hardcoded so the same file runs on the Mac and on the
+# 24/7 Windows server. GWS_SHIM_TOKEN wins if set; otherwise the usual
+# ~/.config/gws_shim/token.json, which expanduser() resolves correctly on both.
+TOKEN = os.environ.get(
+    "GWS_SHIM_TOKEN",
+    os.path.expanduser("~/.config/gws_shim/token.json"),
+)
 SRC = "1tMbA_msRfCRY0KK40GnyZ_h1uNCldlnk9Cg-_MTcbsw"
 SC_SHEET = "SC"
 SC_SHEET_GID = 444769313
