@@ -1559,6 +1559,73 @@ function reconcileAbmRelays__locked_(lookbackHours) {
     Logger.log('reconcileFailedAbmProcessing_ call from reconcileAbmRelays_ failed: ' + e);
   }
 
+  // Same piggyback pattern, same reasoning: best-effort, never blocks the
+  // relay reconciliation above. See reconcileAbmCleanups_ for what this covers.
+  try {
+    const cleanups = reconcileAbmCleanups_();
+    summary.cleanups = cleanups;
+  } catch (e) {
+    Logger.log('reconcileAbmCleanups_ call from reconcileAbmRelays_ failed: ' + e);
+  }
+
+  return summary;
+}
+
+// Safety net for the INBOUND TEXT CLEANUP path (cleanupExistingAbmTicket_ /
+// handleNewAbmTicket_) — a different gap from reconcileAbmRelays_ above,
+// which only covers the Seller-Central-relay log. cleanupExistingAbmTicket_
+// guards its work with a single SCRIPT-WIDE LockService lock
+// (`lock.tryLock(20000)`) — when a buyer sends multiple ABM messages close
+// together (confirmed live down to 1 second apart), their separate
+// webhook-triggered cleanup calls compete for that one lock, and a losing
+// invocation just returns `{status:'locked'}` with NO retry — that
+// comment's clean-text copy is then never generated, permanently (GCX
+// Reply correctly leaves it as the full raw "Amazon card" rather than
+// hiding it, per the v3.6.18 fix, but the customer's message stays
+// effectively unreadable without clicking through). Confirmed live
+// 2026-09-21 on ticket #1000162353: 4 raw comments with zero clean pair,
+// each immediately followed (1s–91s later) by ANOTHER raw comment that got
+// its own pair fine seconds later — the lock-race signature; one stuck
+// since 2026-09-18, still uncleaned 3 days later with no automatic
+// recovery, since nothing previously re-checked already-seen tickets for
+// this specific gap.
+//
+// Reuses cleanupExistingAbmTicket_ itself rather than reimplementing its
+// raw-detection/dedup logic — that function already no-ops instantly (via
+// alreadyCleanedSourceIds_) for any comment already cleaned, so calling it
+// on every recently-active ABM ticket every 30 min is safe and cheap for
+// the common case where nothing is actually missing. If this sweep's own
+// LockService call loses the race too (e.g. running concurrently with a
+// live webhook), it just returns 'locked' and self-heals on the next tick,
+// same tradeoff reconcileAbmRelays_ already accepts.
+function reconcileAbmCleanups_(lookbackHours) {
+  const hours = (typeof lookbackHours === 'number' && lookbackHours > 0) ? lookbackHours : 1;
+  const cutoff = new Date(Date.now() - hours * 3600 * 1000).toISOString().replace(/\.\d+Z$/, 'Z');
+  const query = encodeURIComponent(`type:ticket tags:${ABM_TAG} updated>${cutoff}`);
+
+  const summary = { scanned: 0, cleaned: 0, locked: 0, errors: 0, cleanedTickets: [] };
+  let url = `/api/v2/search.json?query=${query}&sort_by=updated_at&sort_order=desc`;
+  let guard = 0;
+  while (url && guard++ < 10) {
+    const page = zdFetch_(url);
+    (page.results || []).forEach(t => {
+      if (!t || t.id === undefined) return;
+      summary.scanned++;
+      try {
+        const result = cleanupExistingAbmTicket_(t.id);
+        if (result && result.status === 'locked') { summary.locked++; return; }
+        if (result && result.cleaned && result.cleaned.length) {
+          summary.cleaned += result.cleaned.length;
+          summary.cleanedTickets.push(t.id);
+        }
+      } catch (e) {
+        summary.errors++;
+        Logger.log(`reconcileAbmCleanups_(${t.id}): ${e}`);
+      }
+    });
+    url = page.next_page || null;
+  }
+  Logger.log('reconcileAbmCleanups_: ' + JSON.stringify(summary));
   return summary;
 }
 
