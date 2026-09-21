@@ -20,6 +20,13 @@ significance-highlighting thresholds, and the 12-room list.
 iPhone 18 (added 2026-09-21) reuses each room's `glxz8` webhook token, same as Z8 —
 see `room_url()`/`SHARES_GLXZ8_TOKEN` in broadcast.py. It has no KR-gate (that's Z8-only).
 
+Combined carousel format (2026-09-21): all 3 products now go out as ONE message per
+room (a swipeable Cards v2 carousel, iPhone 18 → Z8 → Pixel 11 — see carousel.py in
+badreview-chat-broadcast/), sent via each room's default `token` webhook, replacing
+the old 3-separate-messages-per-room format. Because it's a single message, the Z8
+KR-gate (see below) now holds back the ENTIRE carousel when it trips, not just Z8 —
+there's no way to selectively omit one page from an already-sent message.
+
 Usage:
   auto_broadcast.py                 # normal run (skips silently on holiday/weekend)
   auto_broadcast.py --dry-run       # crunch + build cards, print results, send nothing
@@ -224,6 +231,7 @@ def main():
     z8_report = _load(f"{SKILLS}/glxz8-badreview-chat-report/report.py", "auto_z8_report")
     ip18_report = _load(f"{SKILLS}/iphone18-badreview-chat-report/report.py", "auto_ip18_report")
     broadcast = _load(f"{SKILLS}/badreview-chat-broadcast/broadcast.py", "auto_broadcast_mod")
+    carousel = _load(f"{SKILLS}/badreview-chat-broadcast/carousel.py", "auto_carousel_mod")
 
     px_card = px_report.build_card(px_data, today)
     z8_card = z8_report.build_card(z8_data, today)
@@ -245,40 +253,43 @@ def main():
 
     targets = [broadcast.TEST_ROOM] if a.test_only else broadcast.ROOMS
 
+    header_imgs = {"pixel11": px_report.HEADER_IMG, "glxz8": z8_report.HEADER_IMG,
+                    "iphone18": ip18_report.HEADER_IMG}
+    cards = {"pixel11": px_card, "glxz8": z8_card, "iphone18": ip18_card}
+
     if a.dry_run:
         log(f"[dry-run] cards built, not sending. {'Test room' if a.test_only else 'Rooms'} "
             f"that would receive them:")
         for room in targets:
             log(f"  - {room['name']}")
         if hold_z8:
-            log("[dry-run] would ALERT the private room instead of broadcasting Z8 (0 KR reviews today)")
+            log("[dry-run] would hold the ENTIRE carousel and alert the private room instead "
+                "(0 KR reviews for Z8 today)")
         return
 
     if hold_z8:
         test_url = broadcast.BASE.format(sid=broadcast.TEST_ROOM["sid"], tok=broadcast.TEST_ROOM["token"])
+        preview = carousel.build_carousel_message(cards, header_imgs, today,
+                                                    card_id="badreview-carousel-held")
         alert = {
-            "text": (f"⚠️ Galaxy Z8 배드리뷰 자동발송 보류 — 오늘({today.isoformat()}) KR 리뷰 0건.\n"
+            "text": (f"⚠️ 배드리뷰 캐러셀 자동발송 전체 보류 — 오늘({today.isoformat()}) Z8 KR 리뷰 0건.\n"
                      f"KR 리뷰는 간혹 11시 이후 업로드되는 경우가 있어, 확인 후 수동 재발송이 필요합니다.\n"
-                     f"확인 후 재발송: python3 auto_broadcast.py --force --ignore-kr-gate\n"
-                     f"(또는 badreview-chat-broadcast 스킬로 --product glxz8 재발송)"),
-            "cardsV2": z8_card["cardsV2"],
+                     f"(카드 3개 전부 아래 미리보기로 확인 가능)\n"
+                     f"확인 후 재발송: python3 auto_broadcast.py --force --ignore-kr-gate"),
         }
-        log("ALERT (0 KR reviews, Z8 held): " + broadcast._post(test_url, alert))
+        log("ALERT (0 KR reviews, entire carousel held): " + broadcast._post(test_url, alert))
+        log("ALERT preview: " + broadcast._post(test_url, preview))
+        log(f"DONE {today.isoformat()}: carousel HELD ENTIRELY (0 KR reviews for Z8) — "
+            f"alert + preview posted to private room")
+        return
 
+    message = carousel.build_carousel_message(cards, header_imgs, today)
     for room in targets:
-        if not hold_z8:
-            log(f"[{room['name']}] Z8 : " + broadcast._post(broadcast.room_url(room, "glxz8"), z8_card))
-            time.sleep(1.0)
-        log(f"[{room['name']}] IP18 : " + broadcast._post(broadcast.room_url(room, "iphone18"), ip18_card))
-        time.sleep(1.0)
-        log(f"[{room['name']}] PX : " + broadcast._post(broadcast.room_url(room, "pixel11"), px_card))
+        url = broadcast.BASE.format(sid=room["sid"], tok=room["token"])
+        log(f"[{room['name']}] carousel : " + broadcast._post(url, message))
         time.sleep(1.0)
 
-    if hold_z8:
-        log(f"DONE {today.isoformat()}: PX + IP18 sent to {len(targets)} rooms; "
-            f"Z8 HELD (0 KR reviews) — alert posted to private room")
-    else:
-        log(f"DONE {today.isoformat()}: sent to {len(targets)} {'test' if a.test_only else ''} room(s)")
+    log(f"DONE {today.isoformat()}: sent to {len(targets)} {'test' if a.test_only else ''} room(s)")
 
 
 if __name__ == "__main__":

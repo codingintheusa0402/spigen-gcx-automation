@@ -3,10 +3,17 @@
 Sends the Pixel 11 + Galaxy Z8 + iPhone 18 (added 2026-09-21) 배드리뷰(1~3점) cards to
 all 12 GCX rooms **every weekday at 10:30 AM KST**, skipping Korean public holidays
 automatically — **no test-send, no confirmation prompt.** Added 2026-09-15 per
-explicit user request. iPhone 18 reuses each room's `glxz8` webhook token (no KR-gate
-— that check is Z8-only). This is a *separate*
+explicit user request. This is a *separate*
 path from the interactive `badreview-chat-broadcast` skill, which still requires a
 test-send + explicit "yes" on every manual run — that hard rule is untouched.
+
+**Combined carousel format (2026-09-21, default):** all 3 products go out as **ONE
+message per room** — a swipeable Cards v2 carousel, pages iPhone 18 → Galaxy Z8 →
+Pixel 11 — via each room's default `token` webhook, built by `carousel.py` in
+`badreview-chat-broadcast/` (shared with the interactive skill). Replaces the old
+3-separate-messages-per-room format. Because it's now one message, the Z8 KR-gate
+(below) holds back the **entire carousel**, not just Z8, when it trips — there's no
+way to omit a single page from an already-sent message.
 
 ## Files
 
@@ -45,23 +52,23 @@ test-send + explicit "yes" on every manual run — that hard rule is untouched.
    skill uses, since there's no Chrome session in an unattended launchd run), computes
    the same `{todayCount, todayTags, recentAvg, film, case}` shape as the interactive
    flow (including the `recentAvg` trailing-7-day baseline for significance
-   highlighting), then **imports** (doesn't duplicate) `report.py` from both
-   `~/.claude/skills/{pixel11,glxz8}-badreview-chat-report/` for card-building and
+   highlighting), then **imports** (doesn't duplicate) `report.py` from all three
+   `~/.claude/skills/{pixel11,glxz8,iphone18}-badreview-chat-report/` for card-building,
    `broadcast.py` from `~/.claude/skills/badreview-chat-broadcast/` for the room list
-   + POST helper. Any card-layout or room-list change made to those files takes effect
-   here automatically — nothing to keep in sync manually.
-4. **Z8-only KR gate** (2026-09-18): checks whether any of today's Z8 rows have
-   `국가(tag)` == `KR` — Z8's single largest country segment, unlike Pixel 11 which has
-   none. KR reviews occasionally upload after 11 AM (past this 10:30 run), so 0 KR rows
-   is treated as "maybe still incomplete," not a real zero day. If so, the script
-   **does not** broadcast Z8 to the 12 rooms — it posts an alert (with the built Z8
-   card attached, so you can preview it) to the **private test room only**, and Pixel
-   11 still sends normally to all 12. Resend Z8 once you've confirmed it's a real zero
-   day, or once KR reviews land, with:
+   + POST helper, and `carousel.py` (same directory) to assemble the 3 cards into one
+   combined swipeable message. Any card-layout, room-list, or carousel-layout change
+   made to those files takes effect here automatically — nothing to keep in sync
+   manually.
+4. **Z8-only KR gate** (2026-09-18, updated 2026-09-21 for the combined carousel):
+   checks whether any of today's Z8 rows have `국가(tag)` == `KR` — Z8's single
+   largest country segment, unlike Pixel 11 which has none. KR reviews occasionally
+   upload after 11 AM (past this 10:30 run), so 0 KR rows is treated as "maybe still
+   incomplete," not a real zero day. If so, the script **does not** broadcast the
+   carousel to the 12 rooms at all (Pixel 11 and iPhone 18 no longer send separately
+   either, since it's one message now) — it posts an alert plus a full carousel
+   preview to the **private test room only**. Resend once you've confirmed it's a
+   real zero day, or once KR reviews land, with:
    ```bash
-   python3 ~/.claude/skills/badreview-chat-broadcast/broadcast.py --all --product glxz8 \
-     --z8-data '<fresh JSON>'          # normal interactive path (test-first, confirm)
-   # or, to force this script past the gate on a rerun:
    python3 auto_broadcast.py --force --ignore-kr-gate
    ```
    ⚠️ `--force` only bypasses the weekday/holiday skip — it does **not** hold back
@@ -73,7 +80,7 @@ test-send + explicit "yes" on every manual run — that hard rule is untouched.
 
 **Rule (2026-09-21, permanent): when testing anything in this script, always pass
 `--test-only` — never a bare run, and never `--force` alone with a fake `--date`.**
-`--test-only` sends BOTH cards to the private test room only (space `AAQAc9NQmJQ`) and
+`--test-only` sends the combined carousel to the private test room only (space `AAQAc9NQmJQ`) and
 never touches `broadcast.ROOMS`, no matter what `--date` is given — it implies
 `--force` (a test send shouldn't also get skipped by the weekday/holiday check) and
 disables the KR-gate hold (nothing to hold back when it's already private). This is
