@@ -20,12 +20,16 @@ N (총 N건) = count of `1-3점` rows whose `Update 날짜` resolves to today (K
 Both cards are padded to the same line counts so they render the same height.
 
 USAGE
-  # always test first — posts both cards to the TEST room only
+  # always test first — posts both cards to the TEST room only, never the
+  # public team rooms
   python3 badreview_chat_report.py --test
 
-  # then, only after a human says yes, broadcast to every team room
-  python3 badreview_chat_report.py --broadcast --yes
-  python3 badreview_chat_report.py --broadcast --yes --only "ADS1,JP Sales"
+  # then, only after a human says yes, broadcast to every team room. This
+  # needs TWO deliberate confirmations — the --yes flag AND the env var
+  # below — so a single flag or a copy-pasted command can never fan out to
+  # the public rooms by accident.
+  BADREVIEW_BROADCAST_CONFIRMED=1 python3 badreview_chat_report.py --broadcast --yes
+  BADREVIEW_BROADCAST_CONFIRMED=1 python3 badreview_chat_report.py --broadcast --yes --only "ADS1,JP Sales"
 
   # other flags
   --date 2026-09-02     # override "today"
@@ -122,6 +126,11 @@ KOR_WD = ["월", "화", "수", "목", "금", "토", "일"]
 # Z8 card goes through `token` too.
 TEST_ROOM = {"name": "TEST", "sid": "AAQAc9NQmJQ",
              "token": "Nvngg3UoVU-M7TqqlC48NxP-SXRzXj9zWrIoqd4BJdo"}
+
+# Second, deliberate confirmation required for --broadcast (on top of --yes) so
+# a fan-out to every public team room can never be triggered by a single flag
+# or a copy-pasted command. See main().
+BROADCAST_ENV_GATE = "BADREVIEW_BROADCAST_CONFIRMED"
 
 ROOMS = [
     {"name": "GCX전략 x SDA (아마존직판)", "sid": "AAAAe96DDIs",
@@ -365,6 +374,13 @@ def main() -> None:
 
     if args.broadcast and not args.yes:
         ap.error("--broadcast requires --yes (test with --test first and get a human ok)")
+    if args.broadcast and os.environ.get(BROADCAST_ENV_GATE) != "1":
+        ap.error(
+            f"--broadcast also requires {BROADCAST_ENV_GATE}=1 in the environment — "
+            "a second, deliberate confirmation so a fan-out to the public team rooms "
+            "can never happen from a single flag or a copy-pasted command. Run:\n"
+            f"  {BROADCAST_ENV_GATE}=1 python3 {sys.argv[0]} --broadcast --yes"
+        )
 
     today = datetime.date.fromisoformat(args.date) if args.date else datetime.date.today()
     keys = [args.product] if args.product else list(PRODUCTS)

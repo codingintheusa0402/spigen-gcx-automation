@@ -67,14 +67,18 @@ incoming-webhook tokens, not account credentials.
 ## Usage
 
 ```bash
-# 1. always test first — posts BOTH cards to the TEST room only
+# 1. always test first — posts BOTH cards to the TEST room only, never the
+#    public team rooms
 python3 badreview_chat_report.py --test
 
-# 2. eyeball the test messages, get a human "yes", THEN broadcast
-python3 badreview_chat_report.py --broadcast --yes
+# 2. eyeball the test messages, get a human "yes", THEN broadcast. This needs
+#    TWO deliberate confirmations — the --yes flag AND the env var below — so
+#    a single flag or a copy-pasted command can never fan out to the public
+#    rooms by accident.
+BADREVIEW_BROADCAST_CONFIRMED=1 python3 badreview_chat_report.py --broadcast --yes
 
 # subset of rooms / one product / a past date
-python3 badreview_chat_report.py --broadcast --yes --only "ADS1,JP Sales"
+BADREVIEW_BROADCAST_CONFIRMED=1 python3 badreview_chat_report.py --broadcast --yes --only "ADS1,JP Sales"
 python3 badreview_chat_report.py --test --product glxz8
 python3 badreview_chat_report.py --test --date 2026-09-02
 
@@ -82,9 +86,10 @@ python3 badreview_chat_report.py --test --date 2026-09-02
 python3 badreview_chat_report.py --dry-run --print-data
 ```
 
-`--broadcast` refuses to run without `--yes`. Each room receives **2 messages**
-(Z8 then Pixel 11), one second apart — 12 rooms = 24 messages. Webhook messages
-cannot be edited or deleted afterwards.
+`--broadcast` refuses to run without **both** `--yes` and
+`BADREVIEW_BROADCAST_CONFIRMED=1` in the environment. Each room receives
+**2 messages** (Z8 then Pixel 11), one second apart — 12 rooms = 24 messages.
+Webhook messages cannot be edited or deleted afterwards.
 
 ## Requirements
 
@@ -106,6 +111,7 @@ duplicated from `badreview_chat_report.py`; keep them in sync.
 1. Re-read the sheets every run (never reuse stale numbers).
 2. `--test` → TEST room only.
 3. Show the result + the room list, get an explicit human confirmation.
-4. `--broadcast --yes` → all rooms.
+4. `--broadcast --yes` with `BADREVIEW_BROADCAST_CONFIRMED=1` set → all rooms.
+   Missing either one refuses to run.
 5. If a product's `todayCount` is 0 the card still sends ("업로드된 배드리뷰 없음"); the
    script prints a warning first.
