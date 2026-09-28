@@ -50,6 +50,7 @@ spigen-gcx-automation/
 │   ├── BadReview_ChatReport/            # Pixel 11 / Galaxy Z8 배드리뷰(1~3점) daily Chat app-card + team broadcast
 │   ├── TicketReporterCard/              # Interactive Chat app — TCK report → internal note/thread-reply workflow
 │   └── CaspiSalesBackfill/              # Weekday 판매량(EU) backfill for iPhone18/Pixel11/GlxZ8 sheets from Caspi
+│   └── DiscolorationReport/             # Mon/Fri 10AM 이염/변색 claim+bad-review Chat report from Caspi
 │
 ├── GAS_Zendesk/                         # GAS — Zendesk / CS ticketing operations
 │   ├── ABM_TicketMerge/                 # Merges duplicate Amazon Buyer Message tickets + inbound cleanup
@@ -119,6 +120,7 @@ spigen-gcx-automation/
 | [GAS_Operations/BadReview_ChatReport](GAS_Operations/BadReview_ChatReport/) | Standalone Python: builds the Pixel 11 / Galaxy Z8 배드리뷰(1~3점) Google Chat app-card from each `1-3점` sheet (today's count + Top 5 인입사유 by 대분류) and fans it out to the GCX cross-team rooms — `--test` room first, then `--broadcast --yes`. Reads Sheets via the gws_shim OAuth token. Twin of the `*-badreview-chat-report` Claude skills. | [README](GAS_Operations/BadReview_ChatReport/README.md) |
 | [GAS_Operations/TicketReporterCard](GAS_Operations/TicketReporterCard/) | Interactive Google Chat app companion to the `ticket-reporter` Claude skill — renders a TCK report as a card with a canned-phrase dropdown + submit button that files a Zendesk internal note; resolves plain thread-replies back to their ticket via a Sheet-based thread↔ticket map (works around `chat.bot` not being a consentable OAuth scope); `/revision <feedback>` channel feeds writing-rule updates back to the Claude session. | [README](GAS_Operations/TicketReporterCard/README.md) |
 | [GAS_Operations/CaspiSalesBackfill](GAS_Operations/CaspiSalesBackfill/) | Weekday launchd job (with catch-up if the Mac was off) that fills 판매량(EU) on the iPhone18/Pixel11/GlxZ8 `1-5점` sheets from a fixed launch-date baseline via Caspi's headless registered-query API — no Claude session needed at run time. | [README](GAS_Operations/CaspiSalesBackfill/README.md) |
+| [GAS_Operations/DiscolorationReport](GAS_Operations/DiscolorationReport/) | Mon/Fri 10:00 launchd job (with catch-up) that posts new 이염/변색 Zendesk claims + Amazon bad reviews (Caspi registered queries, reviews classified by local `claude -p`) to Google Chat, grouped by SKU with 90-day cumulative / SIREN flag. | [README](GAS_Operations/DiscolorationReport/README.md) |
 
 ### Google Apps Script — Zendesk / CS ticketing operations
 
