@@ -13,3 +13,4 @@ GAS_ReviewAutomation/Apify/apify-amazon-dp-scraper/
 # IDE settings
 .idea/
 GAS_Operations/BadReview_ChatReport/logs/
+GAS_Operations/DiscolorationReport/logs/
