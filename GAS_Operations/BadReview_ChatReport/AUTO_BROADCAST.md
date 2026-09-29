@@ -1,7 +1,7 @@
 # Auto-broadcast (unattended weekday schedule)
 
 Sends the Pixel 11 + Galaxy Z8 + iPhone 18 (added 2026-09-21) 배드리뷰(1~3점) cards to
-all 12 GCX rooms **every weekday at 10:30 AM KST**, skipping Korean public holidays
+all 13 GCX rooms (GCX전략 Spigen x TCK added 2026-09-29) **every weekday at 10:30 AM KST**, skipping Korean public holidays
 automatically — **no test-send, no confirmation prompt.** Added 2026-09-15 per
 explicit user request. This is a *separate*
 path from the interactive `badreview-chat-broadcast` skill, which still requires a
@@ -64,7 +64,7 @@ way to omit a single page from an already-sent message.
    largest country segment, unlike Pixel 11 which has none. KR reviews occasionally
    upload after 11 AM (past this 10:30 run), so 0 KR rows is treated as "maybe still
    incomplete," not a real zero day. If so, the script **does not** broadcast the
-   carousel to the 12 rooms at all (Pixel 11 and iPhone 18 no longer send separately
+   carousel to the 13 rooms at all (Pixel 11 and iPhone 18 no longer send separately
    either, since it's one message now) — it posts an alert plus a full carousel
    preview to the **private test room only**. Resend once you've confirmed it's a
    real zero day, or once KR reviews land, with:
@@ -91,8 +91,8 @@ without `--test-only`, which leaked a live card to all 12 rooms.
 python3 auto_broadcast.py --test-only --dry-run --date 2026-09-27   # inspect first
 python3 auto_broadcast.py --test-only --date 2026-09-27             # then actually send, still private-only
 ```
-5. Posts Z8 (unless held by the KR gate) then PX to all 12 rooms (same order/pacing as
-   the interactive `--all`), logs each result.
+5. Posts the combined carousel (unless held entirely by the KR gate) to all 13 rooms,
+   1s apart, logs each result.
 
 ## Manual controls
 
