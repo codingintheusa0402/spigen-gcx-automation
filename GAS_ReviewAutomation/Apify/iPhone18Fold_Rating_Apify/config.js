@@ -12,7 +12,8 @@ const SHEETS = [
 /* ===== APIFY TASK ===== */
 // "product-details-scraper-iphone18-fold" task (axesso_data/amazon-product-details-scraper
 // actor — same actor as SKUSales_Rating_Apify), pre-loaded with amazon.de URLs for every
-// ASIN across all sheets above. syncNewAsinsToApifyTask() (weekly trigger) keeps this
+// ASIN across all sheets above. syncNewAsinsToApifyTask() (run before every rating run,
+// plus the weekly trigger as a backstop) keeps this
 // URL list in sync as ASINs are added to any of the sheets.
 const TASK_ID = 'CLQ3G6Sokyr7AJtQi';
 

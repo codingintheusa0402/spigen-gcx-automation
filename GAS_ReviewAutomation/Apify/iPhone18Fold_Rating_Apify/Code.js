@@ -58,6 +58,15 @@ function _startRatingRun_() {
   const ss = SpreadsheetApp.getActive();
   const token = _getToken();
 
+  // Pull in any ASINs added to the sheets since the last sync so they're
+  // scraped in this same run, not only after the weekly sync trigger fires.
+  // A sync failure must not block the refresh of already-covered ASINs.
+  try {
+    syncNewAsinsToApifyTask();
+  } catch (e) {
+    Logger.log('ASIN sync before run failed (continuing with existing task URLs): ' + e);
+  }
+
   const url = `https://api.apify.com/v2/actor-tasks/${encodeURIComponent(TASK_ID)}/runs?token=${encodeURIComponent(token)}`;
   Logger.log('Starting rating run (async): ' + url.replace(/token=[^&]+/, 'token=***'));
 
