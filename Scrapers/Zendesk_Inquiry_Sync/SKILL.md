@@ -64,6 +64,10 @@ Logs: `~/Library/Logs/zendesk-inquiry-sync/sync.log` (Windows: `%LOCALAPPDATA%\z
 date) is ≤ yesterday (KST); tickets created today wait for tomorrow's run. Still Solved/Closed
 only and deduped by Ticket ID, so older tickets that get solved later are picked up too.
 
+**Google Chat notice (optional):** `sync.py setup --chat-webhook <incoming webhook URL>`
+(stored only in `credentials.json`). Scheduled runs then post "Zendesk Raw Data 업데이트 완료"
+with the appended count/rows; a failed scheduled run posts one "업데이트 실패" notice per day.
+
 **Windows:** `python` instead of `python3`; `schedule` registers a Task Scheduler task
 ("Spigen GCX Zendesk Inquiry Sync", every 30 min via `pythonw`, self-gated like launchd).
 `install.sh`'s symlink needs admin on Windows — copy SKILL.md to

@@ -9,7 +9,9 @@ Subcommands:
   run [--dry-run] [--solved-only] [--until-yesterday] [--scheduled]   fetch + append (scheduled = self-gated by schedule)
       --until-yesterday: only tickets created up to yesterday (Ticket created - Date ≤ yesterday KST);
                          today's tickets wait for tomorrow's run. Dedupe makes it cumulative.
-  setup --caspi-key K --query-id Q [--client-secret F]   store per-user credentials
+  setup --caspi-key K --query-id Q [--client-secret F] [--chat-webhook URL]   store per-user credentials
+      --chat-webhook: Google Chat incoming webhook; scheduled runs post "Zendesk Raw Data 업데이트 완료"
+                      (or a failure notice, once per day)
   schedule --days mon,thu --time 09:00 [--until-yesterday]   install/update the launchd job (Windows: Task Scheduler)
   unschedule                      remove the launchd job (Windows: Task Scheduler task)
   status                          show config, schedule, last run
@@ -261,6 +263,22 @@ def append_rows(svc, props, rows):
     return first_new, end
 
 
+# ---------------------------------------------------------------- Google Chat notify
+
+def notify(text):
+    """Post to the Google Chat webhook from credentials.json (optional; never fails the run)."""
+    url = (load_json(CREDS_PATH, {}) or {}).get("chat_webhook")
+    if not url:
+        return
+    req = urllib.request.Request(url, data=json.dumps({"text": text}).encode(), method="POST",
+                                 headers={"Content-Type": "application/json; charset=UTF-8"})
+    try:
+        urllib.request.urlopen(req, timeout=30).read()
+        log("Google Chat notified")
+    except Exception as e:
+        log(f"Google Chat notify failed: {e}")
+
+
 # ---------------------------------------------------------------- commands
 
 def cmd_run(args):
@@ -311,13 +329,21 @@ def cmd_run(args):
             log("  would append:", r[:8])
         return log("dry run — nothing written")
 
+    msg = ["Zendesk Raw Data 업데이트 완료"]
     if rows:
         first, end = append_rows(svc, props, rows)
         log(f"appended rows {first}–{end} (Ticket IDs {rows[0][0]}…{rows[-1][0]})")
+        msg.append(f"• 신규 {len(rows)}건 추가 ('{props['title']}' {first}–{end}행)")
+    else:
+        msg.append("• 신규 티켓 없음")
+    if created_max:
+        msg.append(f"• 기준: Ticket created ≤ {created_max}")
     state.update({"last_run": now.isoformat(timespec="seconds"), "last_appended": len(rows)})
     if args.scheduled:
         state["last_scheduled_run"] = now.strftime("%Y-%m-%d")
     save_json(STATE_PATH, state)
+    if args.scheduled:
+        notify("\n".join(msg))
 
 
 def cmd_setup(args):
@@ -325,6 +351,8 @@ def cmd_setup(args):
     creds = load_json(CREDS_PATH, {})
     creds["caspi_api_key"] = args.caspi_key or creds.get("caspi_api_key") or input("Caspi API key (ak_…): ").strip()
     creds["caspi_query_id"] = args.query_id or creds.get("caspi_query_id") or input("Caspi queryId (pq_…): ").strip()
+    if args.chat_webhook:
+        creds["chat_webhook"] = args.chat_webhook
     save_json(CREDS_PATH, creds)
     log(f"Caspi credentials saved → {CREDS_PATH}")
 
@@ -438,6 +466,7 @@ def main():
     r.add_argument("--until-yesterday", action="store_true", help="only tickets created up to yesterday")
     s = sub.add_parser("setup")
     s.add_argument("--caspi-key"); s.add_argument("--query-id"); s.add_argument("--client-secret")
+    s.add_argument("--chat-webhook", help="Google Chat incoming webhook URL for run notifications")
     sc = sub.add_parser("schedule")
     sc.add_argument("--days", required=True, help="e.g. mon,thu | weekdays | daily")
     sc.add_argument("--time", required=True, help="HH:MM, KST")
@@ -448,8 +477,18 @@ def main():
         # pythonw has no console: send output to the log file (launchd does this on macOS)
         os.makedirs(LOG_DIR, exist_ok=True)
         sys.stdout = sys.stderr = open(os.path.join(LOG_DIR, "sync.log"), "a", encoding="utf-8")
-    {"run": cmd_run, "setup": cmd_setup, "schedule": cmd_schedule,
-     "unschedule": cmd_unschedule, "status": cmd_status}[a.cmd](a)
+    try:
+        {"run": cmd_run, "setup": cmd_setup, "schedule": cmd_schedule,
+         "unschedule": cmd_unschedule, "status": cmd_status}[a.cmd](a)
+    except (Exception, SystemExit) as e:
+        if a.cmd == "run" and a.scheduled and not (isinstance(e, SystemExit) and e.code in (None, 0)):
+            # the job retries every 30 min until it succeeds — notify only once per day
+            state, today = load_json(STATE_PATH, {}), datetime.datetime.now(KST).strftime("%Y-%m-%d")
+            if state.get("last_fail_notified") != today:
+                notify(f"⚠️ Zendesk Raw Data 업데이트 실패\n{str(e)[:300]}\n(30분마다 자동 재시도 · 로그: {LOG_DIR})")
+                state["last_fail_notified"] = today
+                save_json(STATE_PATH, state)
+        raise
 
 
 if __name__ == "__main__":
