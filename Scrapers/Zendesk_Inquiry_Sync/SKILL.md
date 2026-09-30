@@ -19,8 +19,10 @@ metadata:
 
 Keeps `26년 전체문의` (gid `483971768`) in spreadsheet
 `1sjcCj_P4DRD8rywkmYJhbsrzwFfgiJQuF9nIKwCiKlc` up to date with Solved Zendesk
-tickets. Code: `sync.py` next to this file (plain Python 3; Caspi data-api over
-HTTPS + Google Sheets API v4). Runs locally — the scheduled job is a macOS
+tickets. Code: `sync.py` in the same folder as this SKILL.md (plain Python 3; Caspi
+data-api over HTTPS + Google Sheets API v4). The skill is installed as a symlink, so
+find the folder with `dirname "$(readlink ~/.claude/skills/zendesk-inquiry-sync/SKILL.md)"`
+— it lives wherever the user cloned the repo (`<clone>/Scrapers/Zendesk_Inquiry_Sync`). Runs locally — the scheduled job is a macOS
 launchd agent, so no Claude session is needed once it's set up.
 
 ## What gets appended (the rules)
@@ -44,7 +46,7 @@ created 00:00–08:59 KST.
 ## Commands
 
 ```bash
-S=~/Desktop/GCX/Scrapers/Zendesk_Inquiry_Sync/sync.py   # or wherever the repo is cloned
+S="$(dirname "$(readlink ~/.claude/skills/zendesk-inquiry-sync/SKILL.md)")/sync.py"
 python3 $S status                     # creds / schedule / launchd / last run
 python3 $S run --dry-run              # show what would be appended, write nothing
 python3 $S run                        # append now
@@ -57,6 +59,11 @@ A full run takes ~2–3 min (≈28k rows paged from Caspi; 429s are retried).
 Logs: `~/Library/Logs/zendesk-inquiry-sync/sync.log`.
 
 ## How to handle requests
+
+**Every invocation starts with `python3 $S status`.** If credentials are MISSING
+or `schedule: none`, this is a first use on this machine → walk the user through
+"Setup for a new user" below, which ends by asking for their schedule. Never
+pick days/time for them.
 
 **"Run it now"** → `run --dry-run` first, report the count + a few sample
 Ticket IDs, then `run`. Report the appended row range and ID range.
@@ -74,8 +81,15 @@ Mac that was asleep at that time catches up on wake the same day.
 
 Secrets live only in `~/.config/zendesk_inquiry_sync/` (chmod 600) — never in the repo.
 
-1. `bash <repo>/Scrapers/Zendesk_Inquiry_Sync/install.sh` — symlinks this skill
-   into `~/.claude/skills/` and installs the Python deps.
+1. Clone the team repo (needs access to the `spigenHQ` GitHub org) and install:
+   ```bash
+   git clone git@github.com:spigenHQ/HQ_GCX.git ~/HQ_GCX   # any location works
+   bash ~/HQ_GCX/Scrapers/Zendesk_Inquiry_Sync/install.sh
+   ```
+   `install.sh` symlinks this skill into `~/.claude/skills/` and installs the
+   Python deps. Then in Claude Code: "set up zendesk inquiry sync".
+   (macOS: if the clone is under ~/Desktop or ~/Documents, launchd may need
+   Full Disk Access for python3 — cloning to ~/HQ_GCX avoids that.)
 2. **Caspi (Zendesk data).** Needs a Spigen Claude account with the Caspi
    connector and Zendesk-table access. Using the Caspi `data_api` tool:
    - `action: register`, `name: "26년 전체문의 sync"`, `params: ["min_ticket_id"]`,
@@ -91,7 +105,14 @@ Secrets live only in `~/.config/zendesk_inquiry_sync/` (chmod 600) — never in 
    repo owner (never commit it) and run
    `python3 sync.py setup --client-secret /path/client.json` (browser consent
    with your @spigen.com account; you need edit access to the spreadsheet).
-4. `python3 sync.py run --dry-run` to verify, then ask for the schedule (above).
+4. `python3 sync.py run --dry-run` to verify; show the count + sample Ticket IDs.
+5. **Ask the user** (AskUserQuestion) which weekdays / how many times per week and
+   what time (KST) — note Caspi loads Zendesk around 07:00–08:00 KST, so earlier
+   runs see yesterday's data — then `schedule --days … --time …` and `status`.
+6. Ask whether to append the dry-run rows now (`run`) or let the first scheduled
+   run do it. Several teammates may schedule this at once — that's safe: every run
+   re-reads col A right before writing, so a ticket is never appended twice
+   (only two runs in the exact same ~20 s write window could race).
 
 ## If something breaks
 
