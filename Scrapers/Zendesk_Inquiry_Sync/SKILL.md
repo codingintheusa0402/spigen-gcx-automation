@@ -17,7 +17,7 @@ metadata:
 
 # zendesk-inquiry-sync
 
-Keeps `26년 전체문의` (gid `483971768`) in spreadsheet
+Keeps `26년 전체문의` (gid `1597176315`, re-created 2026-09-30) in spreadsheet
 `1sjcCj_P4DRD8rywkmYJhbsrzwFfgiJQuF9nIKwCiKlc` up to date with Solved Zendesk
 tickets. Code: `sync.py` in the same folder as this SKILL.md (plain Python 3; Caspi
 data-api over HTTPS + Google Sheets API v4). The skill is installed as a symlink, so
@@ -50,13 +50,24 @@ S="$(dirname "$(readlink ~/.claude/skills/zendesk-inquiry-sync/SKILL.md)")/sync.
 python3 $S status                     # creds / schedule / launchd / last run
 python3 $S run --dry-run              # show what would be appended, write nothing
 python3 $S run                        # append now
+python3 $S run --until-yesterday      # only tickets created up to yesterday (today's wait)
+python3 $S schedule --days daily --time 09:00 --until-yesterday   # daily, created ≤ yesterday
 python3 $S schedule --days mon,thu --time 09:00   # (re)install launchd job, KST
 python3 $S schedule --days weekdays --time 08:30  # also: daily
 python3 $S unschedule
 ```
 
 A full run takes ~2–3 min (≈28k rows paged from Caspi; 429s are retried).
-Logs: `~/Library/Logs/zendesk-inquiry-sync/sync.log`.
+Logs: `~/Library/Logs/zendesk-inquiry-sync/sync.log` (Windows: `%LOCALAPPDATA%\zendesk-inquiry-sync\Logs\sync.log`).
+
+**`--until-yesterday` mode** only appends tickets whose `Ticket created - Date` (Caspi UTC
+date) is ≤ yesterday (KST); tickets created today wait for tomorrow's run. Still Solved/Closed
+only and deduped by Ticket ID, so older tickets that get solved later are picked up too.
+
+**Windows:** `python` instead of `python3`; `schedule` registers a Task Scheduler task
+("Spigen GCX Zendesk Inquiry Sync", every 30 min via `pythonw`, self-gated like launchd).
+`install.sh`'s symlink needs admin on Windows — copy SKILL.md to
+`~/.claude/skills/zendesk-inquiry-sync/` instead (re-copy after `git pull`).
 
 ## How to handle requests
 

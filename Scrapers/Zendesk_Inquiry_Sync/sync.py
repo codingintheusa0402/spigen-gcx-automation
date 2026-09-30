@@ -6,13 +6,20 @@ KST, 3 GCX channels, that are not yet in the sheet (dedupe by Ticket ID in col A
 AE~ are extended by copying the last existing row's formulas down.
 
 Subcommands:
-  run [--dry-run] [--solved-only] [--scheduled]   fetch + append (scheduled = self-gated by schedule)
+  run [--dry-run] [--solved-only] [--until-yesterday] [--scheduled]   fetch + append (scheduled = self-gated by schedule)
+      --until-yesterday: only tickets created up to yesterday (Ticket created - Date ≤ yesterday KST);
+                         today's tickets wait for tomorrow's run. Dedupe makes it cumulative.
   setup --caspi-key K --query-id Q [--client-secret F]   store per-user credentials
-  schedule --days mon,thu --time 09:00    install/update the launchd job
-  unschedule                      remove the launchd job
+  schedule --days mon,thu --time 09:00 [--until-yesterday]   install/update the launchd job (Windows: Task Scheduler)
+  unschedule                      remove the launchd job (Windows: Task Scheduler task)
   status                          show config, schedule, last run
 """
-import argparse, datetime, fcntl, json, os, subprocess, sys, time
+import argparse, datetime, json, os, subprocess, sys, time
+IS_WIN = sys.platform == "win32"
+if IS_WIN:
+    import msvcrt
+else:
+    import fcntl
 from xml.sax.saxutils import escape
 import urllib.error, urllib.request
 
@@ -24,12 +31,15 @@ GWS_SHIM_TOKEN = os.path.expanduser("~/.config/gws_shim/token.json")  # fallback
 SCHED_PATH = os.path.join(CFG_DIR, "schedule.json")
 STATE_PATH = os.path.join(CFG_DIR, "state.json")
 LOCK_PATH = os.path.join(CFG_DIR, "run.lock")
-LOG_DIR = os.path.expanduser("~/Library/Logs/zendesk-inquiry-sync")
+LOG_DIR = (os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "zendesk-inquiry-sync", "Logs")
+           if IS_WIN else os.path.expanduser("~/Library/Logs/zendesk-inquiry-sync"))
 LABEL = "com.spigen.gcx.zendesk-inquiry-sync"
 PLIST = os.path.expanduser(f"~/Library/LaunchAgents/{LABEL}.plist")
+WIN_TASK = "Spigen GCX Zendesk Inquiry Sync"
 
 SPREADSHEET_ID = os.environ.get("ZIS_SPREADSHEET_ID", "1sjcCj_P4DRD8rywkmYJhbsrzwFfgiJQuF9nIKwCiKlc")  # env override = test copy
-SHEET_GID = 483971768                                        # '26년 전체문의'
+SHEET_GID = 1597176315                                       # '26년 전체문의'
+SHEET_TITLE = "26년 전체문의"                                  # fallback if the tab is re-created
 CASPI_ENDPOINT = "https://caspilm.spigen.com/api/data-api/run"
 # First ticket of 2026 (KST). Caspi's created_at is a UTC *date*, so the year boundary is
 # set by ticket ID (IDs are monotonic) instead of by date.
@@ -65,7 +75,7 @@ def log(*a):
 
 def load_json(path, default=None):
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
         return default
@@ -74,7 +84,7 @@ def load_json(path, default=None):
 def save_json(path, obj):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
-    with open(tmp, "w") as f:
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(obj, f, ensure_ascii=False, indent=2)
     os.replace(tmp, path)
     os.chmod(path, 0o600)
@@ -160,14 +170,16 @@ def build_row(r):
     return row
 
 
-def fetch_candidates(existing_ids, statuses):
+def fetch_candidates(existing_ids, statuses, created_max=None):
     key, qid = caspi_creds()
-    rows, stats = {}, {"seen": 0, "skipped_status": 0, "skipped_channel": 0,
+    rows, stats = {}, {"seen": 0, "skipped_status": 0, "skipped_created_today": 0, "skipped_channel": 0,
                        "skipped_no_agent_reply": 0, "already_in_sheet": 0}
     for r in caspi_fetch(key, qid):
         stats["seen"] += 1
         if r.get("STATUS") not in statuses:
             stats["skipped_status"] += 1; continue
+        if created_max and (r.get("CREATED") or "9999") > created_max:
+            stats["skipped_created_today"] += 1; continue
         if str(r["TICKET_ID"]) in existing_ids:
             stats["already_in_sheet"] += 1; continue
         if r.get("CHANNEL") not in CHANNELS:
@@ -203,7 +215,12 @@ def sheet_props(svc):
     for s in meta["sheets"]:
         if s["properties"]["sheetId"] == SHEET_GID:
             return s["properties"]
-    sys.exit(f"Tab gid {SHEET_GID} not found in spreadsheet.")
+    # tab was re-created (new gid) → fall back to its name
+    for s in meta["sheets"]:
+        if s["properties"]["title"] == SHEET_TITLE:
+            log(f"tab gid {SHEET_GID} not found — using '{SHEET_TITLE}' (gid {s['properties']['sheetId']})")
+            return s["properties"]
+    sys.exit(f"Tab gid {SHEET_GID} / '{SHEET_TITLE}' not found in spreadsheet.")
 
 
 def append_rows(svc, props, rows):
@@ -254,6 +271,7 @@ def cmd_run(args):
         sched = load_json(SCHED_PATH)
         if not sched:
             return log("no schedule configured — skip")
+        args.until_yesterday = args.until_yesterday or sched.get("mode") == "until_yesterday"
         today = now.strftime("%Y-%m-%d")
         if DAYS[now.weekday()] not in sched["days"] or now.strftime("%H:%M") < sched["time"]:
             return
@@ -262,8 +280,11 @@ def cmd_run(args):
 
     lock = open(LOCK_PATH, "w")
     try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
+        if IS_WIN:
+            msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (BlockingIOError, OSError):
         return log("another run is in progress — skip")
 
     svc = sheets_service()
@@ -279,7 +300,10 @@ def cmd_run(args):
     log(f"sheet '{props['title']}': {len(existing)} existing Ticket IDs")
 
     statuses = {"solved"} if args.solved_only else STATUSES
-    rows, stats = fetch_candidates(existing, statuses)
+    created_max = (now.date() - datetime.timedelta(days=1)).isoformat() if args.until_yesterday else None
+    if created_max:
+        log(f"created date filter: ≤ {created_max}")
+    rows, stats = fetch_candidates(existing, statuses, created_max)
     log(f"stats: {stats} → {len(rows)} new {'/'.join(sorted(statuses))} tickets to append")
 
     if args.dry_run:
@@ -328,9 +352,12 @@ def cmd_schedule(args):
         sys.exit(f"--days must be comma-separated from {DAYS} (or daily / weekdays); got {bad or args.days}")
     hh, mm = args.time.split(":")
     t = f"{int(hh):02d}:{int(mm):02d}"
-    save_json(SCHED_PATH, {"days": days, "time": t, "timezone": "Asia/Seoul"})
+    save_json(SCHED_PATH, {"days": days, "time": t, "timezone": "Asia/Seoul",
+                           "mode": "until_yesterday" if args.until_yesterday else "all"})
 
     os.makedirs(LOG_DIR, exist_ok=True)
+    if IS_WIN:
+        return schedule_windows(days, t)
     args_xml = "".join(f"<string>{escape(a)}</string>" for a in
                        [sys.executable, os.path.realpath(__file__), "run", "--scheduled"])
     # StartInterval 1800: tick every 30 min; `run --scheduled` self-gates on days/time and
@@ -356,7 +383,25 @@ def cmd_schedule(args):
     log(f"scheduled: {', '.join(days)} at {t} KST ({len(days)}x/week) → {PLIST}")
 
 
+def schedule_windows(days, t):
+    # Task Scheduler: tick every 30 min (like launchd StartInterval); `run --scheduled`
+    # self-gates on days/time, so a PC that was off/asleep catches up the same day.
+    # pythonw = no console window; output goes to LOG_DIR/sync.log (see main()).
+    pyw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+    exe = pyw if os.path.exists(pyw) else sys.executable
+    tr = f'"{exe}" "{os.path.realpath(__file__)}" run --scheduled'
+    subprocess.run(["schtasks", "/Delete", "/TN", WIN_TASK, "/F"], capture_output=True)
+    subprocess.run(["schtasks", "/Create", "/TN", WIN_TASK, "/TR", tr, "/SC", "MINUTE",
+                    "/MO", "30", "/F"], check=True, capture_output=True)
+    log(f"scheduled: {', '.join(days)} at {t} KST ({len(days)}x/week) → Task Scheduler '{WIN_TASK}'")
+
+
 def cmd_unschedule(args):
+    if IS_WIN:
+        subprocess.run(["schtasks", "/Delete", "/TN", WIN_TASK, "/F"], capture_output=True)
+        if os.path.exists(SCHED_PATH):
+            os.remove(SCHED_PATH)
+        return log("schedule removed")
     subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{LABEL}"], capture_output=True)
     if os.path.exists(PLIST):
         os.remove(PLIST)
@@ -369,8 +414,12 @@ def cmd_status(args):
     print("credentials :", "OK" if (load_json(CREDS_PATH) or {}).get("caspi_api_key") or os.environ.get("CASPI_API_KEY") else "MISSING", CREDS_PATH)
     print("google token:", "OK" if load_json(os.environ.get("GOOGLE_TOKEN_PATH") or GTOKEN_PATH) or load_json(GWS_SHIM_TOKEN) else "MISSING")
     print("schedule    :", load_json(SCHED_PATH) or "none")
-    loaded = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{LABEL}"], capture_output=True).returncode == 0
-    print("launchd     :", "loaded" if loaded else "not loaded")
+    if IS_WIN:
+        loaded = subprocess.run(["schtasks", "/Query", "/TN", WIN_TASK], capture_output=True).returncode == 0
+        print("task sched  :", "registered" if loaded else "not registered")
+    else:
+        loaded = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{LABEL}"], capture_output=True).returncode == 0
+        print("launchd     :", "loaded" if loaded else "not loaded")
     print("state       :", load_json(STATE_PATH, {}))
     print("logs        :", LOG_DIR)
 
@@ -381,13 +430,19 @@ def main():
     r = sub.add_parser("run")
     r.add_argument("--dry-run", action="store_true"); r.add_argument("--scheduled", action="store_true")
     r.add_argument("--solved-only", action="store_true", help="strict: exclude Closed tickets")
+    r.add_argument("--until-yesterday", action="store_true", help="only tickets created up to yesterday")
     s = sub.add_parser("setup")
     s.add_argument("--caspi-key"); s.add_argument("--query-id"); s.add_argument("--client-secret")
     sc = sub.add_parser("schedule")
     sc.add_argument("--days", required=True, help="e.g. mon,thu | weekdays | daily")
     sc.add_argument("--time", required=True, help="HH:MM, KST")
+    sc.add_argument("--until-yesterday", action="store_true", help="scheduled runs use `run --until-yesterday`")
     sub.add_parser("unschedule"); sub.add_parser("status")
     a = p.parse_args()
+    if IS_WIN and a.cmd == "run" and a.scheduled:
+        # pythonw has no console: send output to the log file (launchd does this on macOS)
+        os.makedirs(LOG_DIR, exist_ok=True)
+        sys.stdout = sys.stderr = open(os.path.join(LOG_DIR, "sync.log"), "a", encoding="utf-8")
     {"run": cmd_run, "setup": cmd_setup, "schedule": cmd_schedule,
      "unschedule": cmd_unschedule, "status": cmd_status}[a.cmd](a)
 
