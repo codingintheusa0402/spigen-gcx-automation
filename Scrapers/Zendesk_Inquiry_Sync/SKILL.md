@@ -69,7 +69,8 @@ only and deduped by Ticket ID, so older tickets that get solved later are picked
 with the appended count/rows; a failed scheduled run posts one "업데이트 실패" notice per day.
 
 **Windows:** `python` instead of `python3`; `schedule` registers a Task Scheduler task
-("Spigen GCX Zendesk Inquiry Sync", every 30 min via `pythonw`, self-gated like launchd).
+("Spigen GCX Zendesk Inquiry Sync", every 5 min via `pythonw`, self-gated like launchd, runs
+on battery, catches up after sleep) — a PC switched on after the scheduled time syncs within ~5 min.
 `install.sh`'s symlink needs admin on Windows — copy SKILL.md to
 `~/.claude/skills/zendesk-inquiry-sync/` instead (re-copy after `git pull`).
 

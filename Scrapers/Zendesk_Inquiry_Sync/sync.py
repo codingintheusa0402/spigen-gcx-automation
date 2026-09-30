@@ -38,6 +38,9 @@ LOG_DIR = (os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
 LABEL = "com.spigen.gcx.zendesk-inquiry-sync"
 PLIST = os.path.expanduser(f"~/Library/LaunchAgents/{LABEL}.plist")
 WIN_TASK = "Spigen GCX Zendesk Inquiry Sync"
+# how often the scheduled job wakes to check (launchd StartInterval 1800 / Task Scheduler 5 min,
+# so a PC switched on after the scheduled time catches up within minutes)
+TICK_MIN = 5 if IS_WIN else 30
 
 SPREADSHEET_ID = os.environ.get("ZIS_SPREADSHEET_ID", "1sjcCj_P4DRD8rywkmYJhbsrzwFfgiJQuF9nIKwCiKlc")  # env override = test copy
 SHEET_GID = 1597176315                                       # '26년 전체문의'
@@ -412,7 +415,7 @@ def cmd_schedule(args):
 
 
 def schedule_windows(days, t):
-    # Task Scheduler: tick every 30 min (like launchd StartInterval); `run --scheduled`
+    # Task Scheduler: tick every TICK_MIN min (like launchd StartInterval); `run --scheduled`
     # self-gates on days/time, so a PC that was off/asleep catches up the same day.
     # pythonw = no console window; output goes to LOG_DIR/sync.log (see main()).
     pyw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
@@ -420,7 +423,7 @@ def schedule_windows(days, t):
     tr = f'"{exe}" "{os.path.realpath(__file__)}" run --scheduled'
     subprocess.run(["schtasks", "/Delete", "/TN", WIN_TASK, "/F"], capture_output=True)
     subprocess.run(["schtasks", "/Create", "/TN", WIN_TASK, "/TR", tr, "/SC", "MINUTE",
-                    "/MO", "30", "/F"], check=True, capture_output=True)
+                    "/MO", str(TICK_MIN), "/F"], check=True, capture_output=True)
     # schtasks defaults skip runs on battery (laptops) and don't catch up missed triggers
     ps = (f"$s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries "
           f"-StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 1) -MultipleInstances IgnoreNew; "
@@ -482,10 +485,10 @@ def main():
          "unschedule": cmd_unschedule, "status": cmd_status}[a.cmd](a)
     except (Exception, SystemExit) as e:
         if a.cmd == "run" and a.scheduled and not (isinstance(e, SystemExit) and e.code in (None, 0)):
-            # the job retries every 30 min until it succeeds — notify only once per day
+            # the job retries every TICK_MIN min until it succeeds — notify only once per day
             state, today = load_json(STATE_PATH, {}), datetime.datetime.now(KST).strftime("%Y-%m-%d")
             if state.get("last_fail_notified") != today:
-                notify(f"⚠️ Zendesk Raw Data 업데이트 실패\n{str(e)[:300]}\n(30분마다 자동 재시도 · 로그: {LOG_DIR})")
+                notify(f"⚠️ Zendesk Raw Data 업데이트 실패\n{str(e)[:300]}\n({TICK_MIN}분마다 자동 재시도 · 로그: {LOG_DIR})")
                 state["last_fail_notified"] = today
                 save_json(STATE_PATH, state)
         raise
