@@ -268,6 +268,15 @@ def append_rows(svc, props, rows):
 
 # ---------------------------------------------------------------- Google Chat notify
 
+def kst_stamp(dt):
+    """10/1(수) 09:02"""
+    return f"{dt.month}/{dt.day}({'월화수목금토일'[dt.weekday()]}) {dt:%H:%M}"
+
+
+def sheet_url(props):
+    return f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit#gid={props['sheetId']}"
+
+
 def notify(text):
     """Post to the Google Chat webhook from credentials.json (optional; never fails the run)."""
     url = (load_json(CREDS_PATH, {}) or {}).get("chat_webhook")
@@ -332,15 +341,14 @@ def cmd_run(args):
             log("  would append:", r[:8])
         return log("dry run — nothing written")
 
-    msg = ["Zendesk Raw Data 업데이트 완료"]
     if rows:
         first, end = append_rows(svc, props, rows)
         log(f"appended rows {first}–{end} (Ticket IDs {rows[0][0]}…{rows[-1][0]})")
-        msg.append(f"• 신규 {len(rows)}건 추가 ('{props['title']}' {first}–{end}행)")
-    else:
-        msg.append("• 신규 티켓 없음")
-    if created_max:
-        msg.append(f"• 기준: Ticket created ≤ {created_max}")
+    scope = f" (~{int(created_max[5:7])}/{int(created_max[8:])} 생성분)" if created_max else ""
+    msg = ["*✅ Zendesk Raw Data 업데이트 완료*", "",
+           f"📅 {kst_stamp(now)}",
+           f"🎫 신규 티켓 {len(rows)}건{scope}" if rows else f"🎫 신규 티켓 없음{scope}",
+           f"📊 <{sheet_url(props)}|{props['title']} 바로가기>"]
     state.update({"last_run": now.isoformat(timespec="seconds"), "last_appended": len(rows)})
     if args.scheduled:
         state["last_scheduled_run"] = now.strftime("%Y-%m-%d")
@@ -488,7 +496,10 @@ def main():
             # the job retries every TICK_MIN min until it succeeds — notify only once per day
             state, today = load_json(STATE_PATH, {}), datetime.datetime.now(KST).strftime("%Y-%m-%d")
             if state.get("last_fail_notified") != today:
-                notify(f"⚠️ Zendesk Raw Data 업데이트 실패\n{str(e)[:300]}\n({TICK_MIN}분마다 자동 재시도 · 로그: {LOG_DIR})")
+                notify("\n".join(["*⚠️ Zendesk Raw Data 업데이트 실패*", "",
+                                  f"📅 {kst_stamp(datetime.datetime.now(KST))}",
+                                  f"❗ {str(e)[:300]}",
+                                  f"🔁 {TICK_MIN}분마다 자동 재시도 중 · 로그: {LOG_DIR}"]))
                 state["last_fail_notified"] = today
                 save_json(STATE_PATH, state)
         raise
