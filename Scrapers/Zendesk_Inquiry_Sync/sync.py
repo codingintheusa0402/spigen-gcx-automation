@@ -393,6 +393,11 @@ def schedule_windows(days, t):
     subprocess.run(["schtasks", "/Delete", "/TN", WIN_TASK, "/F"], capture_output=True)
     subprocess.run(["schtasks", "/Create", "/TN", WIN_TASK, "/TR", tr, "/SC", "MINUTE",
                     "/MO", "30", "/F"], check=True, capture_output=True)
+    # schtasks defaults skip runs on battery (laptops) and don't catch up missed triggers
+    ps = (f"$s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries "
+          f"-StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 1) -MultipleInstances IgnoreNew; "
+          f"Set-ScheduledTask -TaskName '{WIN_TASK}' -Settings $s | Out-Null")
+    subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=True, capture_output=True)
     log(f"scheduled: {', '.join(days)} at {t} KST ({len(days)}x/week) → Task Scheduler '{WIN_TASK}'")
 
 
