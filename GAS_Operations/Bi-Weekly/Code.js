@@ -1,62 +1,51 @@
-// Redraws the Overview TOP3 grids of the "261002 GCX Bi-weekly Report-apple"
-// copy in the apple theme (same data definitions as runOverview261002).
-function runOverviewApple261002() {
-  CHART_THEME = CHART_THEMES.apple;
-  const pres = SlidesApp.openById('1quCr9Xj-pSsVXKrYuaEOq0LPILZMN2LPUwBkY1f_GFI');
-  const PI = '4. Product Issue';
-  const jobs = [
-    { id: 'g3fa83ee22f0_1_27',  dataSource: 'zendesk', category: PI, startDate: '2026-01-01' },
+// ─── PER-PERIOD RUN SETTINGS (bi-weekly-builder skill rewrites this block) ───
+// The editor's Run dropdown defaults to the FIRST function of the open file, so the
+// skill moves the wrapper it needs (bwRunCards / bwRunOverview / bwRunOverviewApple)
+// to the very top before pushing.
+const BW_RUN = {
+  start: '2026-09-11', end: '2026-10-01',                 // 작성 날짜 window for the claim/review cards
+  sources: ['glxZ8', 'pixel11', 'iphone18'],              // CLAIM_SLIDE_SOURCES keys
+  appleDeck: '1quCr9Xj-pSsVXKrYuaEOq0LPILZMN2LPUwBkY1f_GFI',
+  // Overview TOP3 slides: claims = Zendesk 4. Product Issue (cumulative, device filter per series);
+  // bad reviews = series 1-3점 minus '긍정 리뷰'; 전제품 = 2026-01-01 ~ latest.
+  overview: [
+    { id: 'g3fa83ee22f0_1_27',  dataSource: 'zendesk', category: '4. Product Issue', startDate: '2026-01-01' },
     { id: 'g3fa83ee22f0_1_76',  dataSource: 'badReview:glxZ8',    excludeReasons: ['긍정 리뷰'] },
     { id: 'g3fa83ee22f0_1_125', dataSource: 'badReview:pixel11',  excludeReasons: ['긍정 리뷰'] },
     { id: 'ov_ip18_review',     dataSource: 'badReview:iphone18', excludeReasons: ['긍정 리뷰'] },
-    { id: 'g3fa83ee22f0_1_174', dataSource: 'zendesk', category: PI, devices: ['Galaxy Z Fold 8', 'Galaxy Z Flip 8'] },
-    { id: 'g3fa83ee22f0_1_218', dataSource: 'zendesk', category: PI, devices: ['Google Pixel 11'] },
-    { id: 'ov_ip18_claim',      dataSource: 'zendesk', category: PI, devices: ['iPhone 18'] }
-  ];
-  jobs.forEach(function(job) {
-    const slide = pres.getSlideById(job.id);
-    slide.getBackground().setSolidFill('#F5F5F7');
-    Logger.log(job.id + ' ' + JSON.stringify(rebuildChartGridOnSlide(slide, Object.assign({ prefix: 'GEN' }, job))));
-  });
-  pres.saveAndClose();
+    { id: 'g3fa83ee22f0_1_174', dataSource: 'zendesk', category: '4. Product Issue', devices: ['Galaxy Z Fold 8', 'Galaxy Z Flip 8'] },
+    { id: 'g3fa83ee22f0_1_218', dataSource: 'zendesk', category: '4. Product Issue', devices: ['Google Pixel 11'] },
+    { id: 'ov_ip18_claim',      dataSource: 'zendesk', category: '4. Product Issue', devices: ['iPhone 18'] }
+  ]
+};
+
+// Claim/review cards for BW_RUN.start..end into the ACTIVE (bound) deck. Re-runs only add missing cards.
+function bwRunCards() {
+  const res = _generateClaimSlides(SlidesApp.getActivePresentation(), { sources: BW_RUN.sources, startDate: BW_RUN.start, endDate: BW_RUN.end });
+  Logger.log(JSON.stringify(res));
 }
 
-// One-off runner for the 261002 deck: redraws the Overview TOP3 grids
-// (slides 4-10) in place, cumulative (전제품 = 2026-01-01~latest). Resumable — slides
-// already done in this window are skipped (Script Properties), so a timeout
-// just means "Run again".
-function runOverview261002() {
-  const PERIOD = { startDate: '', endDate: '' }; // cumulative (all data) — these charts are accrued totals
-  const PI = '4. Product Issue';
-  const jobs = [
-    { id: 'g3fa83ee22f0_1_27',  dataSource: 'zendesk', category: PI, startDate: '2026-01-01', endDate: '' }, // 2026년 전제품 = 260101~latest
-    { id: 'g3fa83ee22f0_1_76',  dataSource: 'badReview:glxZ8',    excludeReasons: ['긍정 리뷰'] },
-    { id: 'g3fa83ee22f0_1_125', dataSource: 'badReview:pixel11',  excludeReasons: ['긍정 리뷰'] },
-    { id: 'ov_ip18_review',     dataSource: 'badReview:iphone18', excludeReasons: ['긍정 리뷰'] },
-    { id: 'g3fa83ee22f0_1_174', dataSource: 'zendesk', category: PI, devices: ['Galaxy Z Fold 8', 'Galaxy Z Flip 8'] },
-    { id: 'g3fa83ee22f0_1_218', dataSource: 'zendesk', category: PI, devices: ['Google Pixel 11'] },
-    { id: 'ov_ip18_claim',      dataSource: 'zendesk', category: PI, devices: ['iPhone 18'] }
-  ];
+// Overview TOP3 grids on the ACTIVE deck, classic theme. Resumable across the 6-min cap.
+function bwRunOverview() { _bwOverview(SlidesApp.getActivePresentation(), CHART_THEMES.classic, 'bw_overview_done_' + BW_RUN.end); }
+
+// Same grids on the Apple copy (BW_RUN.appleDeck), apple theme, #F5F5F7 canvas.
+function bwRunOverviewApple() { _bwOverview(SlidesApp.openById(BW_RUN.appleDeck), CHART_THEMES.apple, 'bw_overview_apple_done_' + BW_RUN.end); }
+
+function _bwOverview(pres, theme, doneKey) {
+  CHART_THEME = theme;
   const props = PropertiesService.getScriptProperties();
-  const done = JSON.parse(props.getProperty('overview261002_done_v3') || '{}');
-  const pres = SlidesApp.getActivePresentation();
+  const done = JSON.parse(props.getProperty(doneKey) || '{}');
   const started = Date.now();
-  jobs.forEach(function(job) {
+  BW_RUN.overview.forEach(function(job) {
     if (done[job.id] || Date.now() - started > 240 * 1000) return;
     const slide = pres.getSlideById(job.id);
-    const opts = Object.assign({ prefix: 'GEN' }, PERIOD, job);
-    done[job.id] = rebuildChartGridOnSlide(slide, opts);
-    props.setProperty('overview261002_done_v3', JSON.stringify(done));
-    Logger.log(job.id + ' ' + JSON.stringify(done[job.id]));
+    if (!slide) { Logger.log('missing slide ' + job.id); return; }
+    if (theme === CHART_THEMES.apple) slide.getBackground().setSolidFill('#F5F5F7');
+    done[job.id] = rebuildChartGridOnSlide(slide, Object.assign({ prefix: 'GEN' }, job));
+    props.setProperty(doneKey, JSON.stringify(done));
   });
-  Logger.log('DONE ' + Object.keys(done).length + '/' + jobs.length + ' ' + JSON.stringify(done));
-}
-
-// One-off runner for the 261002 deck (bound script) — Run from the editor.
-function runBiweekly261002() {
-  const pres = SlidesApp.getActivePresentation();
-  const res = _generateClaimSlides(pres, { sources: ['glxZ8', 'pixel11', 'iphone18'], startDate: '2026-09-11', endDate: '2026-10-01' });
-  Logger.log(JSON.stringify(res));
+  pres.saveAndClose();
+  Logger.log('DONE ' + Object.keys(done).length + '/' + BW_RUN.overview.length + ' ' + JSON.stringify(done));
 }
 
 // TEMP debug — read-only structure dump for the Claim/Review card template
@@ -1040,7 +1029,7 @@ const CHART_THEMES = {
              count: '#FFFFFF', countBold: false, countSize: 13.5, title: '#7680A2', legend: '#FFFFFF', value: '#FFFFFF',
              rank: '#7278B2', headBold: '#121735', headLight: '#7278B2', tile: null },
   apple:   { font: 'Noto Sans KR', chartBg: '#FFFFFF', colors: ['#0071E3', '#64D2FF', '#5E5CE6', '#D2D2D7'],
-             count: '#1D1D1F', countBold: true, countSize: 13, title: '#6E6E73', legend: '#1D1D1F', value: '#6E6E73',
+             count: '#1D1D1F', countBold: true, countSize: 12, title: '#6E6E73', legend: '#1D1D1F', value: '#6E6E73',
              rank: '#86868B', headBold: '#1D1D1F', headLight: '#86868B', tile: '#FFFFFF', tileRadius: 12 }
 };
 let CHART_THEME = CHART_THEMES.classic;

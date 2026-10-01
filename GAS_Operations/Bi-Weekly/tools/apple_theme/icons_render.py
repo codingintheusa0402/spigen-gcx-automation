@@ -1,5 +1,8 @@
 from PIL import Image, ImageDraw, ImageFont
-import json, base64, io
+import json, base64, io, os, urllib.request
+os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'icons'))
+if not os.path.exists('MSR.ttf'):   # Material Symbols Rounded (Apache-2.0), ~15MB, not committed
+    urllib.request.urlretrieve('https://github.com/google/material-design-icons/raw/master/variablefont/MaterialSymbolsRounded%5BFILL,GRAD,opsz,wght%5D.ttf', 'MSR.ttf')
 cp = {}
 for line in open('MSR.codepoints'):
     n, c = line.split(); cp[n] = int(c, 16)
@@ -20,5 +23,4 @@ for key, (g, col) in ICONS.items():
     bb = im.getbbox(); print(key, bb)
     buf = io.BytesIO(); im.save(buf, 'PNG', optimize=True); out[key] = base64.b64encode(buf.getvalue()).decode()
     im.save(f'{key}.png')
-json.dump(out, open('icons_b64.json', 'w'))
 print({k: len(v) for k, v in out.items()})

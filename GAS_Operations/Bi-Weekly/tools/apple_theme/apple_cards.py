@@ -2,12 +2,13 @@ import sys, json, time
 sys.path.insert(0, '/Users/kevinkim/Desktop/GCX/GAS_Operations/Bi-Weekly/tools')
 from rate_pipeline import creds
 from googleapiclient.discovery import build
-P = '1quCr9Xj-pSsVXKrYuaEOq0LPILZMN2LPUwBkY1f_GFI'
+from cfg import CFG
+P = CFG['apple_deck']
 E = 12700
 FONT = 'Noto Sans KR'
 CANVAS, TILE, INK, GRAY, GRAY2, BLUE, RED = '#F5F5F7', '#FFFFFF', '#1D1D1F', '#6E6E73', '#86868B', '#0066CC', '#FF3B30'
 svc = build('slides', 'v1', credentials=creds()).presentations()
-ORIG = '12NxCxbW3z0fH1KKEVzX_uqBGH_APlkZpBWdPgET_aCk'
+ORIG = CFG['source_deck']
 R = 12  # tile corner radius (pt)
 def rtile(sid, oid, x, y, w, h, color=TILE):
     """Rounded tile with a controlled corner radius: 2 rects + 4 corner circles."""

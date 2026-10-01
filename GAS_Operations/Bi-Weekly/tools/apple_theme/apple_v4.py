@@ -1,6 +1,7 @@
 import sys
 sys.path.insert(0, __import__('os').path.dirname(__file__))
 from apple_v3 import svc, P, E, rgb, txt, pill, text, INK, GRAY, FONT, CANVAS
+from cfg import CFG
 
 def siren_and_end():
     p = svc.get(presentationId=P).execute()
@@ -46,7 +47,7 @@ def siren_and_end():
     endid, cov = p['slides'][-1]['objectId'], p['slides'][0]['objectId']
     reqs += [{'deleteObject': {'objectId': e['objectId']}} for e in p['slides'][-1]['pageElements'] if e['objectId'].startswith(('ap3_', 'ap4_'))]
     reqs += text(endid, 'ap4_end_t', 110, 150, 500, 44, 'GCX Bi-weekly Report', 28, INK, bold=True, align='CENTER')
-    reqs += text(endid, 'ap4_end_d', 110, 194, 500, 20, '2026.10.02 · 글로벌CX전략팀', 11, GRAY, align='CENTER')
+    reqs += text(endid, 'ap4_end_d', 110, 194, 500, 20, CFG['report_date'] + ' · 글로벌CX전략팀', 11, GRAY, align='CENTER')
     reqs += pill(endid, 'ap4_end_b', 306, 228, 108, 26, '처음으로', 'outline', 10, slide=cov, under='#FFFFFF')
     svc.batchUpdate(presentationId=P, body={'requests': reqs}).execute()
     print('siren/end requests', len(reqs))

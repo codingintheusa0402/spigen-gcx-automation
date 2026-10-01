@@ -5,7 +5,8 @@ from matplotlib import font_manager as fm
 from matplotlib.patches import PathPatch
 from matplotlib.path import Path
 import math
-S = '/private/tmp/claude-501/-Users-kevinkim/8ab0abda-73a1-40e3-934d-c473628fe948/scratchpad/'
+import os
+S = os.path.dirname(os.path.abspath(__file__)) + '/'
 for f in ['/Library/Fonts/SF-Pro-Text-Regular.otf', '/Library/Fonts/SF-Pro-Text-Semibold.otf', '/Library/Fonts/SF-Pro-Display-Regular.otf', '/System/Library/Fonts/AppleSDGothicNeo.ttc']:
     try: fm.fontManager.addfont(f)
     except Exception as ex: print('font', f, ex)

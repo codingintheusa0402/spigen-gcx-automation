@@ -53,43 +53,44 @@ def restyle(oid, size, color, bold=False, align='CENTER'):
 def move(oid, x, y, sw, size):  # absolute move with target size via scale
     return {'updatePageElementTransform': {'objectId': oid, 'applyMode': 'ABSOLUTE', 'transform': {'scaleX': sw[0]*E/size[0], 'scaleY': sw[1]*E/size[1], 'translateX': x*E, 'translateY': y*E, 'unit': 'EMU'}}}
 
-SECTIONS = [('Overview', 'g3f2ca1aded2_0_19'), ('Galaxy Z8', 'SLIDES_API939767698_0'), ('Pixel 11', 'SLIDES_API939767698_775'),
-            ('iPhone 18', 'SLIDES_API939767698_999'), ('SIREN', 'g3f2ca1aded2_0_340'), ('Appendix', 'apl_appendix')]
+from cfg import CFG, section_anchors
 D = 'https://docs.google.com/presentation/d/%s/edit'
 S = 'https://docs.google.com/spreadsheets/d/%s/edit'
-APPENDIX = [
-  ('클레임·배드리뷰 원본', [('Galaxy Z8 고객사진 모음', D % '1VC5WAoiufinAPz9bPn1OrBnAef9JkDZEZxlAGF6DDho'),
-                       ('Pixel 11 고객사진 모음', D % '1JJKzzBnm9no89mocr6Xqzwqgz8YWoiU5S44Em7gJYSc'),
-                       ('iPhone 18 고객사진 모음', D % '1uuHcoTZxxLYlxdaHb0KFUBbI2hEPMvkOV0cL8ELU9dU')]),
-  ('리뷰 모니터링 시트', [('Galaxy Z8 Series', S % '19OhswglYMx_dxSFFDtWI1WYPWq2jONJn6RK84KITwy4' + '#gid=957652957'),
-                     ('Pixel 11 Series', S % '12I6z_FFmDIMHa0rLanltKKFp7kI_yREQj3adkMamPgI' + '#gid=957652957'),
-                     ('iPhone 18 Series', S % '1aYxZRm7pf5Egx6fIoAGpGg8CWzHaZ_zsBRKsvh9U1iU' + '#gid=957652957')]),
-  ('클레임 데이터', [('Zendesk Raw Data_2026년', S % '1sjcCj_P4DRD8rywkmYJhbsrzwFfgiJQuF9nIKwCiKlc'),
-                ('최다 인입사유 대시보드', 'https://lookerstudio.google.com/u/0/reporting/654b75ad-c824-4ab2-ac9e-9d9e0f30aa35/page/O36tF')]),
-  ('SIREN', [('26년 SIREN 등록 현황', S % '15Jh6ZFDBIbpv4OANVtD3g4wFBJxoof9SHWDUEU3GiXI' + '#gid=1840076165')]),
-  ('보고서', [('원본 보고서 (261002)', D % '12NxCxbW3z0fH1KKEVzX_uqBGH_APlkZpBWdPgET_aCk'),
-           ('Caspi 데이터 포털', 'https://caspilm.spigen.com')]),
-]
+def appendix_columns():
+    S2 = lambda sid, gid=None: S % sid + (f'#gid={gid}' if gid else '')
+    return [
+      ('클레임·배드리뷰 원본', [(f"{x['chip']} 고객사진 모음", D % x['source_deck']) for x in CFG['series']]),
+      ('리뷰 모니터링 시트', [(f"{x['chip']} Series", S2(x['sheet'], 957652957)) for x in CFG['series']]),
+      ('클레임 데이터', [('Zendesk Raw Data_2026년', S2(CFG['zendesk_sheet'])), ('최다 인입사유 대시보드', CFG['looker_url'])]),
+      ('SIREN', [('26년 SIREN 등록 현황', S2(CFG['siren_sheet'], CFG['siren_gid']))]),
+      ('보고서', [(f"원본 보고서 ({CFG['report_code']})", D % CFG['source_deck']), ('Caspi 데이터 포털', 'https://caspilm.spigen.com')]),
+    ]
 
 def build_all():
     p = svc.get(presentationId=P).execute()
     ids = [s['objectId'] for s in p['slides']]
+    SECTIONS = section_anchors(p); APPENDIX = appendix_columns()
+    overview = dict(SECTIONS).get('Overview')
     reqs = []
     # ---- cover: bright hero ----
     cov = p['slides'][0]; cid = cov['objectId']
     reqs += [{'deleteObject': {'objectId': e['objectId']}} for e in cov['pageElements'] if e['objectId'].startswith('ap3_')]
     reqs.append(bg(cid, '#FFFFFF'))
     sizes = {e['objectId']: (e['size']['width']['magnitude'], e['size']['height']['magnitude']) for e in cov['pageElements'] if 'size' in e}
-    eyebrow, title, date = 'g3aa52d0de84_0_1', 'g3aa9ffb5090_2_95', 'g3aa52d0de84_0_2'
+    import re as _re
+    find = lambda pred: next(e['objectId'] for e in cov['pageElements'] if 'shape' in e and pred(txt(e)))
+    eyebrow = find(lambda t: '글로벌CX전략팀' in t)
+    title = find(lambda t: t.startswith('GCX Bi-weekly'))
+    date = find(lambda t: _re.fullmatch(r'\d{4}\.\d{2}\.\d{2}', t or '') is not None)
     reqs += [move(eyebrow, 110, 100, (500, 22), sizes[eyebrow]), move(title, 60, 120, (600, 60), sizes[title]), move(date, 160, 194, (400, 28), sizes[date])]
     reqs += [{'updateShapeProperties': {'objectId': o, 'shapeProperties': {'contentAlignment': 'MIDDLE'}, 'fields': 'contentAlignment'}} for o in (eyebrow, title, date)]
     reqs += restyle(eyebrow, 12, INK, bold=True) + restyle(title, 40, INK, bold=True) + restyle(date, 20, INK)
     # sub-nav chips
-    widths = [64, 70, 62, 66, 52, 66]; gap = 8; x = (720 - (sum(widths) + gap*(len(widths)-1))) / 2
+    widths = [max(52, 14 + len(lab)*6.2) for lab, _ in SECTIONS]; gap = 8; x = (720 - (sum(widths) + gap*(len(widths)-1))) / 2
     for i, ((lab, target), w) in enumerate(zip(SECTIONS, widths)):
         reqs += pill(cid, f'ap3_chip{i}', x, 28, w, 18, lab, 'chip', 8, slide=target); x += w + gap
     # hero buttons
-    reqs += pill(cid, 'ap3_btn1', 238, 248, 116, 30, 'Overview 보기', 'filled', 11, slide='g3f2ca1aded2_0_19')
+    reqs += pill(cid, 'ap3_btn1', 238, 248, 116, 30, 'Overview 보기', 'filled', 11, slide=overview)
     reqs += pill(cid, 'ap3_btn2', 366, 248, 116, 30, 'Appendix 보기', 'outline', 11, slide='apl_appendix', under='#FFFFFF')
     # ---- appendix slide (before the closing slide) ----
     if 'apl_appendix' not in ids:
@@ -116,10 +117,10 @@ def build_all():
     reqs += hair(A, 'ap3_a_h2', 36, 326, 648)
     reqs += text(A, 'ap3_a_copy', 36, 334, 220, 16, 'Copyright © 2026 Spigen Inc. 글로벌CX전략팀', 8, GRAY)
     x = 262
-    for i, (lab, target) in enumerate(SECTIONS[:5]):
+    for i, (lab, target) in enumerate(SECTIONS[:-1]):
         w = 8 + len(lab)*4.6
         reqs += text(A, f'ap3_a_nav{i}', x, 334, w + 8, 16, lab, 8, LINKGRAY, slide=target); x += w + 6
-        if i < 4: reqs += text(A, f'ap3_a_bar{i}', x, 334, 12, 16, '|', 8, HAIR); x += 14
+        if i < len(SECTIONS) - 2: reqs += text(A, f'ap3_a_bar{i}', x, 334, 12, 16, '|', 8, HAIR); x += 14
     reqs += text(A, 'ap3_a_loc', 600, 334, 84, 16, 'Korea', 8, LINKGRAY, align='END')
     # ---- closing slide: bright ----
     reqs.append(bg(ids[-1], '#FFFFFF'))

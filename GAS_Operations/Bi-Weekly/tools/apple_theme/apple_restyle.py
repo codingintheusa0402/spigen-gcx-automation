@@ -3,7 +3,9 @@ sys.path.insert(0, '/Users/kevinkim/Desktop/GCX/GAS_Operations/Bi-Weekly/tools')
 from rate_pipeline import creds
 from googleapiclient.discovery import build
 
-P = '1quCr9Xj-pSsVXKrYuaEOq0LPILZMN2LPUwBkY1f_GFI'
+sys.path.insert(0, __import__('os').path.dirname(__file__))
+from cfg import CFG
+P = CFG['apple_deck']
 E = 12700
 FONT = 'Noto Sans KR'
 INK, SECOND, HAIR, TILE, WHITE = '#1D1D1F', '#6E6E73', '#D2D2D7', '#F5F5F7', '#FFFFFF'
