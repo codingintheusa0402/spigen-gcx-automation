@@ -20,9 +20,11 @@ way to omit a single page from an already-sent message.
 | File | Purpose |
 |------|---------|
 | `auto_broadcast.py` | the unattended script `launchd` runs |
-| `~/Library/LaunchAgents/com.spigen.gcx.badreview-broadcast.plist` | the schedule (Mon–Fri, 10:30 local time = KST) |
+| `~/Library/LaunchAgents/com.spigen.gcx.badreview-broadcast.plist` | the 10:30 AM schedule (Mon–Fri, KST) |
+| `~/Library/LaunchAgents/com.spigen.gcx.badreview-broadcast-retry.plist` | the 11:00 AM `--retry-if-held` follow-up (Mon–Fri, KST) — added 2026-10-01 |
+| `state/held_<date>.flag` | written by a 10:30 KR-gate hold, consumed (deleted) by the 11:00 retry |
 | `logs/auto_broadcast.log` | one line per run: skipped (weekend/holiday) or per-room OK/ERR |
-| `logs/launchd.out.log` / `launchd.err.log` | raw stdout/stderr from launchd itself |
+| `logs/launchd.out.log` / `launchd.err.log` | raw stdout/stderr from launchd itself (shared by both LaunchAgents) |
 
 ## How it works
 
@@ -66,11 +68,22 @@ way to omit a single page from an already-sent message.
    incomplete," not a real zero day. If so, the script **does not** broadcast the
    carousel to the 13 rooms at all (Pixel 11 and iPhone 18 no longer send separately
    either, since it's one message now) — it posts an alert plus a full carousel
-   preview to the **private test room only**. Resend once you've confirmed it's a
-   real zero day, or once KR reviews land, with:
+   preview to the **private test room only**, and writes a marker file
+   (`state/held_<date>.flag`) so the 11:00 retry (below) knows there's something to
+   pick up. You can also resend manually before then:
    ```bash
    python3 auto_broadcast.py --force --ignore-kr-gate
    ```
+
+4b. **11:00 AM automatic retry** (added 2026-10-01, PERMANENT): a second LaunchAgent,
+    `com.spigen.gcx.badreview-broadcast-retry.plist`, fires `auto_broadcast.py
+    --retry-if-held` every weekday at 11:00 AM. It only acts if today's
+    `state/held_<date>.flag` marker exists (i.e. the 10:30 run held the carousel) —
+    otherwise it logs `RETRY <date>: nothing held, skipping` and exits immediately,
+    no sheets fetch, no send. If the marker IS present, it re-fetches fresh data and
+    broadcasts to all 13 rooms **unconditionally** — even if Z8's KR count is still
+    0 at 11:00 — then deletes the marker. This is a hard deadline: by explicit user
+    rule, incomplete Z8 data is never allowed to hold the broadcast past 11:00.
    ⚠️ `--force` only bypasses the weekday/holiday skip — it does **not** hold back
    Pixel 11, and does **not** need `--ignore-kr-gate` to still send PX. (Learned the
    hard way 2026-09-18: testing the KR-gate alert with `--force --date 2026-09-21`

@@ -38,6 +38,13 @@ import argparse, datetime, importlib.util, json, os, sys, time, urllib.error, ur
 SKILLS = os.path.expanduser("~/.claude/skills")
 GWS_TOKEN_PATH = os.path.expanduser("~/.config/gws_shim/token.json")
 LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+STATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
+
+
+def held_marker_path(today):
+    """Written by the 10:30 run when the Z8 KR-gate holds the carousel back; checked
+    by the 11:00 --retry-if-held run to know whether there's anything to retry."""
+    return os.path.join(STATE_DIR, f"held_{today.isoformat()}.flag")
 
 SHEETS = {
     "pixel11":  "12I6z_FFmDIMHa0rLanltKKFp7kI_yREQj3adkMamPgI",
@@ -199,6 +206,14 @@ def main():
     ap.add_argument("--ignore-kr-gate", action="store_true",
                      help="send the Z8 card to all rooms even if 0 KR reviews today "
                           "(after you've manually confirmed that's correct)")
+    ap.add_argument("--retry-if-held", action="store_true",
+                     help="11:00 AM follow-up run (separate launchd job, added "
+                          "2026-10-01 per user rule): only acts if the 10:30 run held "
+                          "the carousel back (today's KR-gate marker file present). If "
+                          "so, re-fetches fresh data and sends to all rooms "
+                          "UNCONDITIONALLY — ignores the KR-gate even if still 0 KR "
+                          "reviews, a hard 11:00 deadline. If nothing was held today "
+                          "(already sent normally, or today was skipped), does nothing.")
     ap.add_argument("--date", help="override today (KST), YYYY-MM-DD")
     a = ap.parse_args()
 
@@ -211,6 +226,14 @@ def main():
         if today.isoformat() in kr_holidays(today.year):
             log(f"SKIP {today.isoformat()}: Korean public holiday")
             return
+
+    if a.retry_if_held:
+        marker = held_marker_path(today)
+        if not os.path.exists(marker):
+            log(f"RETRY {today.isoformat()}: nothing held, skipping")
+            return
+        log(f"RETRY {today.isoformat()}: 10:30 run held the carousel — retrying now, "
+            f"will send unconditionally regardless of today's KR count")
 
     log(f"RUN {today.isoformat()}: fetching sheets")
     token = refresh_gws_token()
@@ -245,10 +268,16 @@ def main():
     z8_kr_count = today_kr_count(z8_header, z8_body, today)
     # --test-only never touches the 12 live rooms, so there's nothing to hold back —
     # both cards go to the private room together, same as a normal test-send would.
-    hold_z8 = z8_kr_count == 0 and not a.ignore_kr_gate and not a.test_only
+    # --retry-if-held is the 11:00 deadline run: always send this time, even if still
+    # 0 KR reviews (2026-10-01 user rule) — it only got here because a marker proved
+    # the 10:30 run held today, so don't hold a second time.
+    hold_z8 = (z8_kr_count == 0 and not a.ignore_kr_gate and not a.test_only
+               and not a.retry_if_held)
     if z8_kr_count == 0:
-        why = "--test-only, sending anyway" if a.test_only else \
-              "--ignore-kr-gate set, sending anyway" if a.ignore_kr_gate else "holding Z8 broadcast"
+        why = ("--test-only, sending anyway" if a.test_only else
+               "--retry-if-held 11:00 deadline, sending anyway" if a.retry_if_held else
+               "--ignore-kr-gate set, sending anyway" if a.ignore_kr_gate else
+               "holding Z8 broadcast")
         log(f"NOTE: 0 KR reviews in today's Z8 data — {why}")
 
     targets = [broadcast.TEST_ROOM] if a.test_only else broadcast.ROOMS
@@ -273,14 +302,16 @@ def main():
                                                     card_id="badreview-carousel-held")
         alert = {
             "text": (f"⚠️ 배드리뷰 캐러셀 자동발송 전체 보류 — 오늘({today.isoformat()}) Z8 KR 리뷰 0건.\n"
-                     f"KR 리뷰는 간혹 11시 이후 업로드되는 경우가 있어, 확인 후 수동 재발송이 필요합니다.\n"
+                     f"11:00에 자동 재시도 예정 (그때도 0건이면 그대로 강제 발송됩니다).\n"
                      f"(카드 3개 전부 아래 미리보기로 확인 가능)\n"
-                     f"확인 후 재발송: python3 auto_broadcast.py --force --ignore-kr-gate"),
+                     f"11:00 전에 직접 보내려면: python3 auto_broadcast.py --force --ignore-kr-gate"),
         }
         log("ALERT (0 KR reviews, entire carousel held): " + broadcast._post(test_url, alert))
         log("ALERT preview: " + broadcast._post(test_url, preview))
+        os.makedirs(STATE_DIR, exist_ok=True)
+        open(held_marker_path(today), "w").close()
         log(f"DONE {today.isoformat()}: carousel HELD ENTIRELY (0 KR reviews for Z8) — "
-            f"alert + preview posted to private room")
+            f"alert + preview posted to private room; marker written for 11:00 retry")
         return
 
     message = carousel.build_carousel_message(cards, header_imgs, today)
@@ -288,6 +319,12 @@ def main():
         url = broadcast.BASE.format(sid=room["sid"], tok=room["token"])
         log(f"[{room['name']}] carousel : " + broadcast._post(url, message))
         time.sleep(1.0)
+
+    if a.retry_if_held:
+        try:
+            os.remove(held_marker_path(today))
+        except FileNotFoundError:
+            pass
 
     log(f"DONE {today.isoformat()}: sent to {len(targets)} {'test' if a.test_only else ''} room(s)")
 
