@@ -16,3 +16,4 @@ All scripts are idempotent (they delete their own at_/ap3_ shapes before redrawi
    (base64 blobs, no public files) — re-create it from these PNGs if needed.
 8. apple_type.py fix  — slide titles: same box (x36,y16), 18pt bold ink, gray "대상 국가" qualifier; '1.' list bullets -> text;
    restores bold, then Latin runs -> Inter (600 for bold), Hangul stays Noto Sans KR.
+9. align_icons.py   — centers each icon on its label's text line (run after any font/label change)
