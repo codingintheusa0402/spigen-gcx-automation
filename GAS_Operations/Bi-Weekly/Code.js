@@ -1,3 +1,34 @@
+// One-off runner for the 261002 deck: redraws the Overview TOP3 grids
+// (slides 4-10) in place, cumulative (전제품 = 2026-01-01~latest). Resumable — slides
+// already done in this window are skipped (Script Properties), so a timeout
+// just means "Run again".
+function runOverview261002() {
+  const PERIOD = { startDate: '', endDate: '' }; // cumulative (all data) — these charts are accrued totals
+  const PI = '4. Product Issue';
+  const jobs = [
+    { id: 'g3fa83ee22f0_1_27',  dataSource: 'zendesk', category: PI, startDate: '2026-01-01', endDate: '' }, // 2026년 전제품 = 260101~latest
+    { id: 'g3fa83ee22f0_1_76',  dataSource: 'badReview:glxZ8',    excludeReasons: ['긍정 리뷰'] },
+    { id: 'g3fa83ee22f0_1_125', dataSource: 'badReview:pixel11',  excludeReasons: ['긍정 리뷰'] },
+    { id: 'ov_ip18_review',     dataSource: 'badReview:iphone18', excludeReasons: ['긍정 리뷰'] },
+    { id: 'g3fa83ee22f0_1_174', dataSource: 'zendesk', category: PI, devices: ['Galaxy Z Fold 8', 'Galaxy Z Flip 8'] },
+    { id: 'g3fa83ee22f0_1_218', dataSource: 'zendesk', category: PI, devices: ['Google Pixel 11'] },
+    { id: 'ov_ip18_claim',      dataSource: 'zendesk', category: PI, devices: ['iPhone 18'] }
+  ];
+  const props = PropertiesService.getScriptProperties();
+  const done = JSON.parse(props.getProperty('overview261002_done_v3') || '{}');
+  const pres = SlidesApp.getActivePresentation();
+  const started = Date.now();
+  jobs.forEach(function(job) {
+    if (done[job.id] || Date.now() - started > 240 * 1000) return;
+    const slide = pres.getSlideById(job.id);
+    const opts = Object.assign({ prefix: 'GEN' }, PERIOD, job);
+    done[job.id] = rebuildChartGridOnSlide(slide, opts);
+    props.setProperty('overview261002_done_v3', JSON.stringify(done));
+    Logger.log(job.id + ' ' + JSON.stringify(done[job.id]));
+  });
+  Logger.log('DONE ' + Object.keys(done).length + '/' + jobs.length + ' ' + JSON.stringify(done));
+}
+
 // One-off runner for the 261002 deck (bound script) — Run from the editor.
 function runBiweekly261002() {
   const pres = SlidesApp.getActivePresentation();
@@ -974,8 +1005,8 @@ const CHART_CARD_GEOM = {
   cardW: 160, cardH: 123,
   count:  { l: 10,  t: 30, w: 135, h: 29, fontSize: 13.5, color: '#FFFFFF', align: 'CENTER', valign: 'MIDDLE' },
   title:  { l: 10,  t: 47, w: 141, h: 31, fontSize: 8.5,  color: '#7680A2', align: 'CENTER', valign: 'MIDDLE' },
-  legend: { l: 23,  t: 59, w: 90,  h: 62, fontSize: 8.5,  color: '#FFFFFF', align: 'START',  valign: 'TOP' },
-  value:  { l: 118, t: 59, w: 40,  h: 62, fontSize: 8.5,  color: '#FFFFFF', align: 'END',    valign: 'TOP' },
+  legend: { l: 17,  t: 65, w: 103, h: 62, fontSize: 7.5,  color: '#FFFFFF', align: 'START',  valign: 'TOP', lineSpacing: 115 },
+  value:  { l: 100, t: 65, w: 40,  h: 62, fontSize: 7.5,  color: '#FFFFFF', align: 'END',    valign: 'TOP', lineSpacing: 115 },
   rank:   { l: -22, t: 98, w: 26,  h: 33, fontSize: 11,   color: '#7278B2', align: 'START',  valign: 'MIDDLE' }
 };
 const CHART_GRID_COL_LEFTS = [142, 326, 509];
@@ -1017,6 +1048,7 @@ function insertGeneratedChartCard(slide, left, top, chartData, chartBlobTitle, c
     const tr = box.getText();
     tr.getTextStyle().setFontFamily('Arial').setFontSize(fontSizeOverride || spec.fontSize).setForegroundColor(spec.color);
     tr.getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment[spec.align]);
+    if (spec.lineSpacing) tr.getParagraphStyle().setLineSpacing(spec.lineSpacing);
     box.setContentAlignment(SlidesApp.ContentAlignment[spec.valign]);
     // Shrinks the font (never truncates) so the full product/reason name
     // always shows, even when longer than the box at the base font size.
@@ -1027,42 +1059,74 @@ function insertGeneratedChartCard(slide, left, top, chartData, chartBlobTitle, c
   }
 
   addText(countText, g.count);
-  addText(cardTitle, g.title, null, true);
+  addText(cardTitle, g.title, null, false);
   addText(legendLabelText, g.legend, legendFontSize);
   addText(legendValueText, g.value, legendFontSize);
   addText(String(rank), g.rank);
 }
 
 // Draws one full row: a "{boldPrefix} 클레임" header followed by up to 3 cards.
-function insertGeneratedChartRow(slide, top, headerBoldText, items, blobTitlePrefix, legendFontSize) {
+function insertGeneratedChartRow(slide, top, headerBoldText, items, blobTitlePrefix, legendFontSize, lightLabel) {
   const boldBox = slide.insertTextBox(headerBoldText, CHART_GRID_HEADER_LEFT, top, 106, 26);
   boldBox.getText().getTextStyle().setFontFamily('Arial').setFontSize(11.5).setBold(true).setForegroundColor('#121735');
 
-  const lightBox = slide.insertTextBox('클레임', CHART_GRID_HEADER_LEFT + 108, top + 1, 47, 27);
+  const lightBox = slide.insertTextBox(lightLabel || '클레임', CHART_GRID_HEADER_LEFT + 90, top + 1, 70, 27);
   lightBox.getText().getTextStyle().setFontFamily('Arial').setFontSize(10.5).setForegroundColor('#7278B2');
 
   const cardsTop = top + 31;
   items.slice(0, 3).forEach(function(item, i) {
+    const fontSize = legendFontSize || CHART_CARD_GEOM.legend.fontSize;
     insertGeneratedChartCard(
       slide, CHART_GRID_COL_LEFTS[i], cardsTop,
       item.chartData, blobTitlePrefix + '_' + (i + 1),
-      item.title, item.count, item.legendLabel, item.legendValue, i + 1, legendFontSize
+      item.title, item.count, item.legendLabel, item.legendValue, i + 1, fontSize
     );
   });
 }
 
 // Appends a new blank slide with the full 모델별 TOP3 / 인입사유별 TOP3 grid,
 // built from the already-computed topProducts / topReasons arrays.
-function insertGeneratedChartGrid(presentation, topProducts, topReasons, blobTitlePrefix) {
+function insertGeneratedChartGrid(presentation, topProducts, topReasons, blobTitlePrefix, lightLabel) {
   const slide = presentation.appendSlide(SlidesApp.PredefinedLayout.BLANK);
   try { slide.getBackground().setSolidFill(CHART_GRID_BG_COLOR); } catch (e) {}
+  _drawChartGrid(slide, topProducts, topReasons, blobTitlePrefix, lightLabel);
+  return slide;
+}
+
+// Keeps every legend at the same font size: a label too wide for one line at
+// the standard size loses its "(…)" suffix first, then gets an ellipsis.
+function _fitLegendLine(line) {
+  const maxW = CHART_CARD_GEOM.legend.w - 8, size = CHART_CARD_GEOM.legend.fontSize;
+  const width = function(t) { let w = 0; for (let i = 0; i < t.length; i++) w += /[ㄱ-힝]/.test(t[i]) ? 1.7 : 1; return w * 0.52 * size; };
+  let t = String(line);
+  if (width(t) <= maxW) return t;
+  t = t.replace(/\s*\(.*$/, '');
+  while (t.length > 1 && width(t + '…') > maxW) t = t.slice(0, -1);
+  return width(String(line).replace(/\s*\(.*$/, '')) <= maxW ? t : t + '…';
+}
+
+// Display name for a product: the Zendesk sheet prefixes some glass lines
+// with "SP_" (e.g. SP_Glas.tR EZ Fit Pro); the deck shows them without it.
+function _chartProductName(name) {
+  return String(name).replace(/^SP_/, '');
+}
+
+// Draws the 모델별 TOP3 / 인입사유별 TOP3 grid onto `slide`.
+function _drawChartGrid(slide, topProducts, topReasons, blobTitlePrefix, lightLabel, perCardFont) {
+  topProducts = topProducts.map(function(p) {
+    return { productName: _chartProductName(p.productName), total: p.total, reasons: p.reasons, other: p.other };
+  });
+  topReasons = topReasons.map(function(r) {
+    return { reasonName: r.reasonName, total: r.total, other: r.other,
+             models: r.models.map(function(m) { return [_chartProductName(m[0]), m[1]]; }) };
+  });
 
   const productItems = topProducts.map(function(p) {
     return {
       chartData: p,
       title: p.productName,
       count: p.total.toLocaleString() + '건',
-      legendLabel: buildLegendText(p),
+      legendLabel: buildLegendText(p).split("\n").map(_fitLegendLine).join("\n"),
       legendValue: buildLegendValues(p)
     };
   });
@@ -1071,7 +1135,7 @@ function insertGeneratedChartGrid(presentation, topProducts, topReasons, blobTit
       chartData: { reasons: r.models, other: r.other },
       title: r.reasonName,
       count: r.total.toLocaleString() + '건',
-      legendLabel: buildModelLegendText(r),
+      legendLabel: buildModelLegendText(r).split("\n").map(_fitLegendLine).join("\n"),
       legendValue: buildModelLegendValues(r)
     };
   });
@@ -1081,12 +1145,49 @@ function insertGeneratedChartGrid(presentation, topProducts, topReasons, blobTit
   // card's text is a different size from another's.
   const allLegendLines = productItems.concat(reasonItems)
     .reduce(function(lines, item) { return lines.concat(item.legendLabel.split('\n')); }, []);
-  const legendFontSize = _fitFontSizeForLines(allLegendLines, CHART_CARD_GEOM.legend.w - 4, CHART_CARD_GEOM.legend.fontSize, 5.5);
+  // null → each card fits its own legend (only cards with long names shrink).
+  const legendFontSize = perCardFont ? null : _fitFontSizeForLines(allLegendLines, CHART_CARD_GEOM.legend.w - 4, CHART_CARD_GEOM.legend.fontSize, 5.5);
 
-  insertGeneratedChartRow(slide, 51, '모델별 TOP3', productItems, blobTitlePrefix + '_Defect_Model', legendFontSize);
-  insertGeneratedChartRow(slide, 225, '인입사유별 TOP3', reasonItems, blobTitlePrefix + '_Model_Defect', legendFontSize);
+  insertGeneratedChartRow(slide, 51, '모델별 TOP3', productItems, blobTitlePrefix + '_Defect_Model', legendFontSize, lightLabel);
+  insertGeneratedChartRow(slide, 225, '인입사유별 TOP3', reasonItems, blobTitlePrefix + '_Model_Defect', legendFontSize, lightLabel);
+}
 
-  return slide;
+// Redraws the TOP3 grid on an existing Overview slide in place: removes the
+// old grid (every non-group element at L>=110, T>=45 — the slide title,
+// sidebar and logo all sit outside that area) and draws a fresh one, so the
+// slide keeps its title, background and position in the deck.
+const _GRID_COLS_CACHE = {};
+function rebuildChartGridOnSlide(slide, opts) {
+  const isBadReview = !!(opts.dataSource && opts.dataSource.indexOf('badReview:') === 0);
+  const src = isBadReview ? BAD_REVIEW_SOURCES[opts.dataSource.slice('badReview:'.length)] : null;
+  const sheet = isBadReview
+    ? SpreadsheetApp.openById(src.id).getSheetByName(src.sheetName)
+    : SpreadsheetApp.openById(CHART_MAKER_SHEET_ID).getSheetByName(CHART_MAKER_SHEET_NAME);
+  const rowCount = Math.max(sheet.getLastRow() - 1, 0);
+  // Several slides share the 22k-row Zendesk sheet — read it once per execution.
+  const cacheKey = opts.dataSource || 'zendesk';
+  const columns = _GRID_COLS_CACHE[cacheKey] ||
+    (_GRID_COLS_CACHE[cacheKey] = isBadReview ? _readBadReviewColumns(sheet, rowCount) : _readChartMakerColumns(sheet, rowCount));
+  const filters = {
+    category: isBadReview ? null : (opts.category || null),
+    devices: opts.devices || [],
+    productSubstrings: opts.products || [],
+    startDate: opts.startDate || '',
+    endDate: opts.endDate || '',
+    excludeReasons: opts.excludeReasons || []
+  };
+  const topProducts = buildTopProductsDataV2(sheet, rowCount, filters, 3, columns);
+  const topReasons  = buildTopReasonsDataV2(sheet, rowCount, filters, 3, columns);
+
+  slide.getPageElements().forEach(function(el) {
+    if (el.getPageElementType() === SlidesApp.PageElementType.GROUP) return;
+    if (el.getLeft() >= 110 && el.getTop() >= 45) el.remove();
+  });
+  _drawChartGrid(slide, topProducts, topReasons, opts.prefix || 'GEN', isBadReview ? '배드리뷰' : '클레임', true);
+  return {
+    products: topProducts.map(function(p) { return p.productName + ' ' + p.total; }),
+    reasons: topReasons.map(function(r) { return r.reasonName + ' ' + r.total; })
+  };
 }
 
 function onOpen() {
@@ -1768,6 +1869,17 @@ function _getBadReviewFilterOptions(sourceKey) {
   return result;
 }
 
+// filters.startDate / endDate ('YYYY-MM-DD', inclusive); rows without a
+// parseable date are dropped only when a range is set.
+function _rowInDateRange(dates, i, filters) {
+  if (!filters.startDate && !filters.endDate) return true;
+  const d = dates ? dates[i] : '';
+  if (!d) return false;
+  if (filters.startDate && d < filters.startDate) return false;
+  if (filters.endDate && d > filters.endDate) return false;
+  return true;
+}
+
 // Generic row-level filter check shared by buildTopProductsDataV2 / buildTopReasonsDataV2.
 // devices / productSubstrings match if the row's value CONTAINS any of the given strings.
 function _rowMatchesFilters(category, device, product, filters) {
@@ -1801,8 +1913,20 @@ function _readChartMakerColumns(sheet, rowCount) {
     categories: rowCount ? sheet.getRange(2, categoryCol, rowCount, 1).getValues().flat() : [],
     products:   rowCount ? sheet.getRange(2, productCol,  rowCount, 1).getValues().flat() : [],
     reasons:    rowCount ? sheet.getRange(2, reasonCol,   rowCount, 1).getValues().flat() : [],
-    devices:    rowCount ? sheet.getRange(2, deviceCol,   rowCount, 1).getValues().flat() : []
+    devices:    rowCount ? sheet.getRange(2, deviceCol,   rowCount, 1).getValues().flat() : [],
+    dates:      _readIsoDates(sheet, 'Ticket created - Date', rowCount)
   };
+}
+
+// Reads a date column as 'YYYY-MM-DD' strings ('' when unparseable) so
+// filters.startDate / endDate can compare lexically.
+function _readIsoDates(sheet, headerName, rowCount) {
+  if (!rowCount) return [];
+  const col = getColumnIndexByHeader(sheet, headerName);
+  return sheet.getRange(2, col, rowCount, 1).getDisplayValues().flat().map(function(v) {
+    const d = _normalizeDate(v);
+    return d ? d.iso : '';
+  });
 }
 
 // Same shape as _readChartMakerColumns, sourced from the Bad Review sheet
@@ -1818,7 +1942,8 @@ function _readBadReviewColumns(sheet, rowCount) {
     categories: new Array(rowCount).fill(''),
     products:   rowCount ? sheet.getRange(2, productCol, rowCount, 1).getValues().flat() : [],
     reasons:    rowCount ? sheet.getRange(2, reasonCol,  rowCount, 1).getValues().flat() : [],
-    devices:    rowCount ? sheet.getRange(2, deviceCol,  rowCount, 1).getValues().flat() : []
+    devices:    rowCount ? sheet.getRange(2, deviceCol,  rowCount, 1).getValues().flat() : [],
+    dates:      _readIsoDates(sheet, 'Created 날짜', rowCount)
   };
 }
 
@@ -1844,6 +1969,8 @@ function buildTopProductsDataV2(sheet, rowCount, filters, topN, columns) {
     const device   = String(devices[i]).trim();
     if (!product || !reason) continue;
     if (!_rowMatchesFilters(category, device, product, filters)) continue;
+    if (!_rowInDateRange(cols.dates, i, filters)) continue;
+    if (filters.excludeReasons && filters.excludeReasons.indexOf(reason) !== -1) continue;
 
     if (!productMap[product]) productMap[product] = { total: 0, reasons: {} };
     productMap[product].total++;
@@ -1884,6 +2011,8 @@ function buildTopReasonsDataV2(sheet, rowCount, filters, topN, columns) {
     const device   = String(devices[i]).trim();
     if (!product || !reason) continue;
     if (!_rowMatchesFilters(category, device, product, filters)) continue;
+    if (!_rowInDateRange(cols.dates, i, filters)) continue;
+    if (filters.excludeReasons && filters.excludeReasons.indexOf(reason) !== -1) continue;
 
     if (!reasonMap[reason]) reasonMap[reason] = { total: 0, models: {} };
     reasonMap[reason].total++;
