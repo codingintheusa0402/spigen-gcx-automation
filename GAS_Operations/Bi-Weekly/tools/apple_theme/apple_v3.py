@@ -118,10 +118,10 @@ def build_all():
     reqs += hair(A, 'ap3_a_h2', 36, 326, 648)
     reqs += text(A, 'ap3_a_copy', 36, 334, 220, 16, 'Copyright © 2026 Spigen Inc. 글로벌CX전략팀', 8, GRAY)
     x = 262
-    NAV = SECTIONS[:-2] + [('SPIGEN', None)]          # approved footer nav: … | SPIGEN
+    NAV = SECTIONS[:-2] + [('SPIGEN', 'https://www.spigen.com/')]   # approved footer nav: … | SPIGEN → spigen.com
     for i, (lab, target) in enumerate(NAV):
         w = 8 + len(lab)*4.6
-        reqs += text(A, f'ap3_a_nav{i}', x, 334, w + 8, 16, lab, 8, LINKGRAY, slide=target); x += w + 6
+        reqs += text(A, f'ap3_a_nav{i}', x, 334, w + 8, 16, lab, 8, LINKGRAY, **({'url': target} if str(target).startswith('http') else {'slide': target})); x += w + 6
         if i < len(NAV) - 1: reqs += text(A, f'ap3_a_bar{i}', x, 334, 12, 16, '|', 8, HAIR); x += 14
     # closing slide stays the classic black Spigen-logo slide
     svc.batchUpdate(presentationId=P, body={'requests': reqs}).execute()
