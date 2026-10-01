@@ -367,12 +367,12 @@ def cmd_run(args):
         log(f"appended rows {first}–{end} (Ticket IDs {rows[0][0]}…{rows[-1][0]})")
     md = lambda d: f"{int(d[5:7])}/{int(d[8:])}"
     scope = f"Solved·Closed, ~{md(created_max)} 생성분" if created_max else "Solved·Closed"
-    msg = ["*✅ Zendesk Raw Data 업데이트 완료*", "", f"📅 {kst_stamp(now)}"]
+    msg = ["*✅ Zendesk Raw Data 업데이트 완료*", "", f"• 실행: {kst_stamp(now)}"]
     intake = intake_counts(created_max) if created_max and args.scheduled else None
     if intake:
-        msg.append(f"📥 {md(created_max)} 인입: {intake[0]}건 (완료 {intake[1]} / 처리 중 {intake[2]})")
-    msg += [f"🎫 시트 추가: {len(rows)}건 ({scope})" if rows else f"🎫 시트 추가: 없음 ({scope})",
-            f"📊 <{sheet_url(props)}|{props['title']} 바로가기>"]
+        msg.append(f"• {md(created_max)} 인입: {intake[0]}건 (완료 {intake[1]} / 처리 중 {intake[2]})")
+    msg += [f"• 시트 추가: {len(rows)}건 ({scope})" if rows else f"• 시트 추가: 없음 ({scope})",
+            "", f"📊 <{sheet_url(props)}|{props['title']} 바로가기>"]
     state.update({"last_run": now.isoformat(timespec="seconds"), "last_appended": len(rows)})
     if args.scheduled:
         state["last_scheduled_run"] = now.strftime("%Y-%m-%d")
