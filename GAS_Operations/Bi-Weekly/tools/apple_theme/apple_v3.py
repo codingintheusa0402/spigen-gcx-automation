@@ -118,7 +118,9 @@ def build_all():
     reqs += hair(A, 'ap3_a_h2', 36, 326, 648)
     reqs += text(A, 'ap3_a_copy', 36, 334, 220, 16, 'Copyright © 2026 Spigen Inc. 글로벌CX전략팀', 8, GRAY)
     x = 262
-    NAV = SECTIONS[:-2] + [('SPIGEN', 'https://www.spigen.com/')]   # approved footer nav: … | SPIGEN → spigen.com
+    purl = {x['chip']: x.get('product_url') for x in CFG['series']}
+    # approved footer nav: Overview → first Overview slide, series → official device page, SPIGEN → spigen.com
+    NAV = [(lab, purl.get(lab) or tgt) for lab, tgt in SECTIONS[:-2]] + [('SPIGEN', 'https://www.spigen.com/')]
     for i, (lab, target) in enumerate(NAV):
         w = 8 + len(lab)*4.6
         reqs += text(A, f'ap3_a_nav{i}', x, 334, w + 8, 16, lab, 8, LINKGRAY, **({'url': target} if str(target).startswith('http') else {'slide': target})); x += w + 6

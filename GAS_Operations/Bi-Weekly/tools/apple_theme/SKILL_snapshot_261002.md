@@ -137,7 +137,7 @@ python3 rate_pipeline.py slides --deck <classicDeckId>
    `<code> GCX Bi-weekly Report` (ask the user first — the classic working deck has the same name;
    suggest renaming that one `<code> GCX Bi-weekly Report (classic)`).
 2. Fill `tools/apple_theme/report.json` (report_code, report_date, period, source_deck,
-   apple_deck, series[chip/title_prefix/source_deck/sheet], zendesk/siren/looker) and set
+   apple_deck, series[chip/title_prefix/source_deck/sheet/product_url], zendesk/siren/looker) and set
    `BW_RUN.appleDeck` in Code.js.
 3. Run in this order (homebrew `python3` unless noted; every script is idempotent):
    | step | command | what it does |
@@ -145,7 +145,7 @@ python3 rate_pipeline.py slides --deck <classicDeckId>
    | a | `python3 apple_restyle.py` | backgrounds, removes navy sidebar chrome, Noto Sans KR, role-based colors, light tables |
    | b | `python3 apple_cards.py` | each card → photo tile (photos fit-scaled) + content tile + 5 spec tiles, labels, blue capsule button, red SIREN capsule (roles read from the CLASSIC deck by element id) |
    | c | `python3 apple_tables.py` | TOP-7/SIREN tables on white tiles, hairline rows, blue "보기" links instead of yellow icons |
-   | d | `python3 apple_v3.py` | Appendix (apple.com footer: 5 icon-headed link columns, line "젠데스크, 아마존 배드리뷰 데이터 접근 권한이 필요하면 **Caspi 접근 신청** 페이지에서 요청하세요.", copyright + nav row `Overview · <series…> · SPIGEN` (SPIGEN → https://www.spigen.com/ as one link), no country). The Apple cover hero only runs if `report.json` `apple_cover: true` — default false |
+   | d | `python3 apple_v3.py` | Appendix (apple.com footer: 5 icon-headed link columns, line "젠데스크, 아마존 배드리뷰 데이터 접근 권한이 필요하면 **Caspi 접근 신청** 페이지에서 요청하세요.", copyright + nav row `Overview · <series…> · SPIGEN` (Overview → first Overview slide; each series → its official device page from `report.json` series[].product_url — Samsung/Google Store/Apple, verify the URL returns the right page title; SPIGEN → https://www.spigen.com/; one link per word), no country). The Apple cover hero only runs if `report.json` `apple_cover: true` — default false |
    | e | `python3 apple_v4.py` | SIREN header/column alignment, stat tile (rounded tile aligned to the table's right edge, 8pt gap), outline capsule |
    | f | GAS `bwRunOverviewApple` | TOP3 gauges in `CHART_THEMES.apple` (white tiles, blue/light-blue/indigo/gray rings) |
    | g | `python3 weekly_fetch.py` then `/usr/bin/python3 chart.py` | Apple weekly bar chart (gray capsule-top bars, latest week blue, faint trend line, SF Pro + Apple SD Gothic Neo) |
