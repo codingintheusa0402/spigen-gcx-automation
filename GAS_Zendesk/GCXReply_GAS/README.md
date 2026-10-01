@@ -25,7 +25,7 @@ Backend for the **GCX Reply** Tampermonkey script ([Browser_Extensions/tampermon
 |---------|--------|
 | SP-API order lookup | SigV4-signed requests across 4 region configs (EU, FE/Japan, NA, India — India shares the EU endpoint but a separate Seller Central account/refresh token) |
 | Product lookup | Reads `SHEET_ID` `Data` tab (SKU, 모델명, 브랜드, etc.) plus per-marketplace sheets (`DE`,`NL`,`SE`,`ES`,`UK`,`FR`,`IT`,`JP`,`IN`,`SG`) |
-| Product index (v2.7.0) | `refreshProductIndex` (15-min trigger, installed once via `setupProductIndexTrigger`; `keepWarm` also refreshes it) pre-builds all product + marketplace data into 128 hashed ScriptCache buckets so `?asin=` is one cache read (~1.6 s vs 8–16 s). Requests never build it; if missing or >2 h old they fall back to the original live sheet reads |
+| Product index (v2.7.1) | `refreshProductIndex` (15-min trigger, installed once via `setupProductIndexTrigger`) rebuilds the index only when >4 h old — product sheets change weekly–monthly. All product + marketplace data lives in 128 hashed ScriptCache buckets so `?asin=` is one cache read (~1.6 s vs 8–16 s). **After editing ASIN Master / market sheets, run `forceRefreshProductIndex`.** Requests never build it; missing or >6 h old → original live sheet reads. TM v3.7.1 also caches each ASIN's response 6 h in GM storage (manual Product button bypasses) |
 | AI 인입사유 (DR) | `inferReason` action — Gemini-based defect/reason classification (`gemini-2.5-flash-lite` → `gemini-2.5-flash` fallback), cached |
 | ABM relay logging | `upsertAbmRelayLog_()` writes/updates rows in the `ASIN_Master_MondaySync` spreadsheet's `ABM_Relay_Log` tab, which [ASIN_Master_MondaySync](../../GAS_Operations/ASIN_Master_MondaySync/) prunes on a daily trigger |
 

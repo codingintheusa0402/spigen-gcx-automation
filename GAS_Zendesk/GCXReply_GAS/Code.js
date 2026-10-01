@@ -1,4 +1,4 @@
-// GCX Reply — Apps Script Web App (v2.7.0)
+// GCX Reply — Apps Script Web App (v2.7.1)
 // Endpoint: ?orderId=XXX  |  ?asin=XXX  |  ?orderId=XXX&asin=XXX
 // Deploy as: Execute as Me, Access: Anyone (or Anyone anonymous)
 // Script Properties required: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
@@ -1011,8 +1011,12 @@ function lookupAsinAll_(asin) {
 //   p     = market partial [기종명, 모델명] (first sheet/row containing the ASIN)
 //   m     = marketplaces [[sheetName, gid, cell], ...]
 // A full build reads ~4.5 MB of sheets and takes ~20-40 s, so it NEVER runs
-// inside an agent's request: refreshProductIndex (own 15-min trigger, see
+// inside an agent's request: refreshProductIndex (15-min trigger, see
 // setupProductIndexTrigger) and keepWarm rebuild it in the background.
+// The product sheets only change weekly-to-monthly, so the 15-min trigger
+// just checks the age and rebuilds every PIDX_REFRESH_MS (4 h — inside the
+// 6 h ScriptCache TTL, so the index never expires). After editing a product
+// sheet, run forceRefreshProductIndex to publish the change immediately.
 // Requests only read it. Missing / older than PIDX_MAX_AGE_MS (trigger not
 // running) / oversized bucket / non-B ASIN → null → caller uses the original
 // live-read path, so a request is never slower than before this change.
@@ -1020,8 +1024,8 @@ const PIDX_PREFIX      = 'pidx_v1_';
 const PIDX_META_KEY    = PIDX_PREFIX + 'meta';
 const PIDX_BUCKETS     = 128;
 const PIDX_TTL         = 21600;
-const PIDX_MAX_AGE_MS  = 2 * 60 * 60 * 1000;
-const PIDX_REFRESH_MS  = 25 * 60 * 1000; // rebuild once older than this (trigger runs every 15 min)
+const PIDX_MAX_AGE_MS  = 6 * 60 * 60 * 1000;
+const PIDX_REFRESH_MS  = 4 * 60 * 60 * 1000; // rebuild once older than this (trigger checks every 15 min)
 const ASIN_CELL_RE     = /^B[A-Z0-9]{9}$/;
 
 function pidxBucketKey_(asin) {
@@ -1124,8 +1128,13 @@ function refreshProductIndexIfStale_() {
   } catch (e) { Logger.log('refreshProductIndexIfStale_: ' + e.message); }
 }
 
-// Trigger / manual entry point (no trailing _ so it shows in the Run dropdown).
+// Trigger entry point: rebuilds only when the index is older than PIDX_REFRESH_MS.
 function refreshProductIndex() {
+  refreshProductIndexIfStale_();
+}
+
+// Run manually after editing ASIN Master / market sheets — rebuilds right now.
+function forceRefreshProductIndex() {
   const t0 = Date.now();
   const b  = rebuildProductIndexLocked_();
   Logger.log(b ? `Product index rebuilt in ${Date.now() - t0} ms` : 'Product index NOT rebuilt (lock busy or oversized bucket)');
@@ -1137,7 +1146,7 @@ function setupProductIndexTrigger() {
   const existing = ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'refreshProductIndex');
   if (!existing.length) ScriptApp.newTrigger('refreshProductIndex').timeBased().everyMinutes(15).create();
   Logger.log('refreshProductIndex trigger ' + (existing.length ? 'already exists' : 'created — fires every 15 minutes'));
-  refreshProductIndex();
+  forceRefreshProductIndex();
 }
 
 function pidxExpand_(vals) {
@@ -1153,7 +1162,8 @@ function lookupFromIndex_(asin) {
   const cache = CacheService.getScriptCache();
   const k     = pidxBucketKey_(asin);
   const got   = cache.getAll([PIDX_META_KEY, k]);
-  if (!got[PIDX_META_KEY] || !got[k]) return null;
+  if (!got[PIDX_META_KEY]) return null;
+  if (!got[k]) { cache.remove(PIDX_META_KEY); return null; } // bucket evicted early → next 15-min trigger rebuilds
   if (Date.now() - JSON.parse(got[PIDX_META_KEY]).builtAt > PIDX_MAX_AGE_MS) return null;
   const bucket = JSON.parse(got[k]);
   if (!bucket) return null;
@@ -1510,7 +1520,7 @@ function fixProductSheetData() {
   if (asinsToInvalidate.length) {
     const cache = CacheService.getScriptCache();
     asinsToInvalidate.forEach(a => cache.remove('asin_all_' + a));
-    cache.remove(PIDX_META_KEY); // live path until the next refreshProductIndex run
+    cache.remove(PIDX_META_KEY); // live path until the next refreshProductIndex run (≤15 min)
     Logger.log('Cache invalidated for ASINs: ' + asinsToInvalidate.join(', '));
   }
 }
