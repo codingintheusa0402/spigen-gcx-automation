@@ -13,6 +13,7 @@ Subcommands:
       --chat-webhook: Google Chat incoming webhook; scheduled runs post "Zendesk Raw Data 업데이트 완료"
                       (or a failure notice, once per day)
       --intake-query-id: Caspi queryId of intake_query.sql → notice also shows yesterday's intake
+                      (after unscheduled days, e.g. Monday on a weekdays schedule: Fri~Sun total)
                       (all statuses: 완료 = Solved·Closed / 처리 중 = the rest)
   schedule --days mon,thu --time 09:00 [--until-yesterday]   install/update the launchd job (Windows: Task Scheduler)
   unschedule                      remove the launchd job (Windows: Task Scheduler task)
@@ -141,21 +142,34 @@ def caspi_fetch(key, qid, params=None):
         offset = nxt
 
 
-def intake_counts(day):
-    """Tickets created on `day` (all statuses) → (total, done, in_progress), or None if not configured/failed.
+def intake_days(yesterday, sched_days):
+    """Days whose intake this run reports. Day D is normally reported by the run on D+1; if D+1 has no
+    scheduled run, the next run picks it up (weekdays schedule → Monday reports Fri~Sun)."""
+    end = start = datetime.date.fromisoformat(yesterday)
+    while DAYS[start.weekday()] not in sched_days and end - start < datetime.timedelta(days=6):
+        start -= datetime.timedelta(days=1)
+    return [(start + datetime.timedelta(days=i)).isoformat()
+            for i in range((end - start).days + 1)]
+
+
+def intake_counts(days):
+    """Tickets created on `days` (all statuses) → (total, done, in_progress), or None if not configured/failed.
     Notification-only: never fails the run."""
     qid = os.environ.get("CASPI_INTAKE_QUERY_ID") or (load_json(CREDS_PATH, {}) or {}).get("caspi_intake_query_id")
     if not qid:
         return None
     try:
         key, _ = caspi_creds()
-        by = {r["STATUS"]: int(float(r["N"])) for r in caspi_fetch(key, qid, {"created_date": day})}
+        by = {}
+        for day in days:
+            for r in caspi_fetch(key, qid, {"created_date": day}):
+                by[r["STATUS"]] = by.get(r["STATUS"], 0) + int(float(r["N"]))
     except (Exception, SystemExit) as e:
         log(f"intake count failed: {e}")
         return None
     done = sum(n for st, n in by.items() if st in STATUSES)
     total = sum(by.values())
-    log(f"intake {day}: {by}")
+    log(f"intake {days[0]}~{days[-1]}: {by}")
     return total, done, total - done
 
 
@@ -368,9 +382,11 @@ def cmd_run(args):
     md = lambda d: f"{int(d[5:7])}/{int(d[8:])}"
     scope = f"Solved·Closed, ~{md(created_max)} 생성분" if created_max else "Solved·Closed"
     msg = ["*✅ Zendesk Raw Data 업데이트 완료*", "", f"• 실행: {kst_stamp(now)}"]
-    intake = intake_counts(created_max) if created_max and args.scheduled else None
+    days = intake_days(created_max, sched["days"]) if created_max and args.scheduled else []
+    intake = intake_counts(days) if days else None
     if intake:
-        msg.append(f"• {md(created_max)} 인입: {intake[0]}건 (완료 {intake[1]} / 처리 중 {intake[2]})")
+        span = md(days[0]) if len(days) == 1 else f"{md(days[0])}~{md(days[-1])}"
+        msg.append(f"• {span} 인입: {intake[0]}건 (완료 {intake[1]} / 처리 중 {intake[2]})")
     msg += [f"• 시트 추가: {len(rows)}건 ({scope})" if rows else f"• 시트 추가: 없음 ({scope})",
             "", f"📊 <{sheet_url(props)}|{props['title']} 바로가기>"]
     state.update({"last_run": now.isoformat(timespec="seconds"), "last_appended": len(rows)})
