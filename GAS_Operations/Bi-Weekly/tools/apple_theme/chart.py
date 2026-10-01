@@ -2,7 +2,9 @@ import json, re
 import matplotlib; matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib import font_manager as fm
-from matplotlib.patches import FancyBboxPatch
+from matplotlib.patches import PathPatch
+from matplotlib.path import Path
+import math
 S = '/private/tmp/claude-501/-Users-kevinkim/8ab0abda-73a1-40e3-934d-c473628fe948/scratchpad/'
 for f in ['/Library/Fonts/SF-Pro-Text-Regular.otf', '/Library/Fonts/SF-Pro-Text-Semibold.otf', '/Library/Fonts/SF-Pro-Display-Regular.otf', '/System/Library/Fonts/AppleSDGothicNeo.ttc']:
     try: fm.fontManager.addfont(f)
@@ -23,9 +25,24 @@ ax = fig.add_axes([0.035, 0.17, 0.93, 0.62])
 ymax = max(vals) * 1.18
 ax.set_xlim(-0.6, n - 0.4); ax.set_ylim(0, ymax)
 bw = 0.62
+# pixels per data unit -> circular (not elliptical) corners on screen
+bbox = ax.get_position(); fw, fh = fig.get_size_inches() * fig.dpi
+px_x = bbox.width * fw / (n - 0.4 + 0.6); px_y = bbox.height * fh / ymax
+def top_rounded_bar(x0, w, h, r_frac=0.30):
+    rx = w * r_frac; ry = rx * px_x / px_y
+    ry = min(ry, h); rx = min(rx, ry * px_y / px_x)
+    pts = [(x0, 0), (x0, h - ry)]
+    for k in range(0, 13):                     # top-left quarter circle
+        a = math.pi - k * (math.pi / 2) / 12
+        pts.append((x0 + rx + rx * math.cos(a), h - ry + ry * math.sin(a)))
+    for k in range(0, 13):                     # top-right quarter circle
+        a = math.pi / 2 - k * (math.pi / 2) / 12
+        pts.append((x0 + w - rx + rx * math.cos(a), h - ry + ry * math.sin(a)))
+    pts += [(x0 + w, 0), (x0, 0)]
+    return Path(pts, [Path.MOVETO] + [Path.LINETO] * (len(pts) - 2) + [Path.CLOSEPOLY])
 for i, v in enumerate(vals):
     c = BLUE if i == n - 1 else BAR
-    ax.add_patch(FancyBboxPatch((i - bw/2, 0), bw, v, boxstyle=f'round,pad=0,rounding_size={bw/2*0.9}', mutation_aspect=ymax/14, fc=c, ec='none'))
+    ax.add_patch(PathPatch(top_rounded_bar(i - bw/2, bw, v), fc=c, ec='none', zorder=2))
     ax.text(i, v + ymax*0.018, f'{v:,}', ha='center', va='bottom', fontsize=4.6, color=BLUE if i == n - 1 else GRAY2,
             fontweight='semibold' if i == n - 1 else 'normal')
 # trend (least squares)
