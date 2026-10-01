@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Fills Z col (판매량, EU+UK Amazon FBA) on the '1-5점' tab of the iPhone18 /
-Pixel11 / GlxZ8 review-monitoring spreadsheets, from a fixed per-product
-launch-date baseline through Caspi's latest available snapshot.
+Fills Z col (판매량, EU+UK Amazon) on the '1-5점' tab of the iPhone18 /
+Pixel11 / GlxZ8 review-monitoring spreadsheets with CUMULATIVE units sold
+per base SKU from each product's start_date through Caspi's latest order day.
 
 Runs unattended via launchd (see com.spigen.gcx.caspi-sales-backfill.plist),
 fired every 30 min on weekdays. Each tick is a no-op unless it's within the
@@ -10,10 +10,18 @@ catch-up window (weekday, 08:00-23:59 KST) AND that product hasn't already
 succeeded today -- so if the Mac was off/asleep during the normal 8-10AM
 window, the first tick after it wakes catches up automatically.
 
-Data source: Caspi registered query pq_bc4163d82dce2e4d38
-("판매량_EU_backfill_delta_by_baseline_date"), called via the headless
-data-api endpoint (no Claude session needed) with a Caspi API key.
-Method + caveats: see memory caspi_판매량_backfill_workflow.md.
+Data source: Caspi registered query pq_01b6fe14503ee3e206
+("판매량_EU_cumulative_since_start_date"), called via the headless data-api
+endpoint (no Claude session needed) with a Caspi API key. It sums order
+quantity from S3.AMAZON_SELLER.FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL
+for EU+UK Amazon marketplaces (DE/FR/IT/ES/UK/NL/SE/PL/BE/IE), excluding
+Cancelled, deduped per order+SKU, purchase-date >= start_date.
+
+Until 2026-10-01 this used RESTOCK_INVENTORY_RECOMMENDATIONS_REPORT's
+"Units Sold Last 30 Days" (latest minus a baseline snapshot). That is a
+rolling 30-day window, not a cumulative count, and the baseline never
+matched (FILE_DATE comes back as a day number), so Z showed last-30-day
+FBA EU5 sales only.
 """
 import json
 import os
@@ -31,7 +39,7 @@ SECRETS_PATH = os.path.expanduser("~/.config/caspi_sales_backfill/secrets.json")
 STATE_PATH = os.path.expanduser("~/.config/caspi_sales_backfill/state.json")
 GWS_TOKEN_PATH = os.path.expanduser("~/.config/gws_shim/token.json")
 CASPI_ENDPOINT = "https://caspilm.spigen.com/api/data-api/run"
-SOURCE_TABLE_NOTE = "S3.AMAZON_SELLER.RESTOCK_INVENTORY_RECOMMENDATIONS_REPORT"
+SOURCE_TABLE_NOTE = "S3.AMAZON_SELLER.FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL (EU+UK orders, excl. Cancelled)"
 
 SHEET_TAB = "1-5점"
 SKU_COL_IDX = 16  # Q
@@ -43,7 +51,6 @@ PRODUCTS = [
         "label": "iPhone 18 Series",
         "ssid": "1aYxZRm7pf5Egx6fIoAGpGg8CWzHaZ_zsBRKsvh9U1iU",
         "sheet_id": 957652957,
-        "baseline_date": "2026-09-17",
         "start_date": "2026-09-18",
     },
     {
@@ -51,7 +58,6 @@ PRODUCTS = [
         "label": "Pixel 11 Series",
         "ssid": "12I6z_FFmDIMHa0rLanltKKFp7kI_yREQj3adkMamPgI",
         "sheet_id": 957652957,
-        "baseline_date": "2026-08-17",
         "start_date": "2026-08-18",
     },
     {
@@ -59,7 +65,6 @@ PRODUCTS = [
         "label": "Galaxy Z Fold8/Flip8/Fold8 Ultra Series",
         "ssid": "19OhswglYMx_dxSFFDtWI1WYPWq2jONJn6RK84KITwy4",
         "sheet_id": 957652957,
-        "baseline_date": "2026-07-26",
         "start_date": "2026-07-27",
     },
 ]
@@ -89,13 +94,13 @@ def within_catchup_window(now):
     return now.hour >= 8  # up to 23:59
 
 
-def caspi_query(baseline_date, api_key, query_id):
+def caspi_query(start_date, api_key, query_id):
     rows = []
     offset = 0
     while True:
         body = json.dumps({
             "queryId": query_id,
-            "params": {"baseline_date": baseline_date},
+            "params": {"start_date": start_date},
             "limit": 1000,
             "offset": offset,
         }).encode()
@@ -114,25 +119,9 @@ def caspi_query(baseline_date, api_key, query_id):
     return rows
 
 
-def compute_deltas(rows, baseline_date):
-    per_sku = {}
-    for r in rows:
-        sku = r["BASE_SKU"]
-        fdate = r["FILE_DATE"]
-        units = int(float(r["UNITS30"]))
-        d = per_sku.setdefault(sku, {})
-        if fdate == baseline_date:
-            d["baseline"] = units
-        else:
-            d["latest"] = max(d.get("latest", 0), units)
-
-    deltas = {}
-    for sku, d in per_sku.items():
-        if "latest" not in d:
-            continue
-        baseline = d.get("baseline", 0)
-        deltas[sku] = max(d["latest"] - baseline, 0)
-    return deltas
+def compute_units(rows):
+    """{base_sku: cumulative units}. SKUs with no orders are absent → Z left blank."""
+    return {r["BASE_SKU"]: int(float(r["UNITS"] or 0)) for r in rows}
 
 
 def get_sheets_client():
@@ -214,7 +203,7 @@ def main():
 
     secrets = load_json(SECRETS_PATH, {})
     api_key = secrets.get("caspi_api_key")
-    query_id = secrets.get("caspi_query_id")
+    query_id = secrets.get("caspi_query_id_cumulative")
     if not api_key or not query_id:
         log("ERROR: missing Caspi API key/queryId in secrets.json")
         return
@@ -224,8 +213,8 @@ def main():
 
     for product in pending:
         try:
-            rows = caspi_query(product["baseline_date"], api_key, query_id)
-            deltas = compute_deltas(rows, product["baseline_date"])
+            rows = caspi_query(product["start_date"], api_key, query_id)
+            deltas = compute_units(rows)
             process_product(sheets, product, deltas, today_str)
             state.setdefault(product["key"], {})["last_success_date"] = today_str
             state[product["key"]]["last_run_at"] = now.isoformat()
