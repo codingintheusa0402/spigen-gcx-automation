@@ -17,10 +17,10 @@ WHAT THIS DOES (established 2026-09-10, see skill `sc-review-propagate`):
            destination sheet, and paste the survivors into the product's
            monitoring sheet (1-5점 where the book has both 1-5/1-3, else 1-3점).
 
-  Phase C  Rewrite `tem` sheet cols F-K (유지훈P, Pixel 10a, Glx26, iPh17e,
-           GlxZ8, Pixel11) from each product's `1-5점` Review-ID col K (유지훈P
-           uses its `1-3점` col K — no 1-5점). This makes the `<Product> Tab`
-           helper formula on `SC` read true. Cols A-E (SDA, iPh17, Auto Acc,
+  Phase C  Rewrite `tem` sheet cols F-L (유지훈P, Pixel 10a, Glx26, iPh17e,
+           GlxZ8, Pixel11, iPh18) from each product's `1-5점` Review-ID col K
+           (유지훈P uses its `1-3점` col K — no 1-5점). This makes the
+           `<Product> Tab` helper formula on `SC` read true. Cols A-E (SDA, iPh17, Auto Acc,
            전략폰, Power_Acc) are `IMPORTRANGE` formulas and are NEVER touched.
            Run it every time (`--refresh-tem`), not only when rows were added.
 
@@ -93,15 +93,15 @@ def is_valid_review_row(row):
 
 # tem sheet columns (1-based), header row 1, Review IDs from row 2:
 #  A SDA | B iPh17 | C Auto Acc | D 전략폰 | E Power_Acc | F 유지훈P |
-#  G Pixel 10a | H Glx26 | I iPh17e | J GlxZ8 | K Pixel11
+#  G Pixel 10a | H Glx26 | I iPh17e | J GlxZ8 | K Pixel11 | L iPh18
 #
 # Cols A-E are `={"hdr"; IMPORTRANGE(<destbook>, "…J2:J")}` formulas that
 # self-update — NEVER write to A-E. (IMPORTRANGE is only used for the small
 # books; the others have too many rows and would hit mass-fetch errors.)
 #
-# Cols F-K are plain value lists that Phase C must rewrite every run from the
+# Cols F-L are plain value lists that Phase C must rewrite every run from the
 # product's `1-5점` Review-ID column K (유지훈P has no 1-5점 → its `1-3점` col K).
-# Verified 2026-09-10: all six sources use Review-ID col K.
+# Verified 2026-09-10: all six sources use Review-ID col K (iPh18 added 2026-09-21, same col).
 TEM_REFRESH = {  # tem col letter -> (source book id, source sheet, review-id col)
     "F": ("1dlY6q8trbVMVJAjw_OUoxp1cguA2oTB8WlPhHR01xIw", "1-3점", "K"),  # 유지훈P
     "G": ("1BpeGq5gIr4tNsPZmnHr19NNY6pQ6sb2_H-v3V9-It4E", "1-5점", "K"),  # Pixel 10a
@@ -109,6 +109,7 @@ TEM_REFRESH = {  # tem col letter -> (source book id, source sheet, review-id co
     "I": ("16xRJHH7Ynii4erNOn_905ST4CZs6OLpOYTof4uqsGsQ", "1-5점", "K"),  # iPh17e
     "J": ("19OhswglYMx_dxSFFDtWI1WYPWq2jONJn6RK84KITwy4", "1-5점", "K"),  # GlxZ8
     "K": ("12I6z_FFmDIMHa0rLanltKKFp7kI_yREQj3adkMamPgI", "1-5점", "K"),  # Pixel11
+    "L": ("1aYxZRm7pf5Egx6fIoAGpGg8CWzHaZ_zsBRKsvh9U1iU", "1-5점", "K"),  # iPh18
 }
 TEM_CLEAR_TO_ROW = 6000  # nuke any residue below the refreshed data
 
@@ -148,6 +149,27 @@ PRODUCTS = {
         "one_three_sheet": "1-3점",
         "dr_sheet": "1-3점",
         "dr_col_header_contains": "인입사유(AI)",   # col M ("인입사유(AI)  Acc. 83.9%")
+        "dr_body_header": "본문",
+        "dr_category_header": "대분류",
+    },
+    "iPh18": {
+        # Onboarded 2026-09-21. Book layout verified identical to GlxZ8/Pixel11
+        # (same A:V headers on both 1-5점 and 1-3점, same array-spill formulas
+        # in M/N/O of 1-5점 and M of 1-3점) — config below is a straight copy
+        # with only dest_id changed. User had already manually pasted today's
+        # iPh18 rows into 1-5점 before this was wired up; dedup-by-Review-ID in
+        # phase_b_c_d_product means those rows are simply skipped as
+        # "already in 1-5점" on the first real run, not duplicated.
+        "filter_view": "iPh18 finalize",          # FV 394382907
+        "dest_id": "1aYxZRm7pf5Egx6fIoAGpGg8CWzHaZ_zsBRKsvh9U1iU",
+        "dest_sheet": "1-5점",
+        "dest_review_id_col": "K",
+        "paste_review_id": True,
+        "paste_through_col": "K",
+        "insert_at_top": False,
+        "one_three_sheet": "1-3점",
+        "dr_sheet": "1-3점",
+        "dr_col_header_contains": "인입사유(AI)",   # col M ("인입사유(AI)  Acc. 0.0%" as of onboarding)
         "dr_body_header": "본문",
         "dr_category_header": "대분류",
     },
@@ -234,11 +256,12 @@ PRODUCTS = {
     },
 }
 
-# `SC` sheet helper columns O..W (0-based within A..W) → the tem column each
+# `SC` sheet helper columns O..X (0-based within A..X) → the tem column each
 # `<Product> Tab` formula compares against, for reference:
 #   O(14) Device | P(15) GlxZ8 Tab→tem J | Q(16) Pixel11 Tab→tem K |
 #   R(17) 유지훈P Tab→tem F | S(18) AutoAcc Tab→tem C | T(19) PowerAcc Tab→tem E |
-#   U(20) SDA Tab→tem A | V(21) 전략폰 Tab→tem D | W(22) GlxS26 Tab→tem H
+#   U(20) SDA Tab→tem A | V(21) 전략폰 Tab→tem D | W(22) GlxS26 Tab→tem H |
+#   X(23) iPh18 Tab→tem L (added 2026-09-21)
 
 
 def a1_col_to_idx(letter):
@@ -744,7 +767,7 @@ def phase_e_notify(svc, creds, new_sheet=None, removed=None, dry_run=True):
                 total += n or 0
             dest_widgets.append(row(product, sid, tab, f"+{n if n is not None else '?'} rows added today"))
 
-    house = [f"<b>tem</b> refreshed (F–K)"]
+    house = [f"<b>tem</b> refreshed (F–L)"]
     if removed:
         house.append("<b>Removed older tabs:</b> " + ", ".join(removed))
     sections = [
@@ -817,13 +840,13 @@ def phase_f_cleanup(svc, dry_run=True):
 
 
 def phase_c_refresh_tem(svc, dry_run=True):
-    """Rewrite tem cols F-K from each product's 1-5점 (유지훈P: 1-3점) Review-ID
+    """Rewrite tem cols F-L from each product's 1-5점 (유지훈P: 1-3점) Review-ID
     col K. Cols A-E are IMPORTRANGE — never touched. Safe to run every time."""
     cur = svc.spreadsheets().values().get(
-        spreadsheetId=SRC, range=f"'{TEM_SHEET}'!A1:K"
+        spreadsheetId=SRC, range=f"'{TEM_SHEET}'!A1:L"
     ).execute().get("values", [])
     cur_len = {}
-    for ci in range(11):
+    for ci in range(12):
         cur_len[idx_to_a1_col(ci + 1)] = sum(
             1 for row in cur[1:] if ci < len(row) and str(row[ci]).strip()
         )
@@ -840,13 +863,13 @@ def phase_c_refresh_tem(svc, dry_run=True):
         data.append({"range": f"{TEM_SHEET}!{col}2:{col}{TEM_CLEAR_TO_ROW}", "values": body})
 
     if dry_run:
-        print("  [dry-run] would rewrite tem cols F-K (A-E IMPORTRANGE untouched)")
+        print("  [dry-run] would rewrite tem cols F-L (A-E IMPORTRANGE untouched)")
         return
     svc.spreadsheets().values().batchUpdate(
         spreadsheetId=SRC,
         body={"valueInputOption": "RAW", "data": data},
     ).execute()
-    print("  ✓ tem cols F-K refreshed")
+    print("  ✓ tem cols F-L refreshed")
 
 
 def main():
@@ -854,7 +877,7 @@ def main():
     ap.add_argument("--new-sheet", help="SC_yymmdd or CaspiLM_yymmdd tab to funnel into SC (Phase A)")
     ap.add_argument("--product", choices=list(PRODUCTS), help="run Phase B/C/D for one product")
     ap.add_argument("--all-products", action="store_true", help="Phase B/D for all active products (dry-run only)")
-    ap.add_argument("--refresh-tem", action="store_true", help="Phase C: rewrite tem cols F-K from the 1-5점/1-3점 Review-ID cols")
+    ap.add_argument("--refresh-tem", action="store_true", help="Phase C: rewrite tem cols F-L from the 1-5점/1-3점 Review-ID cols")
     ap.add_argument("--finish", action="store_true",
                     help="with --product: (re)run only the post-paste steps — =dr() on today's "
                          "un-classified rows + Update 날짜 restyle. Idempotent.")
