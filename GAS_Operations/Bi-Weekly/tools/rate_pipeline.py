@@ -100,8 +100,10 @@ def cmd_prep(a):
     json.dump(out, open(os.path.join(STATE, 'prep.json'), 'w'), ensure_ascii=False, indent=1)
     skus = sorted({it['sku'] for s in out['series'].values() for it in s['items']})
     yr = (a.start or a.end or time.strftime('%Y-%m-%d'))[:4]
-    sql = ("SELECT SUBSTR(SELLER_SKU,1,8) AS SKU, ASIN, TRANSACTION_TYPE, MARKETPLACE, SUM(TRY_TO_NUMBER(QTY)) AS QTY, COUNT(*) AS N, "
-           "MIN(DATA_MONTH) AS FIRST_MONTH, MAX(DATA_MONTH) AS LAST_MONTH\nFROM %s\nWHERE DATA_YEAR = '%s' AND SUBSTR(SELLER_SKU,1,8) IN (%s)\nGROUP BY 1,2,3,4 ORDER BY 1,3,4"
+    # One row per SKU x type keeps the result well under Caspi run_query's ~100KB cap
+    # (per-ASIN/marketplace rows got silently truncated on 2026-10-01).
+    sql = ("SELECT SUBSTR(SELLER_SKU,1,8) AS SKU, TRANSACTION_TYPE, SUM(TRY_TO_NUMBER(QTY)) AS QTY, COUNT(*) AS N, "
+           "MIN(DATA_MONTH) AS FIRST_MONTH, MAX(DATA_MONTH) AS LAST_MONTH\nFROM %s\nWHERE DATA_YEAR = '%s' AND SUBSTR(SELLER_SKU,1,8) IN (%s)\nGROUP BY 1,2 ORDER BY 1,2"
            % (CFG['caspiTable'], yr, ','.join("'%s'" % s for s in skus)))
     open(os.path.join(STATE, 'caspi_sales.sql'), 'w').write(sql)
     print('\nCaspi LM SQL written to tools/state/caspi_sales.sql — run it with the Caspi MCP run_query tool (limit 5000) and save the JSON result to tools/state/caspi_sales.json')
@@ -110,6 +112,8 @@ def cmd_prep(a):
 def cmd_aggregate(a):
     prep = json.load(open(os.path.join(STATE, 'prep.json')))
     raw = open(a.caspi).read(); data = json.loads(raw[raw.index('{'):])
+    if data.get('truncated'):
+        sys.exit('Caspi result is truncated (%s rows) — sales would be undercounted. Narrow the query and re-run.' % data.get('rowCount'))
     sale, refund = collections.Counter(), collections.Counter()
     for r in data['rows']:
         q = float(r.get('QTY') or 0)
