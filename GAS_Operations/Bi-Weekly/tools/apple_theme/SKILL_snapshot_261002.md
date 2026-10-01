@@ -33,13 +33,13 @@ https://docs.google.com/presentation/d/1quCr9Xj-pSsVXKrYuaEOq0LPILZMN2LPUwBkY1f_
 | slides | content |
 |---|---|
 | 1 | Cover — classic orange Spigen cover (title, team line, date) |
-| 2 | Index — 01 Overview · 02/03/04 one block per series · 05 GCX SIREN, icons beside numbers |
+| 2 | Index — 01 Overview · 02 iPhone 18 · 03 Pixel 11 · 04 Galaxy Z8 (newest first) · 05 GCX SIREN, icons beside numbers |
 | 3 | 1. Overview dashboard — 집중 모니터링 대상 (newest series red), 최다 인입사유 top-3 tiles, 누적 클레임 + YoY, Apple weekly bar chart |
 | 4 | 1. Overview (2026년 전제품) — TOP3 gauges, claims 2026-01-01~latest |
 | 5–7 | 1. Overview (<series>) 배드리뷰 TOP3 — one per series, cumulative |
 | 8–10 | 1. Overview (<series>) 클레임 TOP3 — one per series, cumulative |
 | 11–13 | Overview (<series>) 클레임 + 배드리뷰 / 판매량 TOP 7 — product thumbnails |
-| 14… | 2./3./4. <Series> Claims / Reviews — this period's cards only, product tile + photos + spec tiles |
+| 14… | 2. iPhone 18 → 3. Pixel 11 → 4. Galaxy Z8 Claims / Reviews (newest first) — this period's cards only, product tile + photos + spec tiles |
 | next 1–2 | 5. GCX SIREN (26년 하반기 등록 현황) — 9 rows per slide, stat tile + sheet button |
 | next | Appendix — apple.com footer |
 | last | Closing — black Spigen-logo slide |
@@ -121,8 +121,12 @@ python3 rate_pipeline.py slides --deck <classicDeckId>
 
 ## 6. Cover / index / dashboard
 
-- Cover date = report date. Index slide: add a section block per series (04 …), SIREN last;
-  section titles renumbered (`N. <Series> Claims / Reviews`, `N. GCX SIREN …`).
+- Cover date = report date. **Series order = newest launch first** (manager feedback 261002): index blocks
+  02 = newest series (iPhone 18), 03 = Pixel 11, 04 = Galaxy Z8 …, SIREN last; the card sections follow the
+  same order (`2. iPhone 18 Series Claims / Reviews`, `3. Pixel 11 …`, `4. Galaxy Z8 …`, `5. GCX SIREN …`).
+  To reorder: swap the index blocks' title/list texts (insert-then-delete keeps the list style) and their
+  icons, move each card block with `updateSlidesPosition` (one request per block, in deck order), and
+  renumber titles with `replaceAllText` via a temp token. `report.json` series[] is kept in this order.
 - Overview dashboard (slide 3): `2026 전제품 누적 클레임 인입건 수(~MM.DD)` = row count of
   `26년 전체문의` (created ≤ cutoff), YoY via `getYoYStats` logic, top-3 `인입사유` counts
   (all categories), 집중 모니터링 대상 list incl. each series' review-monitoring window —
@@ -148,7 +152,7 @@ python3 rate_pipeline.py slides --deck <classicDeckId>
    | d | `python3 apple_v3.py` | Appendix (apple.com footer: 5 icon-headed link columns, line "젠데스크, 아마존 배드리뷰 데이터 접근 권한이 필요하면 **Caspi 접근 신청** 페이지에서 요청하세요.", copyright + nav row `Overview · <series…> · SPIGEN` (Overview → first Overview slide; each series → its official device page from `report.json` series[].product_url — Samsung/Google Store/Apple, verify the URL returns the right page title; SPIGEN → https://www.spigen.com/; one link per word), no country). The Apple cover hero only runs if `report.json` `apple_cover: true` — default false |
    | e | `python3 apple_v4.py` | SIREN header/column alignment, stat tile (rounded tile aligned to the table's right edge, 8pt gap), outline capsule |
    | f | GAS `bwRunOverviewApple` | TOP3 gauges in `CHART_THEMES.apple` (white tiles, blue/light-blue/indigo/gray rings) |
-   | g | `python3 weekly_fetch.py` then `/usr/bin/python3 chart.py` | Apple weekly bar chart (gray capsule-top bars, latest week blue, faint trend line, SF Pro + Apple SD Gothic Neo) |
+   | g | `python3 weekly_fetch.py` then `/usr/bin/python3 chart.py` | Apple weekly bar chart (gray rounded-top bars, latest week blue, faint trend line, SF Pro + Apple SD Gothic Neo). Labels must be readable (manager feedback): values 7pt (≥1,000 → `1.1k`), weeks 6pt, months 7pt bold, y-axis 5.5pt |
    | h | `/usr/bin/python3 icons_render.py` (only if `icons/*.png` missing) then `python3 make_assets_gas.py` | writes temp `AppleAssets.js` (icons on slides, chart swap, layout icons) → `clasp push`, run `aaRun` (first function of AppleAssets.gs), then **delete AppleAssets.js and push again** |
    | i | `python3 apple_layouts.py` | Apple theme (master `simple-light-2` color scheme + default type) and 10 layouts on the unused stock layouts p2–p11 (Cover, Index, Overview dashboard, TOP3 gauges, Table, Claim/Review card, SIREN, Appendix, Closing, Big number). Re-run step h afterwards for layout icons. Layout names can't be set via API → tell the user: View → Theme builder → right-click → Rename |
    | j | `python3 apple_type.py fix` | '1.' list bullets → text, restores bold, every title same box (x36 y16, 18pt bold #1D1D1F, gray "대상 국가…" qualifier), Latin runs → Inter (600 for bold), Hangul → Noto Sans KR |

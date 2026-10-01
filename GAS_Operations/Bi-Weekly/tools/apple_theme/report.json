@@ -11,12 +11,12 @@
   "team_line": "경영지원부문ㅣ사업지원실ㅣ글로벌CX전략팀 ㅣ김지우",
   "series": [
     {
-      "key": "glxZ8",
-      "chip": "Galaxy Z8",
-      "title_prefix": "2. Galaxy Z8",
-      "source_deck": "1VC5WAoiufinAPz9bPn1OrBnAef9JkDZEZxlAGF6DDho",
-      "sheet": "19OhswglYMx_dxSFFDtWI1WYPWq2jONJn6RK84KITwy4",
-      "product_url": "https://www.samsung.com/us/smartphones/galaxy-z-fold8/"
+      "key": "iphone18",
+      "chip": "iPhone 18",
+      "title_prefix": "2. iPhone 18",
+      "source_deck": "1uuHcoTZxxLYlxdaHb0KFUBbI2hEPMvkOV0cL8ELU9dU",
+      "sheet": "1aYxZRm7pf5Egx6fIoAGpGg8CWzHaZ_zsBRKsvh9U1iU",
+      "product_url": "https://www.apple.com/iphone-18-pro/"
     },
     {
       "key": "pixel11",
@@ -27,12 +27,12 @@
       "product_url": "https://store.google.com/us/product/pixel_11_pro?hl=en-US"
     },
     {
-      "key": "iphone18",
-      "chip": "iPhone 18",
-      "title_prefix": "4. iPhone 18",
-      "source_deck": "1uuHcoTZxxLYlxdaHb0KFUBbI2hEPMvkOV0cL8ELU9dU",
-      "sheet": "1aYxZRm7pf5Egx6fIoAGpGg8CWzHaZ_zsBRKsvh9U1iU",
-      "product_url": "https://www.apple.com/iphone-18-pro/"
+      "key": "glxZ8",
+      "chip": "Galaxy Z8",
+      "title_prefix": "4. Galaxy Z8",
+      "source_deck": "1VC5WAoiufinAPz9bPn1OrBnAef9JkDZEZxlAGF6DDho",
+      "sheet": "19OhswglYMx_dxSFFDtWI1WYPWq2jONJn6RK84KITwy4",
+      "product_url": "https://www.samsung.com/us/smartphones/galaxy-z-fold8/"
     }
   ],
   "zendesk_sheet": "1sjcCj_P4DRD8rywkmYJhbsrzwFfgiJQuF9nIKwCiKlc",

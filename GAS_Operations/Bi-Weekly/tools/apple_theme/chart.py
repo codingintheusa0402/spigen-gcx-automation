@@ -44,23 +44,23 @@ def top_rounded_bar(x0, w, h, r_frac=0.30):
 for i, v in enumerate(vals):
     c = BLUE if i == n - 1 else BAR
     ax.add_patch(PathPatch(top_rounded_bar(i - bw/2, bw, v), fc=c, ec='none', zorder=2))
-    ax.text(i, v + ymax*0.018, f'{v:,}', ha='center', va='bottom', fontsize=4.6, color=BLUE if i == n - 1 else GRAY2,
+    ax.text(i, v + ymax*0.018, (f'{v/1000:.1f}k' if v >= 1000 else f'{v}'), ha='center', va='bottom', fontsize=7, color=BLUE if i == n - 1 else GRAY,
             fontweight='semibold' if i == n - 1 else 'normal')
 # trend (least squares)
 xm = (n-1)/2; ym = sum(vals)/n
 b = sum((i-xm)*(v-ym) for i, v in enumerate(vals)) / sum((i-xm)**2 for i in range(n)); a = ym - b*xm
 ax.plot([-0.4, n-0.6], [a + b*(-0.4), a + b*(n-0.6)], color=BLUE, lw=0.7, alpha=0.35, dash_capstyle='round', dashes=(3, 2.2))
 for y in (250, 500, 750, 1000):
-    if y < ymax: ax.axhline(y, color=GRID, lw=0.5, zorder=0); ax.text(n - 0.35, y, f'{y:,}', fontsize=4, color=GRAY2, va='center', ha='left')
+    if y < ymax: ax.axhline(y, color=GRID, lw=0.5, zorder=0); ax.text(n - 0.35, y, (f'{y/1000:.0f}k' if y >= 1000 else f'{y}'), fontsize=5.5, color=GRAY2, va='center', ha='left')
 ax.axhline(0, color=BAR, lw=0.6)
 for s in ax.spines.values(): s.set_visible(False)
 ax.set_xticks([]); ax.set_yticks([])
 prev_m = None
 for i, l in enumerate(labels):
     m = re.match(r'(\d+)월 (\d+)주', l)
-    ax.text(i, -ymax*0.05, f'{m.group(2)}주', ha='center', va='top', fontsize=4.4, color=BLUE if i == n-1 else GRAY)
+    ax.text(i, -ymax*0.05, f'{m.group(2)}주', ha='center', va='top', fontsize=6, color=BLUE if i == n-1 else GRAY)
     if m.group(1) != prev_m:
-        ax.text(i - bw/2, -ymax*0.15, f'{m.group(1)}월', ha='left', va='top', fontsize=5, color=INK, fontweight='semibold')
+        ax.text(i - bw/2, -ymax*0.15, f'{m.group(1)}월', ha='left', va='top', fontsize=7, color=INK, fontweight='semibold')
         prev_m = m.group(1)
 fig.savefig(S + 'weekly_chart.png', transparent=False, facecolor='white')
 print(n, labels[0], labels[-1], vals[-3:])
