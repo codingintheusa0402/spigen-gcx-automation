@@ -18,22 +18,29 @@ def text(sid, oid, x, y, w, h, s, size, color, bold=False, align='START', url=No
             {'updateTextStyle': {'objectId': oid, 'style': st, 'fields': f, 'textRange': {'type': 'ALL'}}},
             {'updateParagraphStyle': {'objectId': oid, 'style': {'alignment': align, 'lineSpacing': 100}, 'fields': 'alignment,lineSpacing', 'textRange': {'type': 'ALL'}}},
             {'updateShapeProperties': {'objectId': oid, 'shapeProperties': {'contentAlignment': 'MIDDLE'}, 'fields': 'contentAlignment'}}]
-def pill(sid, oid, x, y, w, h, label, style='filled', size=9, url=None, slide=None):
-    """Apple pill button: filled blue / outline blue / gray chip."""
-    fill = {'filled': BLUE, 'outline': '#FFFFFF', 'chip': CHIP, 'dark': INK, 'red': '#FF3B30'}[style]
+def _capsule(sid, oid, x, y, w, h, color):
+    """True capsule (semicircular ends): rect + 2 circles of diameter h."""
+    r = h / 2; out = []
+    for i, (px, py, pw, ph, kind) in enumerate([(x + r, y, max(w - h, 0.1), h, 'RECTANGLE'), (x, y, h, h, 'ELLIPSE'), (x + w - h, y, h, h, 'ELLIPSE')]):
+        pid = f'{oid}_c{i}'
+        out += [box(sid, pid, kind, px, py, pw, ph),
+                {'updateShapeProperties': {'objectId': pid, 'shapeProperties': {'shapeBackgroundFill': {'solidFill': {'color': {'rgbColor': rgb(color)}}},
+                  'outline': {'propertyState': 'NOT_RENDERED'}}, 'fields': 'shapeBackgroundFill.solidFill.color,outline.propertyState'}}]
+    return out
+def pill(sid, oid, x, y, w, h, label, style='filled', size=9, url=None, slide=None, under='#FFFFFF'):
+    """Apple capsule button. filled/red/chip/dark = solid capsule; outline = 1pt blue ring over `under`."""
+    fill = {'filled': BLUE, 'outline': BLUE, 'chip': CHIP, 'dark': INK, 'red': '#FF3B30'}[style]
     color = {'filled': '#FFFFFF', 'outline': BLUE, 'chip': INK, 'dark': '#FFFFFF', 'red': '#FFFFFF'}[style]
-    props = {'shapeBackgroundFill': {'solidFill': {'color': {'rgbColor': rgb(fill)}}}, 'contentAlignment': 'MIDDLE'}
-    if style == 'outline': props['outline'] = {'outlineFill': {'solidFill': {'color': {'rgbColor': rgb(BLUE)}}}, 'weight': {'magnitude': 1, 'unit': 'PT'}}
-    else: props['outline'] = {'propertyState': 'NOT_RENDERED'}
-    fields = 'shapeBackgroundFill.solidFill.color,contentAlignment,' + ('outline.outlineFill.solidFill.color,outline.weight' if style == 'outline' else 'outline.propertyState')
+    out = _capsule(sid, oid + 'a', x, y, w, h, fill)
+    if style == 'outline': out += _capsule(sid, oid + 'b', x + 1, y + 1, w - 2, h - 2, under)
     st = {'fontFamily': FONT, 'fontSize': {'magnitude': size, 'unit': 'PT'}, 'foregroundColor': {'opaqueColor': {'rgbColor': rgb(color)}}, 'underline': False}
     f = 'fontFamily,fontSize,foregroundColor,underline'
     if url or slide: st['link'] = link_style(url, slide); f += ',link'
-    return [box(sid, oid, 'FLOW_CHART_TERMINATOR', x, y, w, h),
-            {'updateShapeProperties': {'objectId': oid, 'shapeProperties': props, 'fields': fields}},
-            {'insertText': {'objectId': oid, 'text': label}},
+    out += [box(sid, oid, 'TEXT_BOX', x, y, w, h), {'insertText': {'objectId': oid, 'text': label}},
             {'updateTextStyle': {'objectId': oid, 'style': st, 'fields': f, 'textRange': {'type': 'ALL'}}},
-            {'updateParagraphStyle': {'objectId': oid, 'style': {'alignment': 'CENTER'}, 'fields': 'alignment', 'textRange': {'type': 'ALL'}}}]
+            {'updateParagraphStyle': {'objectId': oid, 'style': {'alignment': 'CENTER', 'lineSpacing': 100}, 'fields': 'alignment,lineSpacing', 'textRange': {'type': 'ALL'}}},
+            {'updateShapeProperties': {'objectId': oid, 'shapeProperties': {'contentAlignment': 'MIDDLE'}, 'fields': 'contentAlignment'}}]
+    return out
 def hair(sid, oid, x, y, w):
     return [{'createLine': {'objectId': oid, 'lineCategory': 'STRAIGHT', 'elementProperties': {'pageObjectId': sid,
              'size': {'width': {'magnitude': w*E, 'unit': 'EMU'}, 'height': {'magnitude': 0, 'unit': 'EMU'}},
@@ -83,7 +90,7 @@ def build_all():
         reqs += pill(cid, f'ap3_chip{i}', x, 28, w, 18, lab, 'chip', 8, slide=target); x += w + gap
     # hero buttons
     reqs += pill(cid, 'ap3_btn1', 238, 248, 116, 30, 'Overview 보기', 'filled', 11, slide='g3f2ca1aded2_0_19')
-    reqs += pill(cid, 'ap3_btn2', 366, 248, 116, 30, 'Appendix 보기', 'outline', 11, slide='apl_appendix')
+    reqs += pill(cid, 'ap3_btn2', 366, 248, 116, 30, 'Appendix 보기', 'outline', 11, slide='apl_appendix', under='#FFFFFF')
     # ---- appendix slide (before the closing slide) ----
     if 'apl_appendix' not in ids:
         reqs.append({'createSlide': {'objectId': 'apl_appendix', 'insertionIndex': len(ids) - 1,

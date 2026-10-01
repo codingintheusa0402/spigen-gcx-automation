@@ -8,3 +8,11 @@ Run order on a Drive copy of the live deck (set P in apple_cards.py to the copy'
 5. GAS runOverviewApple261002 (Code.js) — TOP3 gauges in CHART_THEMES.apple
 
 All scripts are idempotent (they delete their own at_/ap3_ shapes before redrawing).
+
+## Round 3 (2026-10-01)
+6. apple_v4.py        — capsule buttons (rect + 2 circles; outline = layered ring), SIREN table alignment + stat tile, closing slide
+7. icons_render.py    — renders Material Symbols Rounded (Apache-2.0) icons to PNG; chart.py renders the weekly bar chart
+   (SF Pro / Apple SD Gothic Neo, system /usr/bin/python3 with matplotlib). Both were inserted via a one-off GAS
+   (base64 blobs, no public files) — re-create it from these PNGs if needed.
+8. apple_type.py fix  — slide titles: same box (x36,y16), 18pt bold ink, gray "대상 국가" qualifier; '1.' list bullets -> text;
+   restores bold, then Latin runs -> Inter (600 for bold), Hangul stays Noto Sans KR.
