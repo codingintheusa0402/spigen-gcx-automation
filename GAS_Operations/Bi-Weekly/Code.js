@@ -1,3 +1,26 @@
+// Redraws the Overview TOP3 grids of the "261002 GCX Bi-weekly Report-apple"
+// copy in the apple theme (same data definitions as runOverview261002).
+function runOverviewApple261002() {
+  CHART_THEME = CHART_THEMES.apple;
+  const pres = SlidesApp.openById('1quCr9Xj-pSsVXKrYuaEOq0LPILZMN2LPUwBkY1f_GFI');
+  const PI = '4. Product Issue';
+  const jobs = [
+    { id: 'g3fa83ee22f0_1_27',  dataSource: 'zendesk', category: PI, startDate: '2026-01-01' },
+    { id: 'g3fa83ee22f0_1_76',  dataSource: 'badReview:glxZ8',    excludeReasons: ['긍정 리뷰'] },
+    { id: 'g3fa83ee22f0_1_125', dataSource: 'badReview:pixel11',  excludeReasons: ['긍정 리뷰'] },
+    { id: 'ov_ip18_review',     dataSource: 'badReview:iphone18', excludeReasons: ['긍정 리뷰'] },
+    { id: 'g3fa83ee22f0_1_174', dataSource: 'zendesk', category: PI, devices: ['Galaxy Z Fold 8', 'Galaxy Z Flip 8'] },
+    { id: 'g3fa83ee22f0_1_218', dataSource: 'zendesk', category: PI, devices: ['Google Pixel 11'] },
+    { id: 'ov_ip18_claim',      dataSource: 'zendesk', category: PI, devices: ['iPhone 18'] }
+  ];
+  jobs.forEach(function(job) {
+    const slide = pres.getSlideById(job.id);
+    slide.getBackground().setSolidFill('#F5F5F7');
+    Logger.log(job.id + ' ' + JSON.stringify(rebuildChartGridOnSlide(slide, Object.assign({ prefix: 'GEN' }, job))));
+  });
+  pres.saveAndClose();
+}
+
 // One-off runner for the 261002 deck: redraws the Overview TOP3 grids
 // (slides 4-10) in place, cumulative (전제품 = 2026-01-01~latest). Resumable — slides
 // already done in this window are skipped (Script Properties), so a timeout
@@ -1009,6 +1032,32 @@ const CHART_CARD_GEOM = {
   value:  { l: 100, t: 65, w: 40,  h: 62, fontSize: 7.5,  color: '#FFFFFF', align: 'END',    valign: 'TOP', lineSpacing: 115 },
   rank:   { l: -22, t: 98, w: 26,  h: 33, fontSize: 11,   color: '#7278B2', align: 'START',  valign: 'MIDDLE' }
 };
+// Visual themes for the TOP3 gauge grid. 'classic' = the live deck's navy
+// cards; 'apple' = white rounded tiles on a #F5F5F7 canvas (apple.com style),
+// used for the "-apple" copy of the report.
+const CHART_THEMES = {
+  classic: { font: 'Arial', chartBg: '#11162d', colors: ['#d336f4', '#1554ff', '#19c7f3', '#8790b5'],
+             count: '#FFFFFF', countBold: false, countSize: 13.5, title: '#7680A2', legend: '#FFFFFF', value: '#FFFFFF',
+             rank: '#7278B2', headBold: '#121735', headLight: '#7278B2', tile: null },
+  apple:   { font: 'Noto Sans KR', chartBg: '#FFFFFF', colors: ['#0071E3', '#64D2FF', '#5E5CE6', '#D2D2D7'],
+             count: '#1D1D1F', countBold: true, countSize: 13, title: '#6E6E73', legend: '#1D1D1F', value: '#6E6E73',
+             rank: '#86868B', headBold: '#1D1D1F', headLight: '#86868B', tile: '#FFFFFF', tileRadius: 12 }
+};
+let CHART_THEME = CHART_THEMES.classic;
+
+// White rounded tile with a fixed corner radius (SlidesApp can't set a
+// ROUND_RECTANGLE's radius): two rectangles + four corner circles.
+function _insertRoundedTile(slide, x, y, w, h, color, r) {
+  [[x + r, y, w - 2 * r, h, 'RECTANGLE'], [x, y + r, w, h - 2 * r, 'RECTANGLE'],
+   [x, y, 2 * r, 2 * r, 'ELLIPSE'], [x + w - 2 * r, y, 2 * r, 2 * r, 'ELLIPSE'],
+   [x, y + h - 2 * r, 2 * r, 2 * r, 'ELLIPSE'], [x + w - 2 * r, y + h - 2 * r, 2 * r, 2 * r, 'ELLIPSE']]
+    .forEach(function(p) {
+      const sh = slide.insertShape(SlidesApp.ShapeType[p[4]], p[0], p[1], p[2], p[3]);
+      sh.getFill().setSolidFill(color);
+      sh.getBorder().setTransparent();
+    });
+}
+
 const CHART_GRID_COL_LEFTS = [142, 326, 509];
 const CHART_GRID_HEADER_LEFT = 139;
 const CHART_GRID_BG_COLOR = '#F1F1F3';
@@ -1038,15 +1087,22 @@ function _fitFontSizeForLines(lines, boxWidthPt, baseFontSize, minFontSize) {
 // for the whole grid (see insertGeneratedChartGrid) so every card's legend
 // text renders at the same size instead of each shrinking independently.
 function insertGeneratedChartCard(slide, left, top, chartData, chartBlobTitle, cardTitle, countText, legendLabelText, legendValueText, rank, legendFontSize) {
-  const g = CHART_CARD_GEOM;
+  const g = CHART_CARD_GEOM, th = CHART_THEME;
   const blob = buildDefectModelChartBlob(chartData, chartBlobTitle);
-  const image = slide.insertImage(blob, left, top, g.cardW, g.cardH);
+  let image;
+  if (th.tile) {
+    _insertRoundedTile(slide, left, top, g.cardW, g.cardH, th.tile, th.tileRadius);
+    const iw = g.cardW - 2 * th.tileRadius;   // inset so the tile's rounded corners stay visible
+    image = slide.insertImage(blob, left + th.tileRadius, top + 2, iw, iw * g.cardH / g.cardW);
+  } else {
+    image = slide.insertImage(blob, left, top, g.cardW, g.cardH);
+  }
   image.setTitle(chartBlobTitle);
 
   function addText(text, spec, fontSizeOverride, autofit) {
     const box = slide.insertTextBox(text, left + spec.l, top + spec.t, spec.w, spec.h);
     const tr = box.getText();
-    tr.getTextStyle().setFontFamily('Arial').setFontSize(fontSizeOverride || spec.fontSize).setForegroundColor(spec.color);
+    tr.getTextStyle().setFontFamily(th.font).setFontSize(fontSizeOverride || spec.fontSize).setForegroundColor(spec.color);
     tr.getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment[spec.align]);
     if (spec.lineSpacing) tr.getParagraphStyle().setLineSpacing(spec.lineSpacing);
     box.setContentAlignment(SlidesApp.ContentAlignment[spec.valign]);
@@ -1058,20 +1114,22 @@ function insertGeneratedChartCard(slide, left, top, chartData, chartBlobTitle, c
     return box;
   }
 
-  addText(countText, g.count);
-  addText(cardTitle, g.title, null, false);
-  addText(legendLabelText, g.legend, legendFontSize);
-  addText(legendValueText, g.value, legendFontSize);
-  addText(String(rank), g.rank);
+  const themed = function(spec, key, extra) { return Object.assign({}, spec, { color: th[key] }, extra || {}); };
+  const countBox = addText(countText, themed(g.count, 'count', { fontSize: th.countSize }));
+  if (th.countBold) countBox.getText().getTextStyle().setBold(true);
+  addText(cardTitle, themed(g.title, 'title'), null, false);
+  addText(legendLabelText, themed(g.legend, 'legend'), legendFontSize);
+  addText(legendValueText, themed(g.value, 'value'), legendFontSize);
+  addText(String(rank), themed(g.rank, 'rank'));
 }
 
 // Draws one full row: a "{boldPrefix} 클레임" header followed by up to 3 cards.
 function insertGeneratedChartRow(slide, top, headerBoldText, items, blobTitlePrefix, legendFontSize, lightLabel) {
   const boldBox = slide.insertTextBox(headerBoldText, CHART_GRID_HEADER_LEFT, top, 106, 26);
-  boldBox.getText().getTextStyle().setFontFamily('Arial').setFontSize(11.5).setBold(true).setForegroundColor('#121735');
+  boldBox.getText().getTextStyle().setFontFamily(CHART_THEME.font).setFontSize(11.5).setBold(true).setForegroundColor(CHART_THEME.headBold);
 
   const lightBox = slide.insertTextBox(lightLabel || '클레임', CHART_GRID_HEADER_LEFT + 90, top + 1, 70, 27);
-  lightBox.getText().getTextStyle().setFontFamily('Arial').setFontSize(10.5).setForegroundColor('#7278B2');
+  lightBox.getText().getTextStyle().setFontFamily(CHART_THEME.font).setFontSize(10.5).setForegroundColor(CHART_THEME.headLight);
 
   const cardsTop = top + 31;
   items.slice(0, 3).forEach(function(item, i) {
@@ -2344,17 +2402,17 @@ function buildDefectModelChartBlob(data, title) {
   }
 
   const spacerOpt = {};
-  spacerOpt[labels.length - 1] = { color: '#11162d' };
+  spacerOpt[labels.length - 1] = { color: CHART_THEME.chartBg };
 
   return Charts.newPieChart()
     .setDataTable(dt.build())
     .setDimensions(440, 340)
-    .setColors(['#d336f4', '#1554ff', '#19c7f3', '#8790b5'])
+    .setColors(CHART_THEME.colors)
     .setOption('pieHole', 0.9)
     .setOption('pieStartAngle', -90)
     .setOption('slices', spacerOpt)
-    .setOption('pieSliceBorderColor', '#11162d')
-    .setOption('backgroundColor', '#11162d')
+    .setOption('pieSliceBorderColor', CHART_THEME.chartBg)
+    .setOption('backgroundColor', CHART_THEME.chartBg)
     .setOption('chartArea', { left: 110, top: 45, width: 220, height: 220 })
     .setOption('pieSliceText', 'none')
     .setOption('legend', { position: 'none' })
