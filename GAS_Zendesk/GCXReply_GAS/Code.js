@@ -1,4 +1,4 @@
-// GCX Reply — Apps Script Web App (v2.6.4)
+// GCX Reply — Apps Script Web App (v2.7.0)
 // Endpoint: ?orderId=XXX  |  ?asin=XXX  |  ?orderId=XXX&asin=XXX
 // Deploy as: Execute as Me, Access: Anyone (or Anyone anonymous)
 // Script Properties required: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
@@ -107,22 +107,10 @@ function doGet(e) {
       // Auto-lookup ASIN from items if not passed explicitly
       const itemAsin = !asin && orderData.items && orderData.items[0]
         ? orderData.items[0].ASIN : null;
-      if (itemAsin) {
-        const lu = lookupAsinAll_(itemAsin);
-        result.product = lu.product;
-        result.productSource = lu.productSource;
-        result.allSources = lu.allSources;
-        try { result.marketplaces = checkMarketplaces_(itemAsin); } catch { result.marketplaces = []; }
-      }
+      if (itemAsin) Object.assign(result, lookupProductFull_(itemAsin));
     }
 
-    if (asin) {
-      const lu = lookupAsinAll_(asin);
-      result.product = lu.product;
-      result.productSource = lu.productSource;
-      result.allSources = lu.allSources;
-      try { result.marketplaces = checkMarketplaces_(asin); } catch { result.marketplaces = []; }
-    }
+    if (asin) Object.assign(result, lookupProductFull_(asin));
 
     return respond(result);
   } catch (err) {
@@ -478,6 +466,7 @@ function doPost(e) {
 // Run setupKeepWarmTrigger() ONCE from the GAS editor to install it.
 function keepWarm() {
   CacheService.getScriptCache().get('ping');
+  refreshProductIndexIfStale_();
 }
 
 function setupKeepWarmTrigger() {
@@ -1011,6 +1000,196 @@ function lookupAsinAll_(asin) {
   return result;
 }
 
+// ── Precomputed product index ─────────────────────────────────────────────────
+// Every ?asin= request used to rebuild the market index from all 10 country
+// sheets (~3 MB, 25k ASIN cells) because the index (~1 MB) never fit the 95 KB
+// cache-entry limit — ~7-8 s per lookup, ~16 s for an ASIN in no sheet. Same
+// for ASIN Master (1.5 MB). This builds ONE pass over all sources into per-ASIN
+// records, split into PIDX_BUCKETS hash buckets (~20 KB each) so each lookup is
+// a single cache read. Same output as lookupAsinAll_ + checkMarketplaces_:
+//   s1/s2 = sheet1/sheet2 product values in PRODUCT_COLS order (null = col absent)
+//   p     = market partial [기종명, 모델명] (first sheet/row containing the ASIN)
+//   m     = marketplaces [[sheetName, gid, cell], ...]
+// A full build reads ~4.5 MB of sheets and takes ~20-40 s, so it NEVER runs
+// inside an agent's request: refreshProductIndex (own 15-min trigger, see
+// setupProductIndexTrigger) and keepWarm rebuild it in the background.
+// Requests only read it. Missing / older than PIDX_MAX_AGE_MS (trigger not
+// running) / oversized bucket / non-B ASIN → null → caller uses the original
+// live-read path, so a request is never slower than before this change.
+const PIDX_PREFIX      = 'pidx_v1_';
+const PIDX_META_KEY    = PIDX_PREFIX + 'meta';
+const PIDX_BUCKETS     = 128;
+const PIDX_TTL         = 21600;
+const PIDX_MAX_AGE_MS  = 2 * 60 * 60 * 1000;
+const PIDX_REFRESH_MS  = 25 * 60 * 1000; // rebuild once older than this (trigger runs every 15 min)
+const ASIN_CELL_RE     = /^B[A-Z0-9]{9}$/;
+
+function pidxBucketKey_(asin) {
+  let h = 0;
+  for (let i = 0; i < asin.length; i++) h = (h * 31 + asin.charCodeAt(i)) | 0;
+  return PIDX_PREFIX + (((h % PIDX_BUCKETS) + PIDX_BUCKETS) % PIDX_BUCKETS);
+}
+
+function pidxProductRows_(ssId, sheetName) {
+  const sheet = SpreadsheetApp.openById(ssId).getSheetByName(sheetName);
+  const map = {};
+  if (!sheet) return map;
+  const data = sheet.getDataRange().getValues();
+  if (!data.length) return map;
+  const headers = data[0];
+  const asinIdx = headers.indexOf('ASIN');
+  if (asinIdx < 0) return null;
+  const colIdx = PRODUCT_COLS.map(c => headers.indexOf(c));
+  for (let r = 1; r < data.length; r++) {
+    const a = String(data[r][asinIdx]);
+    if (map[a]) continue; // first match wins, same as .find()
+    map[a] = colIdx.map(i => i < 0 ? null : (data[r][i] !== undefined ? String(data[r][i]) : ''));
+  }
+  return map;
+}
+
+// Returns { bucketKey: bucketObject } on success, null on failure.
+function buildProductIndex_() {
+  const s1 = pidxProductRows_(SHEET_ID, SHEET_NAME);
+  if (!s1) return null; // ASIN column missing → let live path raise its usual error
+  const s2 = pidxProductRows_(MARKET_SS_ID, 'Data') || {};
+
+  const mkt = {}, partial = {};
+  const ss = SpreadsheetApp.openById(MARKET_SS_ID);
+  for (const sheetName of MARKET_SHEETS) {
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) continue;
+    const gid  = sheet.getSheetId();
+    const rows = sheet.getDataRange().getValues();
+    for (let r = 0; r < rows.length; r++) {
+      const cells = rows[r].map(c => String(c));
+      // Marketplaces: first ASIN-shaped cell of the row, row skipped if 단종 (getMktIndex_)
+      for (let col = 0; col < cells.length; col++) {
+        if (ASIN_CELL_RE.test(cells[col])) {
+          if (!cells.some(c => c.includes('단종'))) {
+            (mkt[cells[col]] = mkt[cells[col]] || []).push([sheetName, gid, colToLetter_(col) + (r + 1)]);
+          }
+          break;
+        }
+      }
+      // Partial: first sheet/row containing the ASIN in any cell (lookupAsinFromMarket_)
+      for (const c of cells) {
+        if (c.length === 10 && c[0] === 'B' && !partial[c] && ASIN_CELL_RE.test(c)) partial[c] = [String(rows[r][0] || ''), String(rows[r][1] || '')];
+      }
+    }
+  }
+
+  const buckets = {};
+  const all = new Set([...Object.keys(s1), ...Object.keys(s2), ...Object.keys(mkt), ...Object.keys(partial)]);
+  all.forEach(a => {
+    if (!ASIN_CELL_RE.test(a)) return;
+    const rec = {};
+    if (s1[a]) rec.s1 = s1[a];
+    if (s2[a]) rec.s2 = s2[a];
+    if (partial[a]) rec.p = partial[a];
+    if (mkt[a]) rec.m = mkt[a];
+    const k = pidxBucketKey_(a);
+    (buckets[k] = buckets[k] || {})[a] = rec;
+  });
+  for (let i = 0; i < PIDX_BUCKETS; i++) buckets[PIDX_PREFIX + i] = buckets[PIDX_PREFIX + i] || {};
+
+  const toPut = {};
+  for (const k of Object.keys(buckets)) {
+    const json = JSON.stringify(buckets[k]);
+    if (Utilities.newBlob(json).getBytes().length > 95000) {
+      Logger.log('buildProductIndex_: bucket ' + k + ' too large — index not stored');
+      return null;
+    }
+    toPut[k] = json;
+  }
+  toPut[PIDX_META_KEY] = JSON.stringify({ builtAt: Date.now(), asins: all.size });
+  CacheService.getScriptCache().putAll(toPut, PIDX_TTL);
+  return buckets;
+}
+
+// Lock so overlapping trigger runs (keepWarm + refreshProductIndex) don't
+// both rebuild at once.
+function rebuildProductIndexLocked_() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(0)) return null;
+  try { return buildProductIndex_(); }
+  finally { lock.releaseLock(); }
+}
+
+function refreshProductIndexIfStale_() {
+  try {
+    const meta = CacheService.getScriptCache().get(PIDX_META_KEY);
+    const age  = meta ? Date.now() - JSON.parse(meta).builtAt : Infinity;
+    if (age > PIDX_REFRESH_MS) rebuildProductIndexLocked_();
+  } catch (e) { Logger.log('refreshProductIndexIfStale_: ' + e.message); }
+}
+
+// Trigger / manual entry point (no trailing _ so it shows in the Run dropdown).
+function refreshProductIndex() {
+  const t0 = Date.now();
+  const b  = rebuildProductIndexLocked_();
+  Logger.log(b ? `Product index rebuilt in ${Date.now() - t0} ms` : 'Product index NOT rebuilt (lock busy or oversized bucket)');
+}
+
+// Run ONCE from the GAS editor: installs the 15-min refreshProductIndex trigger
+// and builds the index immediately.
+function setupProductIndexTrigger() {
+  const existing = ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'refreshProductIndex');
+  if (!existing.length) ScriptApp.newTrigger('refreshProductIndex').timeBased().everyMinutes(15).create();
+  Logger.log('refreshProductIndex trigger ' + (existing.length ? 'already exists' : 'created — fires every 15 minutes'));
+  refreshProductIndex();
+}
+
+function pidxExpand_(vals) {
+  if (!vals) return null;
+  const o = {};
+  PRODUCT_COLS.forEach((c, i) => { if (vals[i] !== null) o[c] = vals[i]; });
+  return o;
+}
+
+// Returns the doGet product fields from the index, or null if unavailable.
+function lookupFromIndex_(asin) {
+  if (!ASIN_CELL_RE.test(asin)) return null;
+  const cache = CacheService.getScriptCache();
+  const k     = pidxBucketKey_(asin);
+  const got   = cache.getAll([PIDX_META_KEY, k]);
+  if (!got[PIDX_META_KEY] || !got[k]) return null;
+  if (Date.now() - JSON.parse(got[PIDX_META_KEY]).builtAt > PIDX_MAX_AGE_MS) return null;
+  const bucket = JSON.parse(got[k]);
+  if (!bucket) return null;
+
+  const rec    = bucket[asin] || {};
+  const sheet1 = pidxExpand_(rec.s1);
+  const sheet2 = pidxExpand_(rec.s2);
+  let product = sheet1 || sheet2;
+  let productSource = sheet1 ? 'sheet1' : sheet2 ? 'sheet2' : null;
+  if (!product && rec.p) {
+    product = {
+      'SKU': '', '모델명': rec.p[1], '브랜드': '',
+      '제조사명': '', '기종명': rec.p[0], '색상명': '',
+      '대분류': '', '생산업체': '', '원산지정보': '',
+    };
+    productSource = 'market';
+  }
+  return {
+    product, productSource,
+    allSources: { sheet1: sheet1 || null, sheet2: sheet2 || null },
+    marketplaces: (rec.m || []).map(([name, gid, cell]) => ({ name, gid, cell })),
+  };
+}
+
+// Index first; original live-read chain as fallback.
+function lookupProductFull_(asin) {
+  try {
+    const hit = lookupFromIndex_(asin);
+    if (hit) return hit;
+  } catch (e) { Logger.log('lookupFromIndex_ failed, using live path: ' + e.message); }
+  const lu = lookupAsinAll_(asin);
+  let marketplaces;
+  try { marketplaces = checkMarketplaces_(asin); } catch { marketplaces = []; }
+  return { product: lu.product, productSource: lu.productSource, allSources: lu.allSources, marketplaces };
+}
+
 // ── AI 인입사유 functions ──────────────────────────────────────────────────────
 function inferReason_(text, category) {
   text     = String(text     || '').trim().toLowerCase();
@@ -1331,6 +1510,7 @@ function fixProductSheetData() {
   if (asinsToInvalidate.length) {
     const cache = CacheService.getScriptCache();
     asinsToInvalidate.forEach(a => cache.remove('asin_all_' + a));
+    cache.remove(PIDX_META_KEY); // live path until the next refreshProductIndex run
     Logger.log('Cache invalidated for ASINs: ' + asinsToInvalidate.join(', '));
   }
 }
