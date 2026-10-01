@@ -12,6 +12,8 @@ Subcommands:
   setup --caspi-key K --query-id Q [--client-secret F] [--chat-webhook URL]   store per-user credentials
       --chat-webhook: Google Chat incoming webhook; scheduled runs post "Zendesk Raw Data 업데이트 완료"
                       (or a failure notice, once per day)
+      --intake-query-id: Caspi queryId of intake_query.sql → notice also shows yesterday's intake
+                      (all statuses: 완료 = Solved·Closed / 처리 중 = the rest)
   schedule --days mon,thu --time 09:00 [--until-yesterday]   install/update the launchd job (Windows: Task Scheduler)
   unschedule                      remove the launchd job (Windows: Task Scheduler task)
   status                          show config, schedule, last run
@@ -107,10 +109,11 @@ def caspi_creds():
     return key, qid
 
 
-def caspi_fetch(key, qid):
+def caspi_fetch(key, qid, params=None):
     rows, offset = [], 0
+    params = params or {"min_ticket_id": str(MIN_TICKET_ID)}
     while True:
-        body = json.dumps({"queryId": qid, "params": {"min_ticket_id": str(MIN_TICKET_ID)},
+        body = json.dumps({"queryId": qid, "params": params,
                            "limit": 2000, "offset": offset}).encode()
         for attempt in range(5):
             req = urllib.request.Request(CASPI_ENDPOINT, data=body, method="POST",
@@ -136,6 +139,24 @@ def caspi_fetch(key, qid):
             log(f"Caspi: {len(rows)} rows fetched")
             return rows
         offset = nxt
+
+
+def intake_counts(day):
+    """Tickets created on `day` (all statuses) → (total, done, in_progress), or None if not configured/failed.
+    Notification-only: never fails the run."""
+    qid = os.environ.get("CASPI_INTAKE_QUERY_ID") or (load_json(CREDS_PATH, {}) or {}).get("caspi_intake_query_id")
+    if not qid:
+        return None
+    try:
+        key, _ = caspi_creds()
+        by = {r["STATUS"]: int(float(r["N"])) for r in caspi_fetch(key, qid, {"created_date": day})}
+    except (Exception, SystemExit) as e:
+        log(f"intake count failed: {e}")
+        return None
+    done = sum(n for st, n in by.items() if st in STATUSES)
+    total = sum(by.values())
+    log(f"intake {day}: {by}")
+    return total, done, total - done
 
 
 def date_serial(s):
@@ -344,11 +365,14 @@ def cmd_run(args):
     if rows:
         first, end = append_rows(svc, props, rows)
         log(f"appended rows {first}–{end} (Ticket IDs {rows[0][0]}…{rows[-1][0]})")
-    scope = f" (~{int(created_max[5:7])}/{int(created_max[8:])} 생성분)" if created_max else ""
-    msg = ["*✅ Zendesk Raw Data 업데이트 완료*", "",
-           f"📅 {kst_stamp(now)}",
-           f"🎫 신규 티켓 {len(rows)}건{scope}" if rows else f"🎫 신규 티켓 없음{scope}",
-           f"📊 <{sheet_url(props)}|{props['title']} 바로가기>"]
+    md = lambda d: f"{int(d[5:7])}/{int(d[8:])}"
+    scope = f"Solved·Closed, ~{md(created_max)} 생성분" if created_max else "Solved·Closed"
+    msg = ["*✅ Zendesk Raw Data 업데이트 완료*", "", f"📅 {kst_stamp(now)}"]
+    intake = intake_counts(created_max) if created_max and args.scheduled else None
+    if intake:
+        msg.append(f"📥 {md(created_max)} 인입: {intake[0]}건 (완료 {intake[1]} / 처리 중 {intake[2]})")
+    msg += [f"🎫 시트 추가: {len(rows)}건 ({scope})" if rows else f"🎫 시트 추가: 없음 ({scope})",
+            f"📊 <{sheet_url(props)}|{props['title']} 바로가기>"]
     state.update({"last_run": now.isoformat(timespec="seconds"), "last_appended": len(rows)})
     if args.scheduled:
         state["last_scheduled_run"] = now.strftime("%Y-%m-%d")
@@ -364,6 +388,8 @@ def cmd_setup(args):
     creds["caspi_query_id"] = args.query_id or creds.get("caspi_query_id") or input("Caspi queryId (pq_…): ").strip()
     if args.chat_webhook:
         creds["chat_webhook"] = args.chat_webhook
+    if args.intake_query_id:
+        creds["caspi_intake_query_id"] = args.intake_query_id
     save_json(CREDS_PATH, creds)
     log(f"Caspi credentials saved → {CREDS_PATH}")
 
@@ -478,6 +504,7 @@ def main():
     s = sub.add_parser("setup")
     s.add_argument("--caspi-key"); s.add_argument("--query-id"); s.add_argument("--client-secret")
     s.add_argument("--chat-webhook", help="Google Chat incoming webhook URL for run notifications")
+    s.add_argument("--intake-query-id", help="Caspi queryId of intake_query.sql (yesterday's intake line in the notice)")
     sc = sub.add_parser("schedule")
     sc.add_argument("--days", required=True, help="e.g. mon,thu | weekdays | daily")
     sc.add_argument("--time", required=True, help="HH:MM, KST")
