@@ -43,12 +43,7 @@ def siren_and_end():
                 if widths[5] < 70*E:
                     reqs.append({'updateTableColumnProperties': {'objectId': tid, 'columnIndices': [2], 'tableColumnProperties': {'columnWidth': {'magnitude': widths[2] - 22*E, 'unit': 'EMU'}}, 'fields': 'columnWidth'}})
                     reqs.append({'updateTableColumnProperties': {'objectId': tid, 'columnIndices': [5], 'tableColumnProperties': {'columnWidth': {'magnitude': widths[5] + 22*E, 'unit': 'EMU'}}, 'fields': 'columnWidth'}})
-    # closing slide
-    endid, cov = p['slides'][-1]['objectId'], p['slides'][0]['objectId']
-    reqs += [{'deleteObject': {'objectId': e['objectId']}} for e in p['slides'][-1]['pageElements'] if e['objectId'].startswith(('ap3_', 'ap4_'))]
-    reqs += text(endid, 'ap4_end_t', 110, 150, 500, 44, 'GCX Bi-weekly Report', 28, INK, bold=True, align='CENTER')
-    reqs += text(endid, 'ap4_end_d', 110, 194, 500, 20, CFG['report_date'] + ' · 글로벌CX전략팀', 11, GRAY, align='CENTER')
-    reqs += pill(endid, 'ap4_end_b', 306, 228, 108, 26, '처음으로', 'outline', 10, slide=cov, under='#FFFFFF')
+    # closing slide: kept as the classic black Spigen-logo slide (approved 261002 design)
     svc.batchUpdate(presentationId=P, body={'requests': reqs}).execute()
     print('siren/end requests', len(reqs))
 

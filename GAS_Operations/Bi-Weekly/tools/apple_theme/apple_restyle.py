@@ -85,6 +85,7 @@ for si, s in enumerate(p['slides']):
     if si < START: continue
     sid = s['objectId']; reqs = []
     is_cover, is_end = si == 0, si == n_slides - 1
+    if is_cover or is_end: continue      # final design keeps the orange Spigen cover + black logo closing as-is
     reqs.append(bg(sid, BLACK if (is_cover or is_end) else WHITE))
     top = s.get('pageElements', [])
     # 1) sidebar chrome + hard drop shadows

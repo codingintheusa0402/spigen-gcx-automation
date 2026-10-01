@@ -73,7 +73,7 @@ def fonts():
                     for ci, cell in enumerate(row['tableCells']):
                         for a, b, bd in latin_ranges(cell.get('text', {})):
                             reqs.append({'updateTextStyle': {'objectId': e['objectId'], 'cellLocation': {'rowIndex': ri, 'columnIndex': ci}, 'textRange': {'type': 'FIXED_RANGE', 'startIndex': a, 'endIndex': b}, 'style': {'weightedFontFamily': {'fontFamily': LATIN, 'weight': 600 if bd else 400}}, 'fields': 'weightedFontFamily'}})
-    for s in p['slides']: walk(s['pageElements'])
+    for s in p['slides'][1:-1]: walk(s['pageElements'])     # cover + closing keep their brand fonts
     send(reqs); print('font requests', len(reqs))
 
 if __name__ == '__main__':
@@ -100,7 +100,7 @@ def bullets_and_bold():
                 reqs += [{'deleteParagraphBullets': {'objectId': oid, 'textRange': {'type': 'ALL'}}},
                          {'insertText': {'objectId': oid, 'insertionIndex': 0, 'text': '1. '}}]
             if t.endswith('건') or t in ('모델별 TOP3', '인입사유별 TOP3') or oid.startswith(('ap3_a_c', 'ap3_a_title', 'ap4_end_t')) and not oid.startswith('ap3_a_c0_') \
-               or oid in ('g3aa9ffb5090_2_95', 'g3aa52d0de84_0_1'):
+               :
                 if not re.match(r'^ap3_a_c\d_\d', oid): bold(oid)
         for e in s['pageElements']:   # table header rows
             if 'table' in e:

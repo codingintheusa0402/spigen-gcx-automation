@@ -72,26 +72,27 @@ def build_all():
     SECTIONS = section_anchors(p); APPENDIX = appendix_columns()
     overview = dict(SECTIONS).get('Overview')
     reqs = []
-    # ---- cover: bright hero ----
-    cov = p['slides'][0]; cid = cov['objectId']
-    reqs += [{'deleteObject': {'objectId': e['objectId']}} for e in cov['pageElements'] if e['objectId'].startswith('ap3_')]
-    reqs.append(bg(cid, '#FFFFFF'))
-    sizes = {e['objectId']: (e['size']['width']['magnitude'], e['size']['height']['magnitude']) for e in cov['pageElements'] if 'size' in e}
-    import re as _re
-    find = lambda pred: next(e['objectId'] for e in cov['pageElements'] if 'shape' in e and pred(txt(e)))
-    eyebrow = find(lambda t: '글로벌CX전략팀' in t)
-    title = find(lambda t: t.startswith('GCX Bi-weekly'))
-    date = find(lambda t: _re.fullmatch(r'\d{4}\.\d{2}\.\d{2}', t or '') is not None)
-    reqs += [move(eyebrow, 110, 100, (500, 22), sizes[eyebrow]), move(title, 60, 120, (600, 60), sizes[title]), move(date, 160, 194, (400, 28), sizes[date])]
-    reqs += [{'updateShapeProperties': {'objectId': o, 'shapeProperties': {'contentAlignment': 'MIDDLE'}, 'fields': 'contentAlignment'}} for o in (eyebrow, title, date)]
-    reqs += restyle(eyebrow, 12, INK, bold=True) + restyle(title, 40, INK, bold=True) + restyle(date, 20, INK)
-    # sub-nav chips
-    widths = [max(52, 14 + len(lab)*6.2) for lab, _ in SECTIONS]; gap = 8; x = (720 - (sum(widths) + gap*(len(widths)-1))) / 2
-    for i, ((lab, target), w) in enumerate(zip(SECTIONS, widths)):
-        reqs += pill(cid, f'ap3_chip{i}', x, 28, w, 18, lab, 'chip', 8, slide=target); x += w + gap
-    # hero buttons
-    reqs += pill(cid, 'ap3_btn1', 238, 248, 116, 30, 'Overview 보기', 'filled', 11, slide=overview)
-    reqs += pill(cid, 'ap3_btn2', 366, 248, 116, 30, 'Appendix 보기', 'outline', 11, slide='apl_appendix', under='#FFFFFF')
+    # ---- cover: Apple hero only when report.json apple_cover=true (approved 261002 deck keeps the classic orange cover) ----
+    if CFG.get('apple_cover', False):
+        cov = p['slides'][0]; cid = cov['objectId']
+        reqs += [{'deleteObject': {'objectId': e['objectId']}} for e in cov['pageElements'] if e['objectId'].startswith('ap3_')]
+        reqs.append(bg(cid, '#FFFFFF'))
+        sizes = {e['objectId']: (e['size']['width']['magnitude'], e['size']['height']['magnitude']) for e in cov['pageElements'] if 'size' in e}
+        import re as _re
+        find = lambda pred: next(e['objectId'] for e in cov['pageElements'] if 'shape' in e and pred(txt(e)))
+        eyebrow = find(lambda t: '글로벌CX전략팀' in t)
+        title = find(lambda t: t.startswith('GCX Bi-weekly'))
+        date = find(lambda t: _re.fullmatch(r'\d{4}\.\d{2}\.\d{2}', t or '') is not None)
+        reqs += [move(eyebrow, 110, 100, (500, 22), sizes[eyebrow]), move(title, 60, 120, (600, 60), sizes[title]), move(date, 160, 194, (400, 28), sizes[date])]
+        reqs += [{'updateShapeProperties': {'objectId': o, 'shapeProperties': {'contentAlignment': 'MIDDLE'}, 'fields': 'contentAlignment'}} for o in (eyebrow, title, date)]
+        reqs += restyle(eyebrow, 12, INK, bold=True) + restyle(title, 40, INK, bold=True) + restyle(date, 20, INK)
+        # sub-nav chips
+        widths = [max(52, 14 + len(lab)*6.2) for lab, _ in SECTIONS]; gap = 8; x = (720 - (sum(widths) + gap*(len(widths)-1))) / 2
+        for i, ((lab, target), w) in enumerate(zip(SECTIONS, widths)):
+            reqs += pill(cid, f'ap3_chip{i}', x, 28, w, 18, lab, 'chip', 8, slide=target); x += w + gap
+        # hero buttons
+        reqs += pill(cid, 'ap3_btn1', 238, 248, 116, 30, 'Overview 보기', 'filled', 11, slide=overview)
+        reqs += pill(cid, 'ap3_btn2', 366, 248, 116, 30, 'Appendix 보기', 'outline', 11, slide='apl_appendix', under='#FFFFFF')
     # ---- appendix slide (before the closing slide) ----
     if 'apl_appendix' not in ids:
         reqs.append({'createSlide': {'objectId': 'apl_appendix', 'insertionIndex': len(ids) - 1,
@@ -109,7 +110,7 @@ def build_all():
         for ii, (lab, url) in enumerate(items):
             reqs += text(A, f'ap3_a_c{ci}_{ii}', colx[ci], 104 + ii*19, 126, 16, lab, 8.5, LINKGRAY, url=url)
     more = 'ap3_a_more'
-    msg = '데이터 접근 권한이 필요하면 Caspi 접근 신청 페이지에서 요청하세요. 문의: 글로벌CX전략팀 김지우.'
+    msg = '젠데스크, 아마존 배드리뷰 데이터 접근 권한이 필요하면 Caspi 접근 신청 페이지에서 요청하세요.'
     reqs += text(A, more, 36, 300, 648, 16, msg, 8.5, GRAY)
     s0 = msg.index('Caspi 접근 신청'); s1 = s0 + len('Caspi 접근 신청')
     reqs.append({'updateTextStyle': {'objectId': more, 'style': {'link': {'url': 'https://caspilm.spigen.com/access-request'}, 'underline': True, 'foregroundColor': {'opaqueColor': {'rgbColor': rgb('#0066CC')}}},
@@ -117,13 +118,12 @@ def build_all():
     reqs += hair(A, 'ap3_a_h2', 36, 326, 648)
     reqs += text(A, 'ap3_a_copy', 36, 334, 220, 16, 'Copyright © 2026 Spigen Inc. 글로벌CX전략팀', 8, GRAY)
     x = 262
-    for i, (lab, target) in enumerate(SECTIONS[:-1]):
+    NAV = SECTIONS[:-2] + [('SPIGEN', None)]          # approved footer nav: … | SPIGEN
+    for i, (lab, target) in enumerate(NAV):
         w = 8 + len(lab)*4.6
         reqs += text(A, f'ap3_a_nav{i}', x, 334, w + 8, 16, lab, 8, LINKGRAY, slide=target); x += w + 6
-        if i < len(SECTIONS) - 2: reqs += text(A, f'ap3_a_bar{i}', x, 334, 12, 16, '|', 8, HAIR); x += 14
-    reqs += text(A, 'ap3_a_loc', 600, 334, 84, 16, 'Korea', 8, LINKGRAY, align='END')
-    # ---- closing slide: bright ----
-    reqs.append(bg(ids[-1], '#FFFFFF'))
+        if i < len(NAV) - 1: reqs += text(A, f'ap3_a_bar{i}', x, 334, 12, 16, '|', 8, HAIR); x += 14
+    # closing slide stays the classic black Spigen-logo slide
     svc.batchUpdate(presentationId=P, body={'requests': reqs}).execute()
     print('requests', len(reqs))
 
