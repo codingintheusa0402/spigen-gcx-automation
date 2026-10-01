@@ -18,12 +18,47 @@
       "catalogTab": "신제품 라인업",
       "badReviewTab": "1-3점",
       "ratingTab": "DE"
+    },
+    "iphone18": {
+      "label": "iPhone 18 Series",
+      "familyMatch": "iPhone 18",
+      "sourceDeck": "1uuHcoTZxxLYlxdaHb0KFUBbI2hEPMvkOV0cL8ELU9dU",
+      "sheet": "1aYxZRm7pf5Egx6fIoAGpGg8CWzHaZ_zsBRKsvh9U1iU",
+      "catalogTab": "신제품 라인업",
+      "badReviewTab": "1-3점",
+      "ratingTab": "DE"
     }
   },
-  "zendesk": { "sheet": "1sjcCj_P4DRD8rywkmYJhbsrzwFfgiJQuF9nIKwCiKlc", "tab": "26년 전체문의", "category": "4. Product Issue" },
-  "siren":   { "sheet": "15Jh6ZFDBIbpv4OANVtD3g4wFBJxoof9SHWDUEU3GiXI", "tab": "26년 SIREN", "headerRow": 18 },
-  "euClaimCountries": ["UK", "DE", "FR", "IT", "ES", "NL", "BE", "SE", "PL", "IE", "AT"],
-  "euReviewCountries": ["DE", "FR", "IT", "ES", "UK"],
+  "zendesk": {
+    "sheet": "1sjcCj_P4DRD8rywkmYJhbsrzwFfgiJQuF9nIKwCiKlc",
+    "tab": "26년 전체문의",
+    "category": "4. Product Issue"
+  },
+  "siren": {
+    "sheet": "15Jh6ZFDBIbpv4OANVtD3g4wFBJxoof9SHWDUEU3GiXI",
+    "tab": "26년 SIREN",
+    "headerRow": 18
+  },
+  "euClaimCountries": [
+    "UK",
+    "DE",
+    "FR",
+    "IT",
+    "ES",
+    "NL",
+    "BE",
+    "SE",
+    "PL",
+    "IE",
+    "AT"
+  ],
+  "euReviewCountries": [
+    "DE",
+    "FR",
+    "IT",
+    "ES",
+    "UK"
+  ],
   "caspiTable": "S3.AMAZON_SELLER.VAT_TRANSACTION_DATA",
   "minSold": 20,
   "topN": 7

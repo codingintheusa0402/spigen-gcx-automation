@@ -42,6 +42,7 @@
 <label>Source decks</label>
 <label class="check"><input type="checkbox" id="srcGlxZ8" checked> Galaxy Z8 Series (Fold 8 / Flip 8 / Fold 8 Ultra)</label>
 <label class="check"><input type="checkbox" id="srcPixel11" checked> Pixel 11 Series</label>
+<label class="check"><input type="checkbox" id="srcIphone18" checked> iPhone 18 Series (Pro / Pro Max / Duo)</label>
 
 <label for="startDate">작성 날짜 from</label>
 <input type="date" id="startDate">
@@ -76,6 +77,7 @@
     var sources = [];
     if (document.getElementById('srcGlxZ8').checked) sources.push('glxZ8');
     if (document.getElementById('srcPixel11').checked) sources.push('pixel11');
+    if (document.getElementById('srcIphone18').checked) sources.push('iphone18');
     return {
       sources: sources,
       startDate: document.getElementById('startDate').value,

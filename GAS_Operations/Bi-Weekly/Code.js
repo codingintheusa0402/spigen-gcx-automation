@@ -1,3 +1,10 @@
+// One-off runner for the 261002 deck (bound script) — Run from the editor.
+function runBiweekly261002() {
+  const pres = SlidesApp.getActivePresentation();
+  const res = _generateClaimSlides(pres, { sources: ['glxZ8', 'pixel11', 'iphone18'], startDate: '2026-09-11', endDate: '2026-10-01' });
+  Logger.log(JSON.stringify(res));
+}
+
 // TEMP debug — read-only structure dump for the Claim/Review card template
 // (slides 9-41 of this deck) and for the two source decks. Delete once the
 // slide-maker feature is built and verified.
@@ -283,7 +290,8 @@ function debugCountBothInRange() {
 
 const CLAIM_SLIDE_SOURCES = {
   glxZ8:   { id: '1VC5WAoiufinAPz9bPn1OrBnAef9JkDZEZxlAGF6DDho', label: 'Galaxy Z8 Series', familyMatch: 'Galaxy Z8', badReviewKey: 'glxZ8' },
-  pixel11: { id: '1JJKzzBnm9no89mocr6Xqzwqgz8YWoiU5S44Em7gJYSc', label: 'Pixel 11 Series',  familyMatch: 'Pixel 11', badReviewKey: 'pixel11' }
+  pixel11: { id: '1JJKzzBnm9no89mocr6Xqzwqgz8YWoiU5S44Em7gJYSc', label: 'Pixel 11 Series',  familyMatch: 'Pixel 11', badReviewKey: 'pixel11' },
+  iphone18: { id: '1uuHcoTZxxLYlxdaHb0KFUBbI2hEPMvkOV0cL8ELU9dU', label: 'iPhone 18 Series', familyMatch: 'iPhone 18', badReviewKey: 'iphone18' }
 };
 
 // Card field positions (pt) measured off the live template. Matching is by
@@ -360,12 +368,14 @@ function _readSourceSlide(slide, sourceKey, deckId, index) {
 
   let header = { sku: '', model: '', device: '' };
   let link = rows[1][5] || '';
+  let isTemplateExample = false;
   const media = [];
   slide.getPageElements().forEach(function(el) {
     const type = el.getPageElementType();
     if (type === SlidesApp.PageElementType.SHAPE) {
       const txt = el.asShape().getText().asString();
       if (/SKU\s*:/i.test(txt) && el.getTop() < 40) header = _parseSourceHeader(txt);
+      if (/템플릿 예시|기입 순서/.test(txt)) isTemplateExample = true;
     } else if (type === SlidesApp.PageElementType.IMAGE && el.getTop() > 100) {
       media.push({ kind: 'image', el: el.asImage() });
     } else if (type === SlidesApp.PageElementType.VIDEO) {
@@ -386,6 +396,7 @@ function _readSourceSlide(slide, sourceKey, deckId, index) {
       }
     } catch (e) {}
   }
+  if (isTemplateExample) return null; // source deck's "템플릿 예시" sample slide
   const isReview = link ? !/zendesk/i.test(link) : (_isChecked(rows[1][4]) && !_isChecked(rows[1][3]));
 
   return {
@@ -1666,7 +1677,8 @@ const CHART_MAKER_SHEET_NAME = '26년 전체문의';
 // no other code changes needed.
 const BAD_REVIEW_SOURCES = {
   glxZ8:   { id: '19OhswglYMx_dxSFFDtWI1WYPWq2jONJn6RK84KITwy4', sheetName: '1-3점', label: 'GlxZ8' },
-  pixel11: { id: '12I6z_FFmDIMHa0rLanltKKFp7kI_yREQj3adkMamPgI', sheetName: '1-3점', label: 'Pixel 11' }
+  pixel11: { id: '12I6z_FFmDIMHa0rLanltKKFp7kI_yREQj3adkMamPgI', sheetName: '1-3점', label: 'Pixel 11' },
+  iphone18: { id: '1aYxZRm7pf5Egx6fIoAGpGg8CWzHaZ_zsBRKsvh9U1iU', sheetName: '1-3점', label: 'iPhone 18' }
 };
 
 function _distinctSorted(arr) {
@@ -2303,3 +2315,4 @@ function extractKeywordPlaceholders(slide, prefix) {
 
   return Array.from(placeholders);
 }
+
