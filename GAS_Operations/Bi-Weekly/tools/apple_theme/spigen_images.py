@@ -90,14 +90,35 @@ def main():
             if 'SKU' not in hdr: continue
             ci_sku, ci_prod = hdr.index('SKU'), 1
             x0 = tx + sum(c['columnWidth']['magnitude'] for c in tb['tableColumns'][:ci_prod]) / E
+            # Slides renders rows taller than rowHeight when text wraps, so thumbnails drifted.
+            # Pin every row to a height that fits the tallest content (2-line name + 사유 line):
+            # rendered height == set height, and thumbnail centers can be computed exactly.
+            HH, RH = 24, 40
+            heights = [HH] + [RH] * (len(tb['tableRows']) - 1)
+            reqs.append({'updateTableRowProperties': {'objectId': tid, 'rowIndices': [0], 'tableRowProperties': {'minRowHeight': {'magnitude': HH, 'unit': 'PT'}}, 'fields': 'minRowHeight'}})
+            reqs.append({'updateTableRowProperties': {'objectId': tid, 'rowIndices': list(range(1, len(heights))), 'tableRowProperties': {'minRowHeight': {'magnitude': RH, 'unit': 'PT'}}, 'fields': 'minRowHeight'}})
+            reqs.append({'updateTableCellProperties': {'objectId': tid, 'tableRange': {'location': {'rowIndex': 0, 'columnIndex': 0}, 'rowSpan': len(heights), 'columnSpan': tb['columns']},
+                         'tableCellProperties': {'contentAlignment': 'MIDDLE'}, 'fields': 'contentAlignment'}})
+            # white tile behind the table, resized to the pinned height
+            tw = sum(c['columnWidth']['magnitude'] for c in tb['tableColumns']) / E
+            old = [x['objectId'] for x in els if x['objectId'].startswith('at_tb_' + tid[-8:])]
+            reqs += [{'deleteObject': {'objectId': o}} for o in old]
+            r, tids = rtile(sid, 'sp_tb_' + tid[-8:], tx - 12, ty - 8, tw + 24, sum(heights) + 16); reqs += r
+            reqs.append({'updatePageElementsZOrder': {'pageElementObjectIds': tids, 'operation': 'SEND_TO_BACK'}})
             y = ty
             for ri, row in enumerate(tb['tableRows']):
-                h = row['rowHeight']['magnitude'] / E
+                h = heights[ri]
                 if ri > 0:
                     sku = txt({'shape': {'text': row['tableCells'][ci_sku].get('text', {})}})
-                    url = resolve(cat, sku)
+                    first = txt({'shape': {'text': row['tableCells'][ci_prod].get('text', {})}}).split('\n')[0]
+                    parts = [x.strip() for x in re.split(r'[|｜│ㅣ]', first)]
+                    url = resolve(cat, sku, f'{parts[1]} ㅣ{parts[0]}' if len(parts) >= 2 else '')
                     if url:
-                        reqs.append(image(sid, f'sp_r_{tid[-6:]}_{ri}', url, x0 + 5, y + (h - 24) / 2, 24, 24)); hit += 1
+                        reqs.append(image(sid, f'sp_r_{tid[-6:]}_{ri}', url, x0 + 5, y + (h - 26) / 2, 26, 26)); hit += 1
+                    else:            # keep the thumbnail column even: empty light-gray tile
+                        import apple_cards as _ac; _r = _ac.R; _ac.R = 6
+                        reqs += rtile(sid, f'sp_e_{tid[-6:]}_{ri}', x0 + 5, y + (h - 26) / 2, 26, 26, '#F5F5F7')[0]; _ac.R = _r
+                        miss.append(sku)
                     reqs.append({'updateParagraphStyle': {'objectId': tid, 'cellLocation': {'rowIndex': ri, 'columnIndex': ci_prod}, 'textRange': {'type': 'ALL'},
                                  'style': {'indentStart': {'magnitude': 30, 'unit': 'PT'}, 'indentFirstLine': {'magnitude': 30, 'unit': 'PT'}}, 'fields': 'indentStart,indentFirstLine'}})
                 y += h
