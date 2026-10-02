@@ -22,16 +22,21 @@ way to omit a single page from an already-sent message.
 | `auto_broadcast.py` | the unattended script `launchd` runs |
 | `~/Library/LaunchAgents/com.spigen.gcx.badreview-broadcast.plist` | the 10:30 AM schedule (Mon–Fri, KST) |
 | `~/Library/LaunchAgents/com.spigen.gcx.badreview-broadcast-retry.plist` | the 11:00 AM `--retry-if-held` follow-up (Mon–Fri, KST) — added 2026-10-01 |
+| `~/Library/LaunchAgents/com.spigen.gcx.badreview-broadcast-catchup.plist` | `--catchup` poller, every 5 min (`StartInterval`, no weekday restriction — the script itself no-ops) — added 2026-10-02 |
 | `state/held_<date>.flag` | written by a 10:30 KR-gate hold, consumed (deleted) by the 11:00 retry |
+| `state/ran_<date>.flag` | written once today's real decision (send or hold) has happened; tells `--catchup` there's nothing to do |
 | `logs/auto_broadcast.log` | one line per run: skipped (weekend/holiday) or per-room OK/ERR |
-| `logs/launchd.out.log` / `launchd.err.log` | raw stdout/stderr from launchd itself (shared by both LaunchAgents) |
+| `logs/launchd.out.log` / `launchd.err.log` | raw stdout/stderr from launchd itself (shared by all three LaunchAgents) |
 
 ## How it works
 
 1. `launchd` fires the script at 10:30 AM every weekday (`StartCalendarInterval`, one
-   entry per Weekday 1–5). Requires the Mac to be **on and awake** at that time — if
-   it's asleep/off, that day's run is simply skipped (launchd does not queue/catch up
-   missed fires for `StartCalendarInterval`, unlike `cron`'s behavior on some systems).
+   entry per Weekday 1–5). Requires the Mac to be **on and awake** at that time —
+   `StartCalendarInterval` does not queue/catch up a missed fire by itself (unlike
+   `cron`'s behavior on some systems), which is exactly why the 5-minute `--catchup`
+   poller (below) exists as a separate mechanism — it doesn't rely on launchd's
+   calendar-interval catch-up (there isn't one), it just independently checks every
+   5 minutes whether today's real run has happened yet.
 2. The script checks `today.weekday() >= 5` (weekend safety net, launchd shouldn't fire
    then anyway) and calls the free **Nager.Date API**
    (`https://date.nager.at/api/v3/PublicHolidays/{year}/KR`) for that year's Korean
@@ -89,6 +94,26 @@ way to omit a single page from an already-sent message.
    hard way 2026-09-18: testing the KR-gate alert with `--force --date 2026-09-21`
    sent a real, wrongly-dated Pixel 11 card to all 12 rooms.)
 
+4c. **5-minute missed-trigger catch-up** (added 2026-10-02, PERMANENT, explicit user
+    rule: "if asleep at 10:30AM, should retry 5min later again and again if not
+    history found sent that day"): a third LaunchAgent,
+    `com.spigen.gcx.badreview-broadcast-catchup.plist`, fires `auto_broadcast.py
+    --catchup` every 5 minutes all day (`StartInterval`, not tied to a calendar
+    time, so no per-weekday entries — the script itself gates everything). On each
+    fire it checks, in order: (1) is it a weekday and not a KR holiday (same gate as
+    every other mode), (2) is the current wall-clock time between 10:30 and 18:00,
+    (3) does today's `state/ran_<date>.flag` marker already exist (written whenever
+    a real send OR a real KR-gate hold has happened today, by the 10:30 run, an
+    earlier catchup attempt, or `--retry-if-held`). If any of those fail, it exits
+    immediately — no sheets fetch, no log spam. Only when the marker is absent
+    during the window does it log `CATCHUP <date>: no run recorded yet today...` and
+    run the exact same fetch/build/decide flow the 10:30 trigger would have run —
+    this is specifically for "the Mac was asleep/off at 10:30 so the trigger never
+    fired at all," a different failure mode than the Z8 KR-gate hold (4b handles
+    that one). First real-world cause: 2026-10-02, laptop in clamshell sleep from
+    00:09 AM through past 10:30 AM — no `RUN` log line existed for that day at all
+    until a manual run.
+
 ## Testing — NEVER a bare live run
 
 **Rule (2026-09-21, permanent): when testing anything in this script, always pass
@@ -110,17 +135,18 @@ python3 auto_broadcast.py --test-only --date 2026-09-27             # then actua
 ## Manual controls
 
 ```bash
-# See what launchd currently has loaded
+# See what launchd currently has loaded (repeat for -retry / -catchup suffixes)
 launchctl print gui/$(id -u)/com.spigen.gcx.badreview-broadcast
 
 # Test the logic without sending anything
 python3 auto_broadcast.py --dry-run                    # as if run today
 python3 auto_broadcast.py --dry-run --date 2026-09-25   # simulate a holiday (should SKIP)
+python3 auto_broadcast.py --catchup --dry-run           # as if the 5-min poller fired now
 
 # Force a real send right now, bypassing the weekday/holiday check (careful — this is live)
 python3 auto_broadcast.py --force
 
-# Unload / reload after editing the plist
+# Unload / reload after editing a plist (swap the Label/filename for -retry or -catchup)
 launchctl bootout gui/$(id -u)/com.spigen.gcx.badreview-broadcast
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.spigen.gcx.badreview-broadcast.plist
 

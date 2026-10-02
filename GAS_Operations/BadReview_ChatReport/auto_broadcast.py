@@ -32,6 +32,8 @@ Usage:
   auto_broadcast.py --dry-run       # crunch + build cards, print results, send nothing
   auto_broadcast.py --force         # send even if today is a weekend/holiday (manual testing)
   auto_broadcast.py --date 2026-09-16   # override "today" (KST) for testing
+  auto_broadcast.py --retry-if-held     # 11:00 one-shot: force-send if the 10:30 run held
+  auto_broadcast.py --catchup           # 5-min poller: catch up a missed 10:30 trigger (e.g. asleep)
 """
 import argparse, datetime, importlib.util, json, os, sys, time, urllib.error, urllib.parse, urllib.request
 
@@ -45,6 +47,13 @@ def held_marker_path(today):
     """Written by the 10:30 run when the Z8 KR-gate holds the carousel back; checked
     by the 11:00 --retry-if-held run to know whether there's anything to retry."""
     return os.path.join(STATE_DIR, f"held_{today.isoformat()}.flag")
+
+
+def ran_marker_path(today):
+    """Written once today's real (non-test, non-dry-run) decision has been made —
+    either a full send or a KR-gate hold. Checked by --catchup to know whether the
+    10:30 run (or an earlier catchup attempt) has already happened today."""
+    return os.path.join(STATE_DIR, f"ran_{today.isoformat()}.flag")
 
 SHEETS = {
     "pixel11":  "12I6z_FFmDIMHa0rLanltKKFp7kI_yREQj3adkMamPgI",
@@ -214,6 +223,17 @@ def main():
                           "UNCONDITIONALLY — ignores the KR-gate even if still 0 KR "
                           "reviews, a hard 11:00 deadline. If nothing was held today "
                           "(already sent normally, or today was skipped), does nothing.")
+    ap.add_argument("--catchup", action="store_true",
+                     help="5-minute poller (separate launchd job, added 2026-10-02 "
+                          "per user rule: 'if asleep at 10:30AM, should retry 5min "
+                          "later again and again if not history found sent that "
+                          "day'): catches up a missed 10:30 trigger, e.g. the Mac "
+                          "was asleep. No-ops instantly (no sheets fetch) unless it's "
+                          "a weekday between 10:30 and 18:00 AND today's "
+                          "ran_<date>.flag marker is absent (meaning no real "
+                          "evaluation — send or KR-gate hold — has happened yet "
+                          "today). If it proceeds, runs the exact same normal "
+                          "fetch/build/decide flow as the 10:30 trigger would have.")
     ap.add_argument("--date", help="override today (KST), YYYY-MM-DD")
     a = ap.parse_args()
 
@@ -226,6 +246,15 @@ def main():
         if today.isoformat() in kr_holidays(today.year):
             log(f"SKIP {today.isoformat()}: Korean public holiday")
             return
+
+    if a.catchup:
+        now = datetime.datetime.now().time()
+        if not (datetime.time(10, 30) <= now <= datetime.time(18, 0)):
+            return  # outside the catch-up window — stay silent, don't spam the log every 5 min
+        if os.path.exists(ran_marker_path(today)):
+            return  # today's real run already happened (on time or an earlier catchup) — nothing to do
+        log(f"CATCHUP {today.isoformat()}: no run recorded yet today (likely a missed "
+            f"10:30 trigger, e.g. the Mac was asleep) — running now")
 
     if a.retry_if_held:
         marker = held_marker_path(today)
@@ -310,6 +339,8 @@ def main():
         log("ALERT preview: " + broadcast._post(test_url, preview))
         os.makedirs(STATE_DIR, exist_ok=True)
         open(held_marker_path(today), "w").close()
+        if not a.test_only:
+            open(ran_marker_path(today), "w").close()
         log(f"DONE {today.isoformat()}: carousel HELD ENTIRELY (0 KR reviews for Z8) — "
             f"alert + preview posted to private room; marker written for 11:00 retry")
         return
@@ -325,6 +356,10 @@ def main():
             os.remove(held_marker_path(today))
         except FileNotFoundError:
             pass
+
+    if not a.test_only:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        open(ran_marker_path(today), "w").close()
 
     log(f"DONE {today.isoformat()}: sent to {len(targets)} {'test' if a.test_only else ''} room(s)")
 
