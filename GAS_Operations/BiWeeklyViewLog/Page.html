@@ -1,0 +1,13 @@
+<!doctype html>
+<html><head><base target="_top">
+<style>html,body{margin:0;height:100%;background:#f5f5f7}iframe{border:0;width:100%;height:100%;display:block}</style>
+</head><body>
+<iframe src="https://docs.google.com/presentation/d/<?= deck ?>/embed?start=false&loop=false&rm=minimal" allowfullscreen></iframe>
+<script>
+  var visit = null, timer = null;
+  google.script.run.withSuccessHandler(function(id){ visit = id; tick(); }).startVisit('<?= code ?>', navigator.userAgent);
+  function tick(){ clearInterval(timer); timer = setInterval(function(){ if (visit && document.visibilityState === 'visible') google.script.run.beat(visit); }, <?= beat ?> * 1000); }
+  document.addEventListener('visibilitychange', function(){ if (visit && document.visibilityState === 'visible') google.script.run.beat(visit); });
+  window.addEventListener('pagehide', function(){ if (visit) google.script.run.beat(visit); });
+</script>
+</body></html>
