@@ -66,6 +66,8 @@ spigen-gcx-automation/
 │   ├── sq2gcx_AmazonHelpcenter/         # Amazon EU claim-form Help Center theme
 │   └── spigen-eu_ShopifyHelpcenter/     # Shopify EU claim-form Help Center theme
 │
+├── ClaudeMesh/                          # Electron Mac app — live mission control for Claude Code sessions
+│
 └── reference/                           # Internal reference docs
 ```
 
@@ -135,6 +137,12 @@ spigen-gcx-automation/
 | Project | Description | README |
 |---------|-------------|--------|
 | [Browser_Extensions/tampermonkey_scripts](Browser_Extensions/tampermonkey_scripts/) | **GCX Reply** (`v3.5.2`) — Zendesk order/product lookup panel, Auto-Fill, MCF handoff, ABM auto-relay + NRN. **Amazon MCF Autofill** (`v1.4.3`) — EU Seller Central MCF order-page autofill. **Amazon JP MCF Autofill** (`v1.5.2`) — JP variant. **Amazon Invoice Automation** (`v1.5`) — Amazon.de invoice download. **GChat Reply Suggest** (`v3.6.0`) — Alt+G shows a T3 Esc (deterministic, no-AI ticket-forward — bold + real hyperlink, ↑/↓ ticket browsing, @mention + honorific pickers, sourced from recently-visited Zendesk tickets) / Gratitude / Reminder picker in every Google Chat room by default (incl. the Chrome-PWA desktop app); Gratitude/Reminder auto-read the mention + honorific from the T3 Esc message a thread is attached to. Only in designated rooms (matched by space ID) does it instead suggest 3 AI-generated reply sentences, backed by a local server (`Browser_Extensions/gchat_reply_suggest_server.py`) that calls the `claude` CLI directly. Install `.user.js` files via Tampermonkey Dashboard → Import. | [README](Browser_Extensions/tampermonkey_scripts/README.md) |
+
+### Desktop tools
+
+| Project | Description | README |
+|---------|-------------|--------|
+| [ClaudeMesh](ClaudeMesh/) | **Claude Mesh**, a native macOS app (Electron) that is mission control for Claude Code. Every session is shown as a living bubble orbiting a "mother" star that ages with plan usage (5-hour / week / month). It shows per-model spend, tok/s, health, context and usage left. It can resume or rename any past session, convert a session to a background agent, send slash commands, and run in-app terminals. Working copy is `~/Apps/ClaudeMesh` (`sync-to-repo.sh` copies it here); `install.sh` builds it into /Applications. | [README](ClaudeMesh/README.md) |
 
 ### Zendesk Guide theme exports
 

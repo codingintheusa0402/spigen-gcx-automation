@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
+<title>Claude Mesh</title>
+<link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-view="split">
+<header id="top">
+  <div class="brand"><span class="logo"></span>Claude Mesh</div>
+  <div id="models" class="models"></div>
+  <div class="spacer"></div>
+  <div id="health" class="health"></div>
+  <div class="seg" id="viewSeg">
+    <button data-view="mesh" title="Mesh only (⌘1)">Mesh</button>
+    <button data-view="split" title="Mesh + terminals (⌘2)">Split</button>
+    <button data-view="grid" title="All terminals tiled (⌘3)">Grid</button>
+  </div>
+  <button id="pixelBtn" class="icon-btn" title="Pixel mode — lightweight retro look (⌘P)">▦ PIXEL</button>
+  <button id="bell" class="icon-btn on" title="Notify when a session finishes or errors">🔔</button>
+  <button id="newBtn" class="primary">+ New</button>
+</header>
+
+<div id="body">
+  <aside id="side">
+    <div class="side-h">Sessions <span id="sessCount"></span></div>
+    <div id="list"></div>
+    <div id="agentsBox" style="display:none"><div class="side-h">Agents <span id="agCount"></span></div><div id="agList"></div></div>
+    <div class="side-h">Today</div>
+    <div id="today" class="today"></div>
+    <div class="side-h hist-h">All sessions <span id="hCount"></span><label class="hauto" title="Also show automated claude -p runs"><input type="checkbox" id="hAuto"> auto</label></div>
+    <input id="hSearch" placeholder="Search sessions…  (click to resume)">
+    <div id="hList"></div>
+  </aside>
+
+  <main id="main">
+    <section id="meshWrap">
+      <canvas id="mesh"></canvas>
+      <div id="meshHint">Click a session to control it · right-click for commands · click the mother bubble to broadcast · drag a session to change its orbit · pinch or scroll to zoom · double-click to reset</div>
+      <div id="loading">Reading transcripts…</div>
+    </section>
+    <div id="dockHandle"></div>
+    <section id="dock">
+      <div id="tabs"></div>
+      <div id="terms"><div id="noTerms"><div>No in-app terminals yet. <b>+ New</b> starts a Claude session or shell here.<br>Sessions already running in Terminal.app appear in the mesh and can be controlled from their panel.</div></div></div>
+    </section>
+  </main>
+
+  <aside id="panel" class="hidden">
+    <div id="panelBody"></div>
+  </aside>
+</div>
+
+<div id="modal" class="hidden">
+  <div class="card" id="modalCard"></div>
+</div>
+<div id="toast"></div>
+
+<script src="../node_modules/@xterm/xterm/lib/xterm.js"></script>
+<script src="../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+<script src="mesh.js"></script>
+<script src="mother.js"></script>
+<script src="bubbles.js"></script>
+<script src="organism.js"></script>
+<script src="pixel.js"></script>
+<script src="app.js"></script>
+<script src="commands.js"></script>
+<script src="history.js"></script>
+</body>
+</html>

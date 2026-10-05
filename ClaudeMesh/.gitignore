@@ -1,0 +1,4 @@
+node_modules/
+dist/
+_game_backup/
+.DS_Store
