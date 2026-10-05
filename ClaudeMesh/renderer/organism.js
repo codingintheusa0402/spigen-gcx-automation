@@ -95,7 +95,6 @@ Object.assign(Mesh.prototype, {
 
     // interior, clipped to the sphere
     ctx.save(); ctx.globalAlpha = alive;
-    ctx.beginPath(); ctx.arc(n.x, n.y, R * .985, 0, 6.29); ctx.clip();
     ctx.translate(n.x, n.y);
     ctx.save(); ctx.rotate(n.spin * .6); ctx.drawImage(orb.neb, -R, -R, R * 2, R * 2); ctx.restore();
     ctx.globalCompositeOperation = 'lighter';
@@ -104,16 +103,20 @@ Object.assign(Mesh.prototype, {
     ctx.drawImage(orb.fib, -R * fs, -R * fs, R * 2 * fs, R * 2 * fs); ctx.restore();
     // sparks orbiting on a sphere: brighter in front, twinkling
     const spd = work ? 1 + Math.min(2, (s.tps || 0) / 80) : .25;
+    // batched: dots are bucketed by brightness and filled as one path per bucket (4 draws, not 70)
+    const B = [new Path2D(), new Path2D(), new Path2D(), new Path2D()], gs = glowSprite(P.spark);
     for (const p of orb.sparks) {
       const th = p.th + n.spin * p.sp * spd * 1.6, x = Math.sin(p.ph) * Math.cos(th), z = Math.sin(p.ph) * Math.sin(th), y = Math.cos(p.ph);
       const front = .35 + .65 * (z + 1) / 2, tw = .55 + .45 * Math.sin(t * (2 + p.sp * 3) + p.tw);
-      const px = x * p.rr * R, py = y * p.rr * R, a = front * tw * (.45 + .55 * energy);
-      if (p.big) { const g = R * .16 * front; ctx.globalAlpha = alive * a * .8; ctx.drawImage(glowSprite(P.spark), px - g, py - g, g * 2, g * 2); }
-      ctx.globalAlpha = alive * a; ctx.fillStyle = P.spark; const z2 = p.big ? 1.8 : 1.1; ctx.fillRect(px - z2 / 2, py - z2 / 2, z2, z2);
+      const px = x * p.rr * R, py = y * p.rr * R, a = front * tw;
+      if (p.big) { const g = R * .16 * front; ctx.globalAlpha = alive * a * .8 * (.45 + .55 * energy); ctx.drawImage(gs, px - g, py - g, g * 2, g * 2); }
+      const z2 = p.big ? 1.8 : 1.1; B[Math.min(3, a * 4 | 0)].rect(px - z2 / 2, py - z2 / 2, z2, z2);
     }
+    ctx.fillStyle = P.spark;
+    B.forEach((path, i) => { ctx.globalAlpha = alive * (i + .6) / 4 * (.45 + .55 * energy); ctx.fill(path); });
     // the heart: a slowly turning rose-knot that beats faster while the session works
     const beat = .8 + .2 * Math.sin(t * (work ? 6 : 2) + n.seed * 7), kr = R * .3 * beat, L = orb.lobes;
-    ctx.globalAlpha = alive * (.35 + .5 * energy); ctx.strokeStyle = P.knot; ctx.lineWidth = 1.1; ctx.shadowColor = P.knot; ctx.shadowBlur = 8;
+    ctx.globalAlpha = alive * (.35 + .5 * energy); ctx.strokeStyle = P.knot; ctx.lineWidth = 1.1;
     for (let j = 0; j < 2; j++) {
       ctx.beginPath();
       for (let i = 0; i <= 120; i++) {
@@ -121,9 +124,9 @@ Object.assign(Mesh.prototype, {
         const X = Math.cos(w) * rr, Y = Math.sin(w) * rr * (.75 + .25 * Math.sin(t + j));
         i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y);
       }
-      ctx.stroke();
+      const lw = ctx.lineWidth, ga = ctx.globalAlpha;            // soft glow = a wide faint pass (cheap vs shadowBlur)
+      ctx.lineWidth = 4.5; ctx.globalAlpha = ga * .22; ctx.stroke(); ctx.lineWidth = lw; ctx.globalAlpha = ga; ctx.stroke();
     }
-    ctx.shadowBlur = 0;
     const hg = R * (.22 + .06 * beat); ctx.globalAlpha = alive * (.5 + .4 * energy); ctx.drawImage(glowSprite(P.knot), -hg, -hg, hg * 2, hg * 2);
     ctx.globalCompositeOperation = 'source-over';
     if (dim > .01) { ctx.globalAlpha = alive * dim * .75; ctx.fillStyle = '#05030f'; ctx.beginPath(); ctx.arc(0, 0, R, 0, 6.29); ctx.fill(); }   // spend darkens it

@@ -18,6 +18,7 @@ function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.ad
 
 // ---------------- mesh ----------------
 const viz = new Mesh($('#mesh'), { onSelect: sid => select(sid), onHub: () => openBroadcast() });
+window.api.onVisible(v => { viz.offscreen = !v; });
 
 // ---------------- telemetry ----------------
 window.api.onTelemetry(s => {

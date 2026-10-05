@@ -90,7 +90,7 @@ Object.assign(Mesh.prototype, {
     const { body, flame, S } = this.mtex, t = this.time, heat = Math.min(1, (this.hub.mass || 0) / 10);
     R *= 1 + .014 * Math.sin(t * 1.7) + heat * .05;
     ctx.save(); ctx.imageSmoothingEnabled = smooth;
-    const N = smooth ? 54 : 28, sh = S / N, dh = 2 * R / N, amp = R * (.022 + heat * .02);
+    const N = smooth ? 34 : 24, sh = S / N, dh = 2 * R / N, amp = R * (.022 + heat * .02);
     for (let i = 0; i < N; i++) {
       const off = Math.sin(i * .43 + t * 3.6) * amp + Math.sin(i * .19 - t * 2.1) * amp * .6;
       const x = cx - R + (smooth ? off : Math.round(off)), y = cy - R + i * dh;

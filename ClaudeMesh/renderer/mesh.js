@@ -60,12 +60,12 @@ class Mesh {
     this.cursor = { x: -999, y: -999, px: -999, py: -999, vx: 0, vy: 0, r: 11, in: false, mass: 0 };
     this.stars = [0, 1, 2].map(layer => Array.from({ length: 90 + layer * 40 }, () => ({ x: Math.random(), y: Math.random(), s: Math.random(), tw: Math.random() * 6.28, layer })));
     this.ambient = [];                    // bubbles blown by the sessions (bubbles.js)
-    canvas.addEventListener('mousemove', e => this.move(e));
+    canvas.addEventListener('mousemove', e => { this.lastInput = performance.now(); this.move(e); });
     canvas.addEventListener('mouseenter', () => { this.cursor.in = true; });
     canvas.addEventListener('mouseleave', () => { this.cursor.in = false; this.hover = null; });
     canvas.addEventListener('mousedown', e => this.down(e));
     this.cam = { s: 1, tx: 0, ty: 0, ts: 1, ttx: 0, tty: 0 };      // view zoom (t* = target, eased toward)
-    canvas.addEventListener('wheel', e => this.wheelZoom(e), { passive: false });
+    canvas.addEventListener('wheel', e => { this.lastInput = performance.now(); this.wheelZoom(e); }, { passive: false });
     canvas.addEventListener('dblclick', e => { const h = this.hit(e); if (!h) Object.assign(this.cam, { ts: 1, ttx: 0, tty: 0 }); else if (h !== 'hub') this.unpin(h); });
     addEventListener('mousemove', e => {
       if (this.drag) return this.dragMove(e);
@@ -139,6 +139,39 @@ class Mesh {
   view() { const c = this.cam; return { x0: -c.tx / c.s, y0: -c.ty / c.s, x1: (this.w - c.tx) / c.s, y1: (this.h - c.ty) / c.s }; }
   toWorld(e) { const r = this.c.getBoundingClientRect(), c = this.cam; return { x: (e.clientX - r.left - c.tx) / c.s, y: (e.clientY - r.top - c.ty) / c.s }; }
 
+  drawBackdrop(ctx, W, H, parX, parY) {
+    const d = devicePixelRatio || 1, key = W + 'x' + H + '@' + d;
+    if (!this.bg || this.bg.key !== key) {
+      const mk = () => { const c = document.createElement('canvas'); c.width = Math.ceil(W * d); c.height = Math.ceil(H * d); const x = c.getContext('2d'); x.setTransform(d, 0, 0, d, 0, 0); return [c, x]; };
+      const [base, bx] = mk();
+      const g = bx.createRadialGradient(W * .5, H * .45, 0, W * .5, H * .5, Math.max(W, H) * .8);
+      g.addColorStop(0, BG[0]); g.addColorStop(.45, BG[1]); g.addColorStop(1, BG[2]); bx.fillStyle = g; bx.fillRect(0, 0, W, H);
+      for (const [nx, ny, col] of [[.22, .28, NEB[0]], [.8, .72, NEB[1]], [.7, .2, NEB[2]]]) {
+        const ng = bx.createRadialGradient(W * nx, H * ny, 0, W * nx, H * ny, Math.max(W, H) * .42);
+        ng.addColorStop(0, hexA(col, .28)); ng.addColorStop(1, hexA(col, 0)); bx.fillStyle = ng; bx.fillRect(0, 0, W, H);
+      }
+      // all star layers in one canvas with a margin, so parallax is one blit (no wrap-around tiling)
+      const M = 160, sc = document.createElement('canvas'); sc.width = Math.ceil((W + 2 * M) * d); sc.height = Math.ceil((H + 2 * M) * d);
+      const sx = sc.getContext('2d'); sx.setTransform(d, 0, 0, d, 0, 0);
+      for (const layer of this.stars) for (const s of layer) {
+        sx.fillStyle = `rgba(200,210,255,${(.15 + .5 * s.s) * .8})`; const z = .5 + s.s * (s.layer * .5 + .6);
+        sx.fillRect(s.x * (W + 2 * M), s.y * (H + 2 * M), z, z);
+      }
+      const layers = { c: sc, M };
+      const tw = this.stars.flat().filter(s => s.s > .55).slice(0, 45);           // the brightest ones twinkle live
+      this.bg = { key, base, layers, tw };
+    }
+    ctx.drawImage(this.bg.base, 0, 0, W, H);
+    { const { c, M } = this.bg.layers, ox = Math.max(-M, Math.min(M, -parX * 12 + this.cam.tx * .12)), oy = Math.max(-M, Math.min(M, -parY * 12 + this.cam.ty * .12));
+      ctx.drawImage(c, ox - M, oy - M, W + 2 * M, H + 2 * M); }
+    for (const s of this.bg.tw) {
+      const { M } = this.bg.layers, ox = Math.max(-M, Math.min(M, -parX * 12 + this.cam.tx * .12)), oy = Math.max(-M, Math.min(M, -parY * 12 + this.cam.ty * .12));
+      const x = s.x * (W + 2 * M) - M + ox, y = s.y * (H + 2 * M) - M + oy;
+      const a = (.15 + .5 * s.s) * .5 * Math.max(0, Math.sin(this.time * (1 + s.s) + s.tw));
+      if (a > .02) { ctx.fillStyle = `rgba(220,228,255,${a})`; const z = 1 + s.s * (s.layer * .5 + .6); ctx.fillRect(x - .3, y - .3, z, z); }
+    }
+  }
+
   resize() {
     if (this.pixel) return this.resizePixel();
     const r = this.c.getBoundingClientRect(), d = devicePixelRatio || 1;
@@ -189,7 +222,16 @@ class Mesh {
 
   nodeRadius(n) { return 22 + Math.min(30, Math.log10(1 + (n.s.totalUsd || 0)) * 10); }
 
+  // Frame governor: 60 fps while you interact (pointer, drag, zoom, pan), 30 otherwise;
+  // nothing at all while the window is hidden/minimised or the mesh is off-screen (Grid view).
   frame(now) {
+    if (document.hidden || this.offscreen || document.body.dataset.view === 'grid' || !this.w) {
+      this.last = this.lastPx = 0; setTimeout(() => requestAnimationFrame(t => this.frame(t)), 250); return;
+    }
+    const c = this.cam, busy = now - (this.lastInput || 0) < 2500 || this.drag || this.pan || Math.abs(c.s - c.ts) > .002 || Math.abs(c.tx - c.ttx) > .5;
+    const fps = busy ? 60 : 30;
+    if (now - (this.lastDraw || 0) < 1000 / fps - 3) { requestAnimationFrame(t => this.frame(t)); return; }
+    this.lastDraw = now;
     if (this.pixel) { this.framePixel(now); requestAnimationFrame(t => this.frame(t)); return; }
     const realDt = Math.min(.1, (now - (this.last || now)) / 1000); this.last = now;
     const dt = realDt; this.time += dt; this.stepCam(realDt);
@@ -200,22 +242,8 @@ class Mesh {
     const cspd = Math.hypot(cur.vx, cur.vy);
     const parX = cur.in ? (cur.x / W - .5) : 0, parY = cur.in ? (cur.y / H - .5) : 0;
 
-    // --- deep indigo nebula backdrop + parallax starfield
-    const g = ctx.createRadialGradient(W * .5, H * .45, 0, W * .5, H * .5, Math.max(W, H) * .8);
-    const TB = BG; g.addColorStop(0, TB[0]); g.addColorStop(.45, TB[1]); g.addColorStop(1, TB[2]);
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    const TN = NEB, neb = [[.22, .28, TN[0]], [.8, .72, TN[1]], [.7, .2, TN[2]]];
-    for (const [nx, ny, col] of neb) {
-      const ng = ctx.createRadialGradient(W * nx - parX * 20, H * ny - parY * 20, 0, W * nx, H * ny, Math.max(W, H) * .42);
-      ng.addColorStop(0, hexA(col, .28)); ng.addColorStop(1, hexA(col, 0)); ctx.fillStyle = ng; ctx.fillRect(0, 0, W, H);
-    }
-    for (const layer of this.stars) for (const s of layer) {
-      const k = (s.layer + 1) * 6;
-      const pk = .06 + s.layer * .07, x = (((s.x * W - parX * k + this.cam.tx * pk) % W) + W) % W, y = (((s.y * H - parY * k + this.cam.ty * pk) % H) + H) % H;
-      const a = (.15 + .5 * s.s) * (.6 + .4 * Math.sin(this.time * (1 + s.s) + s.tw));
-      ctx.fillStyle = `rgba(200,210,255,${a})`; const z = .5 + s.s * (s.layer * .5 + .6);
-      ctx.fillRect(x, y, z, z);
-    }
+    // --- deep indigo nebula backdrop + parallax starfield (pre-rendered; only a few stars twinkle live)
+    this.drawBackdrop(ctx, W, H, parX, parY);
 
     const d = devicePixelRatio || 1, cam = this.cam;
     ctx.setTransform(d * cam.s, 0, 0, d * cam.s, d * cam.tx, d * cam.ty);   // world space from here on
@@ -452,7 +480,6 @@ class Mesh {
     }
     const push = (o, k) => { const dx = o.x - x, dy = o.y - y, d = Math.hypot(dx, dy); if (d < 220 && d > 1) { o.vx += dx / d * (1 - d / 220) * k; o.vy += dy / d * (1 - d / 220) * k; } };
     for (const m of this.ambient) push(m, 260);
-    for (const n of this.nodes.values()) push(n, 420);
     this.onSelect(null);
   }
 }

@@ -161,5 +161,11 @@ async function stopAgent(a) {
 }
 
 // keep in sync with telemetry; history rescans every 20s (cached per file, only changed ones re-read)
-window.api.onTelemetry(() => { renderAgents(); if (hist.length && !$('#hList').matches(':hover')) renderHistory(); });
+// re-render only when something visible changed (live set, agents), not on every 1 s tick
+let lastHistKey = '', lastAgKey = '';
+window.api.onTelemetry(() => {
+  const ak = JSON.stringify(snap.agents || []); if (ak !== lastAgKey) { lastAgKey = ak; renderAgents(); }
+  const hk = snap.sessions.map(s => s.sid).join() + '|' + (snap.agents || []).map(a => a.sessionId).join() + '|' + hist.length + '|' + Math.floor(Date.now() / 60000);
+  if (hist.length && hk !== lastHistKey && !$('#hList').matches(':hover')) { lastHistKey = hk; renderHistory(); }
+});
 loadHistory(); setInterval(loadHistory, 20000);

@@ -17,10 +17,14 @@ function createWindow() {
     width: 1680, height: 1020, minWidth: 1100, minHeight: 700,
     backgroundColor: '#05060a', title: 'Claude Mesh',
     titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 },
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: true },
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.on('closed', () => { win = null; });
+  // tell the renderer when nobody can see the window so it stops drawing (telemetry keeps flowing)
+  const vis = v => () => win && win.webContents.send('win:visible', v);
+  win.on('hide', vis(false)); win.on('minimize', vis(false)); win.on('show', vis(true)); win.on('restore', vis(true));
+  app.on('hide', vis(false)); app.on('show', vis(true));
   if (process.env.MESH_DEBUG) win.webContents.on('console-message', (e, ...a) => console.log('[renderer]', JSON.stringify(e.message ?? a)));
 }
 

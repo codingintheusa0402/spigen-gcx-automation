@@ -78,12 +78,14 @@ Object.assign(Mesh.prototype, {
     this.simAmbient(dt, cspd);
     this.stepSessions(dt, realDt, cspd);
     const live = [...this.nodes.values()].filter(n => !n.dying);
-    for (const n of live) {
-      const col = PAL[n.s.family] || PAL.other, dx = this.hub.x - n.x, dy = this.hub.y - n.y, L = Math.hypot(dx, dy) || 1;
-      const bend = (n.seed > .5 ? 1 : -1) * L * .22, mx = (n.x + this.hub.x) / 2 - dy / L * bend, my = (n.y + this.hub.y) / 2 + dx / L * bend;
-      const steps = Math.max(8, L * k / 3 | 0), off = (t * (n.s.health === 'working' ? 6 : 1)) % 1;
-      ctx.fillStyle = n.s.health === 'working' ? shade(col, .9) : shade(col, .45);
-      for (let i = 0; i < steps; i++) { const kk = (i + off) / steps, q = 1 - kk; ctx.fillRect(Math.round((q * q * n.x + 2 * q * kk * mx + kk * kk * this.hub.x) * k), Math.round((q * q * n.y + 2 * q * kk * my + kk * kk * this.hub.y) * k), 1, 1); }
+    for (const n of live) {                         // load strands as dotted pixel arcs, ageing with load
+      const h = this.heaviness(n), N = Math.ceil(1 + h * 6), st = starColor('outer', .08 + h * .92, 1.7).map(Math.round);
+      const col = '#' + st.map(v => v.toString(16).padStart(2, '0')).join(''), off = (t * (n.s.health === 'working' ? 4 + 8 * h : 1)) % 1;
+      for (let j = 0; j < N; j++) {
+        const g = this.strandGeom(n, j, t), L = Math.hypot(g.x1 - g.x0, g.y1 - g.y0), steps = Math.max(8, L * k / 3 | 0);
+        ctx.fillStyle = j === 0 || Math.floor(t * 6 + j) % 3 ? col : shade(col, .55);
+        for (let i = 0; i < steps; i++) { const kk = (i + off) / steps, q = 1 - kk; ctx.fillRect(Math.round((q * q * g.x0 + 2 * q * kk * g.mx + kk * kk * g.x1) * k), Math.round((q * q * g.y0 + 2 * q * kk * g.my + kk * kk * g.y1) * k), 1, 1); }
+      }
     }
     for (const m of this.ambient) {
       const col = PAL[m.fam] || PAL.other, r = Math.max(1, m.r * k * 1.1), x = m.x * k, y = m.y * k, glint = Math.sin(t * 4.2 + m.ph) > .2;

@@ -2,8 +2,8 @@
 //  • Every session slowly orbits the mother bubble. Drag one anywhere: the drop point becomes
 //    its orbit (saved per session). Farther orbits turn slower, closer ones faster (Kepler-ish).
 //    Double-click a session bubble to send it back to its automatic slot.
-//  • Sessions blow bubbles in their model's colour — more and bigger the more tokens they burn.
-//  • The mother bubble's gravity pulls every bubble in (stronger the closer it gets) and eats it.
+//  • Each session is tied to the mother by glowing strands: more strands, and an older star
+//    colour, the harder it works (drawLinks).
 const ORBIT_LAP = 900;                    // seconds per lap for an automatic slot (≈ 15 min)
 const PIN_KEY = 'mesh.orbits';
 
@@ -36,9 +36,22 @@ Object.assign(Mesh.prototype, {
     const ref = this.orbitShape().rx, w0 = 6.283 / ORBIT_LAP;
     return w0 * Math.min(4, Math.max(.2, Math.pow(ref / Math.max(20, rx), 1.5)));
   },
-  orbitPos(o) {                           // o = { rx, a0, t0 } — angle advances with wall-clock time
-    const sh = this.orbitShape(), a = o.a0 + this.omegaAt(o.rx) * (Date.now() - o.t0) / 1000;
-    return { x: this.hub.x + Math.cos(a) * o.rx, y: this.hub.y + Math.sin(a) * o.rx * sh.k };
+  orbitPos(o) {                           // o = { rx, a0, t0, auto? } — angle advances with wall-clock time
+    const sh = this.orbitShape(), rx = o.auto ? sh.rx : o.rx, a = o.a0 + this.omegaAt(rx) * (Date.now() - o.t0) / 1000;
+    return { x: this.hub.x + Math.cos(a) * rx, y: this.hub.y + Math.sin(a) * rx * sh.k };
+  },
+  // a new (or released) session gets its own automatic orbit in the widest free gap — once.
+  // Sessions never get re-slotted when others arrive, leave or are dragged.
+  autoOrbit(n, live) {
+    const sh = this.orbitShape(), orb = this.loadOrbits(), now = Date.now();
+    const angs = live.filter(o => o !== n && orb[o.sid]).map(o => { const p = this.orbitPos(orb[o.sid]); return Math.atan2((p.y - this.hub.y) / sh.k, p.x - this.hub.x); });
+    let best = -Math.PI / 2, bestGap = -1;
+    for (let i = 0; i < 72; i++) {
+      const a = -Math.PI / 2 + i / 72 * 6.283;
+      const gap = angs.length ? Math.min(...angs.map(b => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b))))) : 9;
+      if (gap > bestGap + 1e-6) { bestGap = gap; best = a; }
+    }
+    orb[n.sid] = { auto: true, rx: sh.rx, a0: best, t0: now }; this.saveOrbits();
   },
   dropOrbit(n) {                          // turn the drop point into an orbit on the same ellipse family
     const sh = this.orbitShape(), dx = n.x - this.hub.x, dy = (n.y - this.hub.y) / sh.k;
@@ -48,79 +61,22 @@ Object.assign(Mesh.prototype, {
 
   // ---------------- session motion (shared by both renderers) ----------------
   stepSessions(dt, realDt, cspd) {
-    const cur = this.cursor, orb = this.loadOrbits();
+    const orb = this.loadOrbits();
     const live = [...this.nodes.values()].filter(n => !n.dying);
-    const auto = live.filter(n => !orb[n.sid]);
+    for (const n of live) if (!orb[n.sid]) this.autoOrbit(n, live);
     live.forEach(n => {
       n.swell += ((this.hover === n.sid || n.dragging ? 1 : 0) - n.swell) * Math.min(1, realDt * 8);
       if (n.dragging) { n.vx = n.vy = 0; return; }
-      const h = orb[n.sid] ? this.orbitPos(orb[n.sid]) : this.home(n, auto, auto.indexOf(n));
+      const h = this.orbitPos(orb[n.sid]);             // each session follows only its own orbit
       n.vx += (h.x - n.x) * 2.2 * dt; n.vy += (h.y - n.y) * 2.2 * dt;
-      if (cur.in && !orb[n.sid]) {
-        const dx = n.x - cur.x, dy = n.y - cur.y, d = Math.hypot(dx, dy), R = this.nodeRadius(n) + 90;
-        if (d < R && d > 1 && this.hover !== n.sid) { const f = (1 - d / R) * Math.max(0, cspd - 180) * .9; n.vx += dx / d * f * dt; n.vy += dy / d * f * dt; }
-      }
-      if (!orb[n.sid]) for (const o of live) if (o !== n) {
-        const dx = n.x - o.x, dy = n.y - o.y, d = Math.hypot(dx, dy), min = this.nodeRadius(n) + this.nodeRadius(o) + 50;
-        if (d < min && d > .1) { n.vx += dx / d * (min - d) * 3 * dt; n.vy += dy / d * (min - d) * 3 * dt; }
-      }
       const damp = Math.pow(.12, dt); n.vx *= damp; n.vy *= damp;
       n.x += n.vx * dt; n.y += n.vy * dt;
     });
     for (const [sid, n] of this.nodes) if (n.dying && this.time - n.dying > 2.5) this.nodes.delete(sid);
   },
 
-  // ---------------- bubbles: emitted by sessions, eaten by the mother ----------------
-  emitBubble(n) {
-    // leave mostly from the side facing the mother: a cone around that direction (bell-shaped spread), rare strays wider
-    const toHub = Math.atan2(this.hub.y - n.y, this.hub.x - n.x), spread = (Math.random() + Math.random() + Math.random() - 1.5) * (Math.random() < .12 ? 2.2 : .75);
-    const s = n.s, R = this.nodeRadius(n), a = toHub + spread, sp = 50 + Math.random() * 80;
-    const tang = (n.seed > .5 ? 1 : -1) * (12 + Math.random() * 28);
-    const q = Math.random(), r = .7 + q * q * q * 4.3;                       // mostly tiny, the odd larger one
-    n.flash = Math.min(.35, n.flash + .02);
-    return { x: n.x + Math.cos(a) * (R + 2), y: n.y + Math.sin(a) * (R + 2), vx: Math.cos(a) * sp - Math.sin(toHub) * tang, vy: Math.sin(a) * sp + Math.cos(toHub) * tang,
-      r, fam: s.family, color: FAMILY_COLOR[s.family] || FAMILY_COLOR.other, born: this.time, ph: Math.random() * 6.28, depth: 1 };
-  },
-  seedBubble() {
-    const v = this.view(), fams = ['opus', 'sonnet', 'fable', 'haiku'], fam = fams[Math.random() * fams.length | 0];
-    return { x: v.x0 + Math.random() * (v.x1 - v.x0), y: v.y0 + Math.random() * (v.y1 - v.y0), vx: (Math.random() - .5) * 20, vy: (Math.random() - .5) * 20,
-      r: 2 + Math.random() * 4, fam, color: FAMILY_COLOR[fam], born: this.time, ph: Math.random() * 6.28, depth: 1 };
-  },
-
-  simAmbient(dt, cspd) {
-    if (!this.seeded && this.w) { this.seeded = true; for (let i = 0; i < 18; i++) this.ambient.push(this.seedBubble()); }
-    const A = this.ambient, hub = this.hub, cur = this.cursor, v = this.view();
-    const MR = this.motherRadius(), cap = this.pixel ? 140 : 520, live = [...this.nodes.values()].filter(n => !n.dying);
-    // emission: rate and size follow each session's token speed
-    for (const n of live) {
-      const s = n.s, rate = s.tps > 0 ? Math.min(40, 2 + s.tps / 4) : s.health === 'working' ? 1.5 : .04;
-      n.bacc = (n.bacc || 0) + rate * dt;
-      while (n.bacc >= 1) { n.bacc -= 1; if (A.length < cap) A.push(this.emitBubble(n)); n.phase = 1; }
-    }
-    for (const m of A) {
-      // mother gravity: ∝ 1/d², so it tugs gently from afar and hard up close
-      const dx = hub.x - m.x, dy = hub.y - m.y, dist = Math.hypot(dx, dy) || 1, d2 = dist * dist + 900;
-      const g = 4.2e6 / d2; m.vx += dx / dist * g * dt; m.vy += dy / dist * g * dt;     // a = GM / r² (softened)
-      if (dist < MR * .78) {
-        m.dead = true; hub.mass = Math.min(14, (hub.mass || 0) + m.r * .18);
-        if (!this.pixel) this.fx.push({ kind: 'absorb', x: m.x, y: m.y, r: m.r, color: m.color, t: 0, to: hub });
-        continue;
-      }
-      if (cur.in) {
-        const cx = m.x - cur.x, cy = m.y - cur.y, cd = Math.hypot(cx, cy), R = 70 + m.r;
-        if (cd < R && cd > 1) { const f = (1 - cd / R) * (40 + cspd * .4); m.vx += cx / cd * f * dt; m.vy += cy / cd * f * dt; }
-      }
-      for (const n of live) {                // slide off session bubbles instead of passing through
-        const R = this.nodeRadius(n) + m.r + 2, sx = m.x - n.x, sy = m.y - n.y, sd = Math.hypot(sx, sy);
-        if (sd < R && sd > .1 && this.time - m.born > .3) { m.vx += sx / sd * (R - sd) * 8 * dt; m.vy += sy / sd * (R - sd) * 8 * dt; }
-      }
-      const damp = Math.pow(.93, dt); m.vx *= damp; m.vy *= damp;       // a little drag → orbits decay into the mother
-      m.x += m.vx * dt; m.y += m.vy * dt;
-      if (m.x < v.x0 - 500 || m.x > v.x1 + 500 || m.y < v.y0 - 500 || m.y > v.y1 + 500) m.dead = true;
-    }
-    this.ambient = A.filter(m => !m.dead);
-  },
-
+    // token bubbles were removed (too costly); load now shows as strands in drawLinks
+  simAmbient() { this.ambient.length = 0; },
   // shimmering, glow-rimmed bubbles
   drawBubbles(ctx, parX, parY) {
     const t = this.time;
@@ -134,31 +90,51 @@ Object.assign(Mesh.prototype, {
   },
 
   // glowing curved links from each session to the mother; a light pulse travels while it works
+  // Load lines: every session is tied to the mother by glowing strands. The harder it works
+  // (tok/s, smoothed), the more strands (1 → 7) and the older their star colour — young
+  // blue-white when light, cooling through gold to red-orange under heavy load.
+  heaviness(n) {
+    const target = n.s.health === 'working' ? Math.min(1, Math.sqrt((n.s.tps || 0) / 260)) : 0;
+    n.heavy = (n.heavy || 0) + (target - (n.heavy || 0)) * .04;      // eases over ~1–2 s
+    return n.heavy;
+  },
+  strandGeom(n, j, t) {
+    const hub = this.hub, MR = this.motherRadius(), R = this.nodeRadius(n);
+    const dx = hub.x - n.x, dy = hub.y - n.y, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
+    const side = n.seed > .5 ? 1 : -1, fan = j === 0 ? 0 : (j % 2 ? 1 : -1) * Math.ceil(j / 2);   // 0, +1, -1, +2, -2 …
+    const sa = fan * .16, sx = ux * Math.cos(sa) - uy * Math.sin(sa), sy = ux * Math.sin(sa) + uy * Math.cos(sa);
+    const x0 = n.x + sx * R, y0 = n.y + sy * R, x1 = hub.x - ux * MR * 1.04, y1 = hub.y - uy * MR * 1.04;
+    const bend = (side * .22 + fan * .09 + .025 * Math.sin(t * (1.1 + j * .37) + n.seed * 9 + j)) * L;
+    return { x0, y0, x1, y1, mx: (x0 + x1) / 2 - uy * bend, my: (y0 + y1) / 2 + ux * bend };
+  },
   drawLinks(ctx) {
-    const hub = this.hub, t = this.time, MR = this.motherRadius();
+    const t = this.time;
     ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
     for (const n of this.nodes.values()) {
       if (n.dying) continue;
-      const col = sessionColor(n.s), R = this.nodeRadius(n);
-      const dx = hub.x - n.x, dy = hub.y - n.y, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
-      const x0 = n.x + ux * R, y0 = n.y + uy * R, x1 = hub.x - ux * MR * 1.05, y1 = hub.y - uy * MR * 1.05;
-      const bend = (n.seed > .5 ? 1 : -1) * L * .22, mx = (x0 + x1) / 2 - uy * bend, my = (y0 + y1) / 2 + ux * bend;
-      const work = n.s.health === 'working' ? 1 : 0, g = ctx.createLinearGradient(x0, y0, x1, y1);
-      g.addColorStop(0, hexA(col, .9)); g.addColorStop(1, 'rgba(255,150,90,.8)');
-      for (const [w, a] of [[7, .07 + .05 * work], [3, .16 + .1 * work], [1.2, .55 + .3 * work]]) {
-        ctx.strokeStyle = g; ctx.globalAlpha = a; ctx.lineWidth = w;
-        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo(mx, my, x1, y1); ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
-      const pulses = work ? 1 + Math.min(3, (n.s.tps || 0) / 60 | 0) : 0;
-      for (let i = 0; i < pulses; i++) {
-        const k = ((t * (.35 + (n.s.tps || 0) / 400) + i / pulses + n.seed) % 1), q = 1 - k;
-        const px = q * q * x0 + 2 * q * k * mx + k * k * x1, py = q * q * y0 + 2 * q * k * my + k * k * y1, sz = 9;
-        ctx.drawImage(glowSprite(mix(col, .4)), px - sz, py - sz, sz * 2, sz * 2);
+      const h = this.heaviness(n), strands = 1 + h * 6, work = n.s.health === 'working' ? 1 : 0;
+      const star = starColor('outer', .08 + h * .92, 1.7).map(Math.round), starRGB = `${star}`;
+      const rim = (ORB_PAL[n.s.family] || ORB_PAL.other).rim;
+      for (let j = 0; j < Math.ceil(strands); j++) {
+        const vis = Math.min(1, strands - j), g = this.strandGeom(n, j, t);   // the newest strand fades in
+        const grad = ctx.createLinearGradient(g.x0, g.y0, g.x1, g.y1);
+        grad.addColorStop(0, hexA(rim, .85)); grad.addColorStop(.35, `rgba(${starRGB},.9)`); grad.addColorStop(1, `rgba(${starRGB},.95)`);
+        ctx.strokeStyle = grad;
+        const passes = j === 0 ? [[7, .07 + .06 * work], [3, .16 + .12 * work], [1.2, .55 + .3 * work]] : [[4, .1 + .08 * h], [1, .45 + .3 * h]];
+        for (const [w, a] of passes) {
+          ctx.globalAlpha = a * vis; ctx.lineWidth = w;
+          ctx.beginPath(); ctx.moveTo(g.x0, g.y0); ctx.quadraticCurveTo(g.mx, g.my, g.x1, g.y1); ctx.stroke();
+        }
+        if (work) {                                                    // a light pulse runs down each strand
+          const k = (t * (.3 + h * .9) + j * .37 + n.seed) % 1, q = 1 - k, sz = 6 + 4 * h;
+          const px = q * q * g.x0 + 2 * q * k * g.mx + k * k * g.x1, py = q * q * g.y0 + 2 * q * k * g.my + k * k * g.y1;
+          ctx.globalAlpha = vis * (.6 + .4 * h); ctx.drawImage(glowSprite('#' + star.map(v => v.toString(16).padStart(2, '0')).join('')), px - sz, py - sz, sz * 2, sz * 2);
+        }
       }
     }
-    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   },
+
 
   // ---------------- drag & drop ----------------
   dragStart(e, sid) { this.drag = { sid, x0: e.clientX, y0: e.clientY, moved: false }; },

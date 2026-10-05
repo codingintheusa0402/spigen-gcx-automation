@@ -134,19 +134,19 @@ body[data-view="grid"] .term .xt { flex: 1; min-height: 0; padding: 4px 4px 2px 
 
 /* ---- Osmos skin ---- */
 body { background: radial-gradient(ellipse at 30% 20%, #1d1752 0%, #0c0a2e 45%, #05041a 100%) fixed; font-weight: 300; }
-#top { background: rgba(10,8,36,.55); backdrop-filter: blur(18px) saturate(140%); border-bottom-color: var(--line); }
+#top { background: rgba(10,8,36,.55); border-bottom-color: var(--line); }
 .brand { font-weight: 200; letter-spacing: .42em; font-size: 14px; text-transform: uppercase; }
 .logo { width: 16px; height: 16px; background: radial-gradient(circle at 35% 35%, #fff 0 12%, #9fd8ff 30%, rgba(80,140,255,.4) 62%, rgba(80,140,255,0) 72%); box-shadow: 0 0 14px #6fb6ff, inset 0 0 0 1px rgba(220,240,255,.7); }
-button { background: rgba(40,36,110,.35); border-color: var(--line2); border-radius: 999px; font-weight: 400; letter-spacing: .04em; backdrop-filter: blur(8px); }
+button { background: rgba(40,36,110,.35); border-color: var(--line2); border-radius: 999px; font-weight: 400; letter-spacing: .04em; }
 button:hover { background: rgba(70,64,170,.45); border-color: rgba(170,190,255,.45); box-shadow: 0 0 14px rgba(120,150,255,.25); }
 button.primary { background: radial-gradient(circle at 30% 30%, #9fd8ff, #4f7dff 70%); border-color: rgba(210,235,255,.7); color: #08103a; font-weight: 600; box-shadow: 0 0 18px rgba(111,182,255,.45); }
 .seg { border-radius: 999px; background: rgba(20,18,60,.4); }
 .seg button { border-radius: 999px; letter-spacing: .12em; text-transform: uppercase; font-size: 11px; }
 .seg button.on { background: rgba(120,140,255,.22); box-shadow: inset 0 0 0 1px rgba(170,190,255,.35); }
-.mchip, .hpill { background: rgba(26,24,80,.45); border-color: var(--line2); backdrop-filter: blur(8px); }
+.mchip, .hpill { background: rgba(26,24,80,.45); border-color: var(--line2); }
 .mchip .dot { width: 10px; height: 10px; background: transparent !important; border: 1.5px solid currentColor; }
 .mchip b { font-weight: 500; letter-spacing: .06em; }
-#side, #panel { background: rgba(10,8,38,.62); backdrop-filter: blur(20px) saturate(140%); border-color: var(--line); }
+#side, #panel { background: rgba(10,8,38,.62); border-color: var(--line); }
 .side-h, .sec h3 { letter-spacing: .32em; font-weight: 400; color: var(--faint); }
 .srow { border-radius: 14px; }
 .srow:hover { background: rgba(60,56,150,.22); }
@@ -272,3 +272,11 @@ body.pixel #cmdMenu .cm-i.on, body.pixel .cmd-ac div.on { background: #29466f; }
 .card textarea { width: 100%; min-height: 70px; }
 body.pixel .hrow, body.pixel .arow { border-radius: 0; }
 body.pixel .hrow:hover, body.pixel .arow:hover { background: #1d2b53; }
+
+/* perf: the header, sidebars, buttons and chips never sit over the animated canvas, so their
+   frosted-glass blur was invisible but cost ~10% CPU (re-blurred every frame). Only floating
+   cards/menus that overlap the mesh keep backdrop-filter. */
+
+/* header logo = the app icon */
+.logo, body.pixel .logo { width: 22px; height: 22px; background: none; box-shadow: none; border-radius: 5px; filter: drop-shadow(0 0 6px rgba(140,170,255,.45)); }
+body.pixel .logo { image-rendering: pixelated; border-radius: 0; filter: none; }

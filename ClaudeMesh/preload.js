@@ -31,5 +31,6 @@ contextBridge.exposeInMainWorld('api', {
     logs: id => ipcRenderer.invoke('agent:logs', id),
   },
   refreshUsage: () => ipcRenderer.invoke('usage:refresh'),
+  onVisible: cb => ipcRenderer.on('win:visible', (_e, v) => cb(v)),
   debugShot: f => ipcRenderer.invoke('debug:shot', f),
 });
