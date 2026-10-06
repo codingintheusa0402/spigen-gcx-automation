@@ -12,6 +12,35 @@ Electron app · personal tool, separate from the Spigen automations · macOS (Ap
 
 ---
 
+## On iPhone
+
+The Mac app also serves a **home-screen web app** for iPhone. It has the same live mesh, sessions, controls, plan-usage card and terminals, with touch gestures: pinch to zoom, drag to pan, drag a session to re-orbit it, and tap to open it.
+
+| Mesh on iPhone | Session sheet |
+|---|---|
+| <img src="docs/phone-mesh.jpg" width="300"> | <img src="docs/phone-session.jpg" width="300"> |
+
+1. On the Mac, click **📱** in the header, then turn on **Allow phone access**.
+2. Scan the QR code with the iPhone camera. Use **Wi-Fi** on the same network, or **Tailscale** from anywhere; the phone needs Tailscale on for the second.
+3. In Safari choose Share → **Add to Home Screen**. It then opens full-screen with the Claude Mesh icon.
+
+What you can do from the phone:
+- Send prompts, interrupt, and run slash commands.
+- Broadcast by tapping the mother star.
+- Rename a session, or convert it to an agent.
+- **Resume any past session**: it starts on the Mac, in an in-app terminal.
+- **Live terminal** for in-app sessions, with an Esc / Tab / arrows / ⏎ / ^C key row.
+
+How it works and how it's protected:
+- `phone-server.js` is a small HTTP server on port 47320. Phone access is **off by default**; when it's off, nothing listens.
+- Data comes over Server-Sent Events and controls over JSON POSTs. Every data or control request needs the private pairing key that the QR code carries.
+- **New pairing key** cuts off every phone paired before.
+- It is reachable only on the local network and your Tailnet; it is never published through Tailscale Funnel.
+- The macOS firewall asks once to allow incoming connections.
+- The phone caps the canvas at 2× pixel density to stay cool.
+
+---
+
 ## What it does
 
 | Area | Features |
@@ -61,6 +90,8 @@ main.js        Electron main: window, node-pty terminals, AppleScript control, h
                rename, background agents, plan-usage fetch, telemetry loop (1 s)
 collector.js   Session registry + incremental transcript tailing → spend/speed/health snapshot
 preload.js     window.api bridge (contextIsolation)
+phone-server.js  iPhone web-app server: static files + token-protected JSON/SSE API (off by default)
+phone/         iPhone home-screen app (index.html, phone.js, phone.css) — reuses the renderer engine
 renderer/
   index.html   Layout + script order
   app.js       Header, session list, detail panel, terminals, views, modals, notifications

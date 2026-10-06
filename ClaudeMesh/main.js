@@ -5,6 +5,10 @@ const fs = require('fs');
 const { execFile } = require('child_process');
 const pty = require('node-pty');
 const { Collector } = require('./collector');
+const { EventEmitter } = require('events');
+const { createPhoneServer } = require('./phone-server');
+const ptyBus = new EventEmitter(); ptyBus.setMaxListeners(50);   // pty output fan-out (desktop + phone terminals)
+let lastSnap = null, phone = null;
 
 const HOME = os.homedir();
 const collector = new Collector();
@@ -52,11 +56,17 @@ ipcMain.handle('pty:spawn', (_e, opts) => {
     name: 'xterm-256color', cols: opts.cols || 120, rows: opts.rows || 32, cwd,
     env: { ...cleanEnv(), TERM: 'xterm-256color', COLORTERM: 'truecolor', TERM_PROGRAM: 'ClaudeMesh' },
   });
-  ptys.set(id, { proc, title, kind: opts.kind, cwd });
-  proc.onData(d => win && win.webContents.send('pty:data', id, d));
+  const entry = { proc, title, kind: opts.kind, cwd, buf: '' };
+  ptys.set(id, entry);
+  proc.onData(d => {
+    win && win.webContents.send('pty:data', id, d);
+    entry.buf = (entry.buf + d).slice(-200000);                 // backlog for a phone that opens this terminal later
+    ptyBus.emit('data', id, d);
+  });
   proc.onExit(({ exitCode }) => {
     ptys.delete(id);
     win && win.webContents.send('pty:exit', id, exitCode);
+    ptyBus.emit('exit', id);
   });
   return { id, pid: proc.pid, title, cwd };
 });
@@ -89,12 +99,28 @@ ipcMain.handle('ext:focus', async (_e, tty) =>
   osa(terminalTabScript(tty, ['set selected of t to true', 'set index of w to 1', 'activate'])));
 
 // Write to an in-app session (owned pty) by id
-ipcMain.handle('ctl:send', (_e, ptyId, text, submit) => {
+function ctlSend(ptyId, text, submit) {
   const p = ptys.get(ptyId); if (!p) return { ok: false };
   p.proc.write(String(text));
   if (submit) setTimeout(() => p.proc.write('\r'), 60);
   return { ok: true };
-});
+}
+ipcMain.handle('ctl:send', (_e, ptyId, text, submit) => ctlSend(ptyId, text, submit));
+
+// by session id (used by the phone): in-app → pty, Terminal.app → AppleScript
+const liveSession = sid => lastSnap && lastSnap.sessions.find(s => s.sid === sid);
+async function sendToSession(sid, text) {
+  const s = liveSession(sid); if (!s) return { ok: false, err: 'session is not running' };
+  if (s.owner) return ctlSend(s.owner, text, true);
+  if (s.tty && s.kind !== 'bg') return osa(terminalTabScript(s.tty, [`do script ${asStr(String(text).replace(/\r?\n/g, ' '))} in t`]));
+  return { ok: false, err: 'background session — view only' };
+}
+async function interruptSession(sid) {
+  const s = liveSession(sid); if (!s) return { ok: false };
+  if (s.owner) { const p = ptys.get(s.owner); if (p) p.proc.write('\x1b'); return { ok: true }; }
+  if (s.tty) return osa(terminalTabScript(s.tty, ['do script (ASCII character 27) in t']));
+  return { ok: false };
+}
 
 ipcMain.handle('dlg:dir', async () => {
   const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'], defaultPath: HOME });
@@ -128,11 +154,12 @@ function scanCommands(base, scope) {
   } catch { }
   return out;
 }
-ipcMain.handle('cmds:list', (_e, cwd) => {
+ipcMain.handle('cmds:list', (_e, cwd) => commandsFor(cwd));
+function commandsFor(cwd) {
   const list = scanCommands(path.join(HOME, '.claude'), 'Your skills & commands');
   if (cwd && cwd !== HOME) list.push(...scanCommands(path.join(cwd, '.claude'), 'Project'));
   const seen = new Set(); return list.filter(c => !seen.has(c.cmd) && seen.add(c.cmd));
-});
+}
 // ---------------- session history (what `claude --resume` lists) ----------------
 const PROJ_DIR = path.join(HOME, '.claude', 'projects');
 const histCache = new Map();      // file -> { mtimeMs, size, meta }
@@ -211,7 +238,8 @@ async function scanHistory() {
   return [...histCache.values()].map(c => c.meta).filter(Boolean).sort((a, b) => b.mtime - a.mtime);
 }
 // Rename = the same record `/rename` writes, appended to the transcript (shows in the /resume picker)
-ipcMain.handle('hist:rename', (_e, sid, name) => {
+ipcMain.handle('hist:rename', (_e, sid, name) => renameTranscript(sid, name));
+function renameTranscript(sid, name) {
   const c = [...histCache.values()].find(c => c.meta && c.meta.sid === sid);
   let file = c && c.meta.file;
   if (!file) try { for (const d of fs.readdirSync(PROJ_DIR)) { const f = path.join(PROJ_DIR, d, sid + '.jsonl'); if (fs.existsSync(f)) { file = f; break; } } } catch { }
@@ -219,7 +247,7 @@ ipcMain.handle('hist:rename', (_e, sid, name) => {
   fs.appendFileSync(file, JSON.stringify({ type: 'custom-title', customTitle: String(name), sessionId: sid }) + '\n');
   if (c) c.meta.title = String(name);
   return { ok: true };
-});
+}
 
 // ---------------- background agents (`claude agents`, `claude --bg`) ----------------
 let claudeBin = null;            // resolved once through a login shell (PATH from the user's profile)
@@ -246,13 +274,14 @@ async function refreshAgents(force) {
   return agentsCache;
 }
 // Convert a session into a background agent: resume it under the same id with --bg
-ipcMain.handle('agent:convert', async (_e, sid, cwd, task) => {
+ipcMain.handle('agent:convert', (_e, sid, cwd, task) => convertToAgent(sid, cwd, task));
+async function convertToAgent(sid, cwd, task) {
   const args = ['--bg', '--dangerously-skip-permissions', '--resume', sid];
   if (task && task.trim()) args.push(task.trim());
   const r = await claudeCli(args, cwd);
   refreshAgents(true);
   return r;
-});
+}
 ipcMain.handle('agent:stop', async (_e, id) => { const r = await claudeCli(['stop', id]); refreshAgents(true); return r; });
 ipcMain.handle('agent:logs', (_e, id) => claudeCli(['logs', id]));
 ipcMain.handle('agents:list', () => refreshAgents(true));
@@ -344,6 +373,32 @@ function monthlyFrom(limits) {
 }
 ipcMain.handle('usage:refresh', async () => { await refreshUsage(true); return usage; });
 
+// ---------------- phone access (phone-server.js) ----------------
+function initPhone() {
+  phone = createPhoneServer({
+    root: __dirname, userData: app.getPath('userData'), ptys, ptyBus,
+    getSnap: () => lastSnap,
+    getHistory: () => scanHistory(),
+    commandsFor,
+    sendToSession, interruptSession,
+    resumeOnMac: sid => { if (!win) return { ok: false }; win.webContents.send('phone:resume', sid); return { ok: true }; },
+    rename: async (sid, name) => {
+      const s = liveSession(sid);
+      if (s && (s.owner || (s.tty && s.kind !== 'bg'))) { const r = await sendToSession(sid, '/rename ' + name); if (r && r.ok !== false && r.out !== 'notfound') return { ok: true }; }
+      return renameTranscript(sid, name);
+    },
+    convert: async (sid, task) => {
+      const s = liveSession(sid), h = [...histCache.values()].map(c => c.meta).find(m => m && m.sid === sid);
+      if (s && s.owner) { const p = ptys.get(s.owner); if (p) try { p.proc.kill(); } catch { } await new Promise(r => setTimeout(r, 1500)); }
+      return convertToAgent(sid, (s && s.cwd) || (h && h.cwd) || HOME, task);
+    },
+  });
+}
+ipcMain.handle('phone:status', () => phone.status());
+ipcMain.handle('phone:set', (_e, v) => { phone.setEnabled(v); return phone.status(); });
+ipcMain.handle('phone:regen', () => { phone.regenerate(); return phone.status(); });
+ipcMain.handle('phone:qr', (_e, url) => require('qrcode').toDataURL(url, { margin: 1, width: 360, color: { dark: '#0a0826', light: '#ffffff' } }));
+
 // ---------------- telemetry loop ----------------
 async function loop() {
   try {
@@ -355,6 +410,7 @@ async function loop() {
       snap.usage = usage; refreshUsage();
       snap.ptys = [...ptys].map(([id, p]) => ({ id, pid: p.proc.pid, title: p.title, kind: p.kind, cwd: p.cwd }));
       win.webContents.send('telemetry', snap);
+      lastSnap = snap; if (phone) phone.broadcast(snap);
     }
   } catch (e) { console.error(e); }
   setTimeout(loop, 1000);
@@ -363,6 +419,7 @@ async function loop() {
 app.whenReady().then(() => {
   app.setName('Claude Mesh');
   createWindow();
+  initPhone();
   loop();
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 });

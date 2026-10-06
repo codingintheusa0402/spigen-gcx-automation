@@ -280,3 +280,9 @@ body.pixel .hrow:hover, body.pixel .arow:hover { background: #1d2b53; }
 /* header logo = the app icon */
 .logo, body.pixel .logo { width: 22px; height: 22px; background: none; box-shadow: none; border-radius: 5px; filter: drop-shadow(0 0 6px rgba(140,170,255,.45)); }
 body.pixel .logo { image-rendering: pixelated; border-radius: 0; filter: none; }
+
+/* iPhone pairing */
+.ph-qrs { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+.ph-qr { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; }
+.ph-qr img { width: 180px; height: 180px; border-radius: 12px; background: #fff; padding: 6px; }
+.ph-qr code { color: var(--dim); font-size: 11px; }

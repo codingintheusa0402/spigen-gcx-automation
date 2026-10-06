@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Claude Mesh">
+<meta name="theme-color" content="#0a0826">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" id="manifest">
+<title>Claude Mesh</title>
+<link rel="stylesheet" href="/xterm.css">
+<link rel="stylesheet" href="/phone.css">
+</head>
+<body>
+<header id="top">
+  <img src="/icon.png" class="logo" alt="">
+  <span class="brand">CLAUDE MESH</span>
+  <span class="spacer"></span>
+  <span id="conn" class="conn" title="connection"></span>
+  <span id="today" class="today">$0.00</span>
+</header>
+
+<main id="stage">
+  <canvas id="mesh"></canvas>
+  <div id="hint">Tap a session · pinch to zoom · drag to move · tap the star to broadcast</div>
+</main>
+
+<section id="sheet" class="sheet hidden"><div class="grab"></div><div id="sheetBody"></div></section>
+
+<nav id="tabs">
+  <button data-tab="mesh" class="on"><b>◎</b>Mesh</button>
+  <button data-tab="sessions"><b>☰</b>Sessions</button>
+  <button data-tab="history"><b>↺</b>All sessions</button>
+  <button data-tab="term" id="termTab" class="hidden"><b>›_</b>Terminal</button>
+</nav>
+<div id="toast"></div>
+<div id="offline" class="hidden"></div>
+
+<script src="/xterm.js"></script>
+<script src="/mesh.js"></script>
+<script src="/mother.js"></script>
+<script src="/bubbles.js"></script>
+<script src="/organism.js"></script>
+<script src="/phone.js"></script>
+</body>
+</html>

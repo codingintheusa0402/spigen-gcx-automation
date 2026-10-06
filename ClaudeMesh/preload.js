@@ -32,5 +32,12 @@ contextBridge.exposeInMainWorld('api', {
   },
   refreshUsage: () => ipcRenderer.invoke('usage:refresh'),
   onVisible: cb => ipcRenderer.on('win:visible', (_e, v) => cb(v)),
+  phone: {
+    status: () => ipcRenderer.invoke('phone:status'),
+    set: v => ipcRenderer.invoke('phone:set', v),
+    regen: () => ipcRenderer.invoke('phone:regen'),
+    qr: url => ipcRenderer.invoke('phone:qr', url),
+    onResume: cb => ipcRenderer.on('phone:resume', (_e, sid) => cb(sid)),
+  },
   debugShot: f => ipcRenderer.invoke('debug:shot', f),
 });
