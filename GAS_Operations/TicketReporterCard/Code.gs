@@ -50,18 +50,47 @@ function onMessage(event) {
     return handleRevisionFeedback_(trimmed.replace(/^\/revision\s*/i, ''), event);
   }
 
-  var m = trimmed.match(/(\d{6,})/);
+  // `/manual` — dumps the full ticket-reporter SKILL.md text into the chat (사용자 지시
+  // 2026-09-17). The file itself lives only on the local machine running the monitor
+  // session, so it's mirrored into the Manual sheet tab (see MANUAL_TAB) every time
+  // SKILL.md changes; this just reads that cell back out. Checked before the ticket-number
+  // regex for the same reason /revision is.
+  if (/^\/manual\b/i.test(trimmed)) {
+    return handleManualRequest_(event);
+  }
 
-  // Thread-reply direct-post path: a reply (no explicit ticket number in the text) inside
-  // a thread the monitor already mapped to a ticket (see lookupTicketByThread_) is treated
-  // as the internal-note content itself — no card round-trip needed. This is how a human
-  // replies under an auto-sent static report and has it land on Zendesk directly.
-  if (!m) {
-    var threadName = threadName_(event);
-    var mappedId = threadName ? lookupTicketByThread_(threadName) : null;
-    if (mappedId) {
-      return postThreadReplyAsNote_(mappedId, trimmed, event);
+  // Thread-reply direct-post path: a reply inside a thread the monitor already mapped to a
+  // ticket (see lookupTicketByThread_) is treated as the internal-note content itself — no
+  // card round-trip needed. This is how a human replies under an auto-sent static report and
+  // has it land on Zendesk directly. Checked BEFORE the ticket-number regex below, same
+  // reasoning as /revision and /manual above — and for good reason: a reply inside a mapped
+  // thread often legitimately cites another ticket's number (e.g. "#1000164335 건과 동일
+  // 이슈" as a precedent reference), which must NOT redirect the note onto that cited ticket
+  // instead of the thread's own. (Bug fixed 2026-10-06 — originally this thread-mapping
+  // check only ran when the reply text contained NO digit sequence at all, so a reply to the
+  // #1000164768 thread that merely mentioned precedent ticket #1000164335 got misrouted and
+  // posted as an internal note onto #1000164335 instead of #1000164768. Caught via /revision
+  // feedback; see auto-memory for the full diagnosis.)
+  var threadName = threadName_(event);
+  var mappedId = threadName ? lookupTicketByThread_(threadName) : null;
+  if (mappedId) {
+    // TCT-log-sourced tickets (Lazada/Shopee "Esc T2" rows, 사용자 지시 2026-09-18) have a
+    // non-numeric id like "260915BQH9J0" — a plain Zendesk ticket id is always all-digit.
+    // These write back into the TCT log sheet instead of calling the Zendesk API.
+    if (!/^\d+$/.test(mappedId)) {
+      return updateTctLogRow_(mappedId, trimmed, event);
     }
+    return postThreadReplyAsNote_(mappedId, trimmed, event);
+  }
+
+  var m = trimmed.match(/(\d{6,})/);
+  if (!m) {
+    // No mapping found and no ticket number in the text — log the thread so a backfill can
+    // register it later (e.g. a report sent before send.py's --ticket-id auto-derive fix,
+    // 사용자 지시 2026-09-16). Without this, an old thread's mapping can never be recovered
+    // since the app has no Chat API read access to work out which ticket the thread belongs
+    // to on its own.
+    logUnmappedThread_(threadName, event);
     return chatCreate_({ text: '티켓 번호를 찾을 수 없습니다. 예: "티켓 1000161577"' });
   }
   // Short trigger ("티켓 1000161577") just opens the card. A longer pasted message
@@ -346,6 +375,86 @@ function confirmerForUser_(event) {
   return CONFIRMER_BY_EMAIL[email.toLowerCase()] || CONFIRMERS[0];
 }
 
+/* ===================== Lazada/Shopee TCT log sheet (thread-reply hand-off) ===================== */
+
+/**
+ * Thread-reply counterpart to postThreadReplyAsNote_, for tickets sourced from the
+ * Lazada/Shopee TCT log sheet instead of Zendesk (사용자 지시 2026-09-18). There is no
+ * Zendesk ticket to post an internal note to here — instead the reply is written straight
+ * into that row's Voucher/Advice/GCX STATUS/Status columns, which is what sends the row
+ * back down to TCT (Tier 1).
+ *
+ * Unlike the Zendesk path, this does NOT wrap the memo in "처리 요청 사항 / [GCX 컨펌]" —
+ * the raw memo text (minus a leading "/voucher N%" token, if present) goes straight into
+ * the Advice/Internal Memo column, verbatim, per explicit user instruction.
+ *
+ * "/voucher <100|50|10>[%] <나머지 메모>" → Voucher column = "Provide <N>% voucher" (must
+ * match the sheet's strict dropdown string exactly) + memo column = the remaining text.
+ * No "/voucher" token → Voucher column left untouched, memo column = the full text as-is.
+ * Either way, GCX STATUS✅ → "Advice given" and Status → "Esc T1  " (sic — the dropdown's
+ * own value has two trailing spaces; TCT_LOG_STATUS_ESC_T1 preserves that exactly).
+ */
+function updateTctLogRow_(ticketId, noteText, event) {
+  if (!noteText) {
+    return chatCreate_({ text: '⚠️ 메모 내용이 비어 있습니다.' });
+  }
+  var loc = findTctLogRow_(ticketId);
+  if (!loc) {
+    return chatCreate_({ text: '❌ TCT 로그 시트에서 티켓 ' + ticketId + '을(를) 찾을 수 없습니다.' });
+  }
+
+  var voucherMatch = noteText.match(/\/voucher\s*(\d+)\s*%?\s*/i);
+  var voucherLabel = null;
+  var memo = noteText;
+  if (voucherMatch) {
+    var pct = voucherMatch[1];
+    if (pct === '100' || pct === '50' || pct === '10') {
+      voucherLabel = 'Provide ' + pct + '% voucher';
+    }
+    memo = (noteText.slice(0, voucherMatch.index) + noteText.slice(voucherMatch.index + voucherMatch[0].length)).trim();
+  }
+
+  var sheet = SpreadsheetApp.openById(TCT_LOG_SHEET_ID).getSheetByName(loc.tab);
+  if (voucherLabel) sheet.getRange(loc.row, TCT_LOG_COL.VOUCHER).setValue(voucherLabel);
+  sheet.getRange(loc.row, TCT_LOG_COL.MEMO).setValue(memo);
+  sheet.getRange(loc.row, TCT_LOG_COL.GCX_STATUS).setValue(TCT_LOG_GCX_STATUS_ADVICE_GIVEN);
+  sheet.getRange(loc.row, TCT_LOG_COL.STATUS).setValue(TCT_LOG_STATUS_ESC_T1);
+
+  var confirmer = confirmerForUser_(event);
+  logSubmission_(ticketId, memo, confirmer);
+
+  var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + TCT_LOG_SHEET_ID + '/edit#gid=' +
+      (loc.tab === 'Shopee log' ? '1376766342' : '43582188') + '&range=A' + loc.row;
+  return chatCreate_({
+    cardsV2: [{
+      cardId: 'ticket-reporter-tct-done-' + ticketId + '-' + new Date().getTime(),
+      card: {
+        header: { title: 'TCT 로그 기록 완료', subtitle: loc.tab + ' · ' + (voucherLabel || 'Voucher 미지정') },
+        sections: [{ widgets: [
+          { textParagraph: { text: escapeHtml_(memo).replace(/\n/g, '<br>') } },
+          { buttonList: { buttons: [{ text: '시트에서 보기', onClick: { openLink: { url: sheetUrl } } }] } }
+        ]}]
+      }
+    }]
+  });
+}
+
+/** Searches both TCT_LOG_TABS for a row whose Ticket ID column matches. */
+function findTctLogRow_(ticketId) {
+  var ss = SpreadsheetApp.openById(TCT_LOG_SHEET_ID);
+  for (var t = 0; t < TCT_LOG_TABS.length; t++) {
+    var sheet = ss.getSheetByName(TCT_LOG_TABS[t]);
+    if (!sheet) continue;
+    var vals = sheet.getRange(1, TCT_LOG_COL.TICKET_ID, sheet.getLastRow(), 1).getValues();
+    for (var r = 0; r < vals.length; r++) {
+      if (String(vals[r][0]).trim() === String(ticketId).trim()) {
+        return { tab: TCT_LOG_TABS[t], row: r + 1 };
+      }
+    }
+  }
+  return null;
+}
+
 /* ===================== TicketQueue sheet (monitor → card hand-off) ===================== */
 
 /** Plain name so it shows in the editor's Run-function dropdown (GAS hides `_`-suffixed names). */
@@ -427,6 +536,65 @@ function handleRevisionFeedback_(feedbackText, event) {
       }
     }]
   });
+}
+
+/**
+ * Logs a thread that mentioned the app with no ticket number and no TicketQueue mapping
+ * (사용자 지시 2026-09-16) — lets a human backfill TicketQueue's threadId for that ticket
+ * later, since the app has no other way to discover which ticket an old thread belongs to.
+ */
+function logUnmappedThread_(threadName, event) {
+  var id = PropertiesService.getScriptProperties().getProperty(QUEUE_SHEET_PROP);
+  if (!id) return;
+  var ss = SpreadsheetApp.openById(id);
+  var sheet = ss.getSheetByName(UNMAPPED_TAB);
+  if (!sheet) {
+    sheet = ss.insertSheet(UNMAPPED_TAB);
+    sheet.appendRow(['ts', 'threadId', 'senderEmail', 'text', 'resolvedTicketId']);
+  }
+  var email = (event && event.user && event.user.email) || '';
+  var text = messageText_(event);
+  sheet.appendRow([new Date(), threadName || '', email, text, '']);
+}
+
+/**
+ * `/manual` handler (사용자 지시 2026-09-17, 2026-09-18 링크 방식으로 변경).
+ *
+ * 처음엔 SKILL.md 전체를 textParagraph 여러 개로 쪼개 카드에 직접 채워 넣었으나, SKILL.md가
+ * /revision 누적으로 계속 커지면서(24KB+) 카드 전체 payload가 Chat 쪽 크기 제한에 걸린 것으로
+ * 보인다 — Apps Script 실행 로그는 "Completed"(에러 없음)로 남는데 정작 Chat에는 메시지가
+ * 전혀 표시되지 않는 증상 확인(2026-09-18). Apps Script 쪽에서는 이 실패가 보이지 않아
+ * 디버그가 어려우므로, 이제는 짧은 미리보기 텍스트 + Manual 시트 탭으로 바로 이동하는 링크
+ * 버튼을 반환한다 — 페이로드 크기 문제 자체를 원천적으로 피한다.
+ */
+function handleManualRequest_(event) {
+  var content = getManualText_();
+  if (!content) {
+    return chatCreate_({ text: '⚠️ SKILL.md 매뉴얼 텍스트가 아직 Manual 시트에 등록되지 않았습니다.' });
+  }
+  var preview = content.length > 1500 ? content.slice(0, 1500) + '\n…' : content;
+  var id = PropertiesService.getScriptProperties().getProperty(QUEUE_SHEET_PROP);
+  var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + id + '/edit#gid=' + MANUAL_TAB_GID;
+  return chatCreate_({
+    cardsV2: [{
+      cardId: 'ticket-reporter-manual-' + new Date().getTime(),
+      card: {
+        header: { title: 'Ticket Reporter — SKILL.md', subtitle: '전체 ' + content.length + '자 (미리보기 1,500자)' },
+        sections: [{ widgets: [
+          { textParagraph: { text: escapeHtml_(preview) } },
+          { buttonList: { buttons: [{ text: '전체 매뉴얼 시트에서 보기', onClick: { openLink: { url: sheetUrl } } }] } }
+        ]}]
+      }
+    }]
+  });
+}
+
+function getManualText_() {
+  var id = PropertiesService.getScriptProperties().getProperty(QUEUE_SHEET_PROP);
+  if (!id) return '';
+  var sheet = SpreadsheetApp.openById(id).getSheetByName(MANUAL_TAB);
+  if (!sheet) return '';
+  return String(sheet.getRange('A1').getValue() || '');
 }
 
 function logRevisionFeedback_(feedbackText, email) {

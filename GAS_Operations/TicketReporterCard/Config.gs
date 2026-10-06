@@ -13,6 +13,25 @@ var ZENDESK_SUBDOMAIN = 'spigenhelp';                 // https://spigenhelp.zend
 var QUEUE_SHEET_PROP = 'QUEUE_SHEET_ID';              // Script Property holding the queue Sheet's file ID
 var QUEUE_TAB = 'TicketQueue';
 var FEEDBACK_TAB = 'Feedback';                        // /revision submissions (see handleRevisionFeedback_)
+var UNMAPPED_TAB = 'UnmappedThreads';                 // thread replies with no TicketQueue row (see logUnmappedThread_)
+var MANUAL_TAB = 'Manual';                            // full SKILL.md text mirror for /manual (see handleManualRequest_)
+var MANUAL_TAB_GID = '2076587794';                    // Manual tab's sheetId, for the direct #gid= deep link in /manual's reply
+
+/**
+ * Lazada/Shopee TCT log sheet — the second monitor source (사용자 지시 2026-09-18). A thread
+ * reply for a ticket sourced from here (ticketId is NOT all-digit, e.g. "260915BQH9J0")
+ * writes back into this sheet instead of calling the Zendesk API — see updateTctLogRow_.
+ */
+var TCT_LOG_SHEET_ID = '1HZ14uqTVeP7bGYZDu9v9Ve2C1xNY_m6dcSv-KMCoAKc';
+var TCT_LOG_TABS = ['Lazada log', 'Shopee log'];
+// Column letters (1-indexed) in both tabs — identical schema confirmed 2026-09-18.
+var TCT_LOG_COL = { STATUS: 1, TICKET_ID: 2, VOUCHER: 20, MEMO: 21, GCX_STATUS: 22 };
+// Exact strings required by each column's strict ONE_OF_LIST data validation — Sheets API/
+// Apps Script writes bypass validation enforcement, but conditional formatting keyed on
+// these exact strings (including the accidental trailing spaces baked into the dropdown
+// itself) will only color correctly on an exact match. NEVER "fix" the whitespace.
+var TCT_LOG_STATUS_ESC_T1 = 'Esc T1  ';                // two trailing spaces, verified 2026-09-18
+var TCT_LOG_GCX_STATUS_ADVICE_GIVEN = 'Advice given';
 
 var CONFIRMERS = ['KJW', 'YSR', 'NAR'];               // [GCX <이니셜> 컨펌] dropdown, KJW default
 
