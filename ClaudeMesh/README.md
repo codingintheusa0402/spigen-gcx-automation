@@ -24,6 +24,15 @@ The Mac app also serves a **home-screen web app** for iPhone. It has the same li
 2. Scan the QR code with the iPhone camera. Use **Wi-Fi** on the same network, or **Tailscale** from anywhere; the phone needs Tailscale on for the second.
 3. In Safari choose Share → **Add to Home Screen**. It then opens full-screen with the Claude Mesh icon.
 
+**Native iPhone app (optional):** `ios/` is a SwiftUI app built with XcodeGen. It wraps the same live mesh in a native WKWebView, with a camera QR-scanner pairing screen, native dialogs, automatic fallback between the Tailscale and Wi-Fi addresses, and a three-finger long-press menu to reload or re-pair. To build it and install it on a USB-connected iPhone:
+
+```bash
+brew install xcodegen          # once
+bash ios/build-iphone.sh       # needs Xcode + your Apple ID in Xcode → Settings → Accounts, Developer Mode on the iPhone
+```
+
+With a free Apple ID, the app stays installed for 7 days; run the script again to refresh it.
+
 What you can do from the phone:
 - Send prompts, interrupt, and run slash commands.
 - Broadcast by tapping the mother star.
@@ -92,6 +101,7 @@ collector.js   Session registry + incremental transcript tailing → spend/speed
 preload.js     window.api bridge (contextIsolation)
 phone-server.js  iPhone web-app server: static files + token-protected JSON/SSE API (off by default)
 phone/         iPhone home-screen app (index.html, phone.js, phone.css) — reuses the renderer engine
+ios/           Native iPhone app (SwiftUI + WKWebView, XcodeGen project.yml, build-iphone.sh)
 renderer/
   index.html   Layout + script order
   app.js       Header, session list, detail panel, terminals, views, modals, notifications
