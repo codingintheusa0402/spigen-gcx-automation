@@ -89,52 +89,63 @@ Object.assign(Mesh.prototype, {
     ctx.globalAlpha = 1;
   },
 
-  // glowing curved links from each session to the mother; a light pulse travels while it works
-  // Load lines: every session is tied to the mother by glowing strands. The harder it works
-  // (tok/s, smoothed), the more strands (1 → 7) and the older their star colour — young
-  // blue-white when light, cooling through gold to red-orange under heavy load.
+  // smoothed load 0…1 from tok/s (√ so moderate work already shows a visible bundle)
   heaviness(n) {
-    const target = n.s.health === 'working' ? Math.min(1, Math.sqrt((n.s.tps || 0) / 260)) : 0;
+    const target = n.s.health === 'working' ? Math.min(1, Math.sqrt((n.s.tps || 0) / 300)) : 0;
     n.heavy = (n.heavy || 0) + (target - (n.heavy || 0)) * .04;      // eases over ~1–2 s
     return n.heavy;
   },
+  // Strand j has a fixed place in the bundle (golden-ratio spread), so new strands fan in
+  // around the existing ones instead of everything shifting as the count grows.
   strandGeom(n, j, t) {
     const hub = this.hub, MR = this.motherRadius(), R = this.nodeRadius(n);
     const dx = hub.x - n.x, dy = hub.y - n.y, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
-    const side = n.seed > .5 ? 1 : -1, fan = j === 0 ? 0 : (j % 2 ? 1 : -1) * Math.ceil(j / 2);   // 0, +1, -1, +2, -2 …
-    const sa = fan * .16, sx = ux * Math.cos(sa) - uy * Math.sin(sa), sy = ux * Math.sin(sa) + uy * Math.cos(sa);
-    const x0 = n.x + sx * R, y0 = n.y + sy * R, x1 = hub.x - ux * MR * 1.04, y1 = hub.y - uy * MR * 1.04;
-    const bend = (side * .22 + fan * .09 + .025 * Math.sin(t * (1.1 + j * .37) + n.seed * 9 + j)) * L;
+    const side = n.seed > .5 ? 1 : -1, u = j === 0 ? 0 : ((j * .6180339887 + n.seed) % 1) * 2 - 1;   // −1…1
+    const rot = (x, y, a) => [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)];
+    const [sx, sy] = rot(ux, uy, u * 1.2), [ex, ey] = rot(-ux, -uy, -u * .55);       // leave the orb / reach the star across an arc
+    const x0 = n.x + sx * R, y0 = n.y + sy * R, x1 = hub.x + ex * MR * 1.03, y1 = hub.y + ey * MR * 1.03;
+    const bend = (side * .2 + u * .3 + .02 * Math.sin(t * (.9 + (j % 7) * .23) + n.seed * 9 + j)) * L;
     return { x0, y0, x1, y1, mx: (x0 + x1) / 2 - uy * bend, my: (y0 + y1) / 2 + ux * bend };
   },
+  // Load lines: 1 strand when idle, up to 100 under heavy load, ageing young → old star colour.
+  // Strand 0 is the bright main link; the rest are batched into one path per session (one stroke).
   drawLinks(ctx) {
-    const t = this.time;
+    const t = this.time, cap = this.pixel ? 24 : 100;
     ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
     for (const n of this.nodes.values()) {
       if (n.dying) continue;
-      const h = this.heaviness(n), strands = 1 + h * 6, work = n.s.health === 'working' ? 1 : 0;
+      const h = this.heaviness(n), N = Math.max(1, Math.round(1 + h * (cap - 1))), work = n.s.health === 'working' ? 1 : 0;
       const star = starColor('outer', .08 + h * .92, 1.7).map(Math.round), starRGB = `${star}`;
+      const starHex = '#' + star.map(v => v.toString(16).padStart(2, '0')).join('');
       const rim = (ORB_PAL[n.s.family] || ORB_PAL.other).rim;
-      for (let j = 0; j < Math.ceil(strands); j++) {
-        const vis = Math.min(1, strands - j), g = this.strandGeom(n, j, t);   // the newest strand fades in
-        const grad = ctx.createLinearGradient(g.x0, g.y0, g.x1, g.y1);
-        grad.addColorStop(0, hexA(rim, .85)); grad.addColorStop(.35, `rgba(${starRGB},.9)`); grad.addColorStop(1, `rgba(${starRGB},.95)`);
-        ctx.strokeStyle = grad;
-        const passes = j === 0 ? [[7, .07 + .06 * work], [3, .16 + .12 * work], [1.2, .55 + .3 * work]] : [[4, .1 + .08 * h], [1, .45 + .3 * h]];
-        for (const [w, a] of passes) {
-          ctx.globalAlpha = a * vis; ctx.lineWidth = w;
-          ctx.beginPath(); ctx.moveTo(g.x0, g.y0); ctx.quadraticCurveTo(g.mx, g.my, g.x1, g.y1); ctx.stroke();
-        }
-        if (work) {                                                    // a light pulse runs down each strand
-          const k = (t * (.3 + h * .9) + j * .37 + n.seed) % 1, q = 1 - k, sz = 6 + 4 * h;
-          const px = q * q * g.x0 + 2 * q * k * g.mx + k * k * g.x1, py = q * q * g.y0 + 2 * q * k * g.my + k * k * g.y1;
-          ctx.globalAlpha = vis * (.6 + .4 * h); ctx.drawImage(glowSprite('#' + star.map(v => v.toString(16).padStart(2, '0')).join('')), px - sz, py - sz, sz * 2, sz * 2);
-        }
+      const g0 = this.strandGeom(n, 0, t), grad = ctx.createLinearGradient(g0.x0, g0.y0, g0.x1, g0.y1);
+      grad.addColorStop(0, hexA(rim, .85)); grad.addColorStop(.35, `rgba(${starRGB},.9)`); grad.addColorStop(1, `rgba(${starRGB},.95)`);
+      ctx.strokeStyle = grad;
+      for (const [w, a] of [[7, .07 + .06 * work], [3, .16 + .12 * work], [1.2, .55 + .3 * work]]) {      // main link
+        ctx.globalAlpha = a; ctx.lineWidth = w;
+        ctx.beginPath(); ctx.moveTo(g0.x0, g0.y0); ctx.quadraticCurveTo(g0.mx, g0.my, g0.x1, g0.y1); ctx.stroke();
+      }
+      if (N > 1) {                                                     // the bundle: one path, two passes (glow + core)
+        const bundle = new Path2D(), G = [];
+        for (let j = 1; j < N; j++) { const g = this.strandGeom(n, j, t); G.push(g); bundle.moveTo(g.x0, g.y0); bundle.quadraticCurveTo(g.mx, g.my, g.x1, g.y1); }
+        const k = 1 / Math.sqrt(Math.max(1, N / 8));                   // thinner/fainter per strand as the bundle thickens
+        ctx.globalAlpha = (.06 + .06 * h) * k; ctx.lineWidth = 3.5; ctx.stroke(bundle);       // additive glow
+        ctx.globalCompositeOperation = 'source-over';                  // cores keep their true star colour (no white-out)
+        ctx.strokeStyle = `rgba(${starRGB},1)`; ctx.globalAlpha = Math.min(.85, (.5 + .3 * h) * Math.sqrt(k)); ctx.lineWidth = .8; ctx.stroke(bundle);
+        ctx.globalCompositeOperation = 'lighter';
+        n._bundle = G;
+      } else n._bundle = [];
+      if (work) {                                                      // light pulses run down the main link and ~1 in 6 strands
+        const gs = glowSprite(starHex), list = [g0, ...n._bundle.filter((_, i) => i % 6 === 0)].slice(0, 18);
+        list.forEach((g, i) => {
+          const kk = (t * (.3 + h * .9) + i * .37 + n.seed) % 1, q = 1 - kk, sz = 5 + 4 * h;
+          const px = q * q * g.x0 + 2 * q * kk * g.mx + kk * kk * g.x1, py = q * q * g.y0 + 2 * q * kk * g.my + kk * kk * g.y1;
+          ctx.globalAlpha = .55 + .4 * h; ctx.drawImage(gs, px - sz, py - sz, sz * 2, sz * 2);
+        });
       }
     }
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   },
-
 
   // ---------------- drag & drop ----------------
   dragStart(e, sid) { this.drag = { sid, x0: e.clientX, y0: e.clientY, moved: false }; },
