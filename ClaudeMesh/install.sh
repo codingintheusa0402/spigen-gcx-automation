@@ -12,10 +12,11 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac --dir -c.directorie
 
 # Claude Mesh instances that have sessions running inside them (their children are `claude`)
 busy=0
-for pid in $(pgrep -f 'Claude Mesh.app/Contents/MacOS/Claude Mesh$'); do
-  if ps -axo ppid=,comm= | awk -v p="$pid" '$1==p && $2 ~ /claude/' | grep -q .; then busy=1; fi
+# (ps, not pgrep: pgrep hides its own ancestors — i.e. the Claude Mesh this script may be running inside)
+for pid in $(ps -axo pid=,command= | awk '/Claude Mesh\.app\/Contents\/MacOS\/Claude Mesh$/ {print $1}'); do
+  if ps -axo ppid=,comm= | awk -v p="$pid" '$1==p && $2 ~ /(^|\/)claude$/' | grep -q .; then busy=1; fi
 done
-running=$(pgrep -f 'Applications/Claude Mesh.app/Contents/MacOS/Claude Mesh$' || true)
+running=$(ps -axo pid=,command= | awk '/\/Applications\/Claude Mesh\.app\/Contents\/MacOS\/Claude Mesh$/ {print $1}')
 if [ "$busy" = 0 ] && [ -n "$running" ]; then
   osascript -e 'quit app "Claude Mesh"' 2>/dev/null || true
   for i in $(seq 1 20); do pgrep -f 'Applications/Claude Mesh.app/Contents/MacOS/Claude Mesh$' >/dev/null || break; sleep 0.5; done

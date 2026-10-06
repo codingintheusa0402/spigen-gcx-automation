@@ -100,13 +100,26 @@ Object.assign(Mesh.prototype, {
   strandGeom(n, j, t) {
     const hub = this.hub, MR = this.motherRadius(), R = this.nodeRadius(n);
     const dx = hub.x - n.x, dy = hub.y - n.y, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
-    const side = n.seed > .5 ? 1 : -1, u = j === 0 ? 0 : ((j * .6180339887 + n.seed) % 1) * 2 - 1;   // −1…1
+    const side = n.seed > .5 ? 1 : -1, u = j === 0 ? 0 : ((j * .6180339887 + n.seed) % 1) * 2 - 1;   // −1…1, 0 = centre line
     const rot = (x, y, a) => [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)];
-    const [sx, sy] = rot(ux, uy, u * 1.2), [ex, ey] = rot(-ux, -uy, -u * .55);       // leave the orb / reach the star across an arc
+    const [sx, sy] = rot(ux, uy, u * .42), [ex, ey] = rot(-ux, -uy, -u * .22);       // a narrow bundle around the centre line
     const x0 = n.x + sx * R, y0 = n.y + sy * R, x1 = hub.x + ex * MR * 1.03, y1 = hub.y + ey * MR * 1.03;
-    const bend = (side * .2 + u * .3 + .02 * Math.sin(t * (.9 + (j % 7) * .23) + n.seed * 9 + j)) * L;
-    return { x0, y0, x1, y1, mx: (x0 + x1) / 2 - uy * bend, my: (y0 + y1) / 2 + ux * bend };
+    const bend = (side * .2 + u * .07 + .015 * Math.sin(t * (.9 + (j % 7) * .23) + n.seed * 9 + j)) * L;
+    // outer strands dangle: they sag outward and wiggle, more the farther they sit from the centre line;
+    // about a third are extra squiggly
+    const far = Math.abs(u), h = ((j * 7919 + Math.round(n.seed * 1e4)) % 97) / 97, squig = j > 0 && h < .33;
+    const amp = j === 0 ? 0 : L * (.004 + .03 * Math.pow(far, 1.6)) * (squig ? 1.35 : 1);
+    return { x0, y0, x1, y1, mx: (x0 + x1) / 2 - uy * bend, my: (y0 + y1) / 2 + ux * bend, nx: -uy, ny: ux,
+      amp, sag: j === 0 ? 0 : Math.sign(u || 1) * L * .06 * far * far, freq: squig ? 3 + h * 4 : 1.2 + far * 1.8, ph: h * 6.283 + t * (squig ? 1.9 : .8) * (h > .5 ? 1 : -1), wobbly: j > 0 };
   },
+  // point at s∈[0,1] along a strand: the quadratic curve plus its dangle/wiggle (zero at both ends)
+  strandPoint(g, s) {
+    const q = 1 - s, x = q * q * g.x0 + 2 * q * s * g.mx + s * s * g.x1, y = q * q * g.y0 + 2 * q * s * g.my + s * s * g.y1;
+    if (!g.wobbly) return [x, y];
+    const env = Math.sin(Math.PI * s), off = env * (g.sag + g.amp * Math.sin(g.freq * s * 6.283 + g.ph));
+    return [x + g.nx * off, y + g.ny * off];
+  },
+
   // Load lines: 1 strand when idle, up to 100 under heavy load, ageing young → old star colour.
   // Strand 0 is the bright main link; the rest are batched into one path per session (one stroke).
   drawLinks(ctx) {
@@ -127,7 +140,11 @@ Object.assign(Mesh.prototype, {
       }
       if (N > 1) {                                                     // the bundle: one path, two passes (glow + core)
         const bundle = new Path2D(), G = [];
-        for (let j = 1; j < N; j++) { const g = this.strandGeom(n, j, t); G.push(g); bundle.moveTo(g.x0, g.y0); bundle.quadraticCurveTo(g.mx, g.my, g.x1, g.y1); }
+        for (let j = 1; j < N; j++) {
+          const g = this.strandGeom(n, j, t), steps = Math.min(56, Math.max(14, Math.ceil(g.freq * 8))); G.push(g);   // ~8 points per wave → smooth
+          bundle.moveTo(g.x0, g.y0);
+          for (let i = 1; i <= steps; i++) { const [x, y] = this.strandPoint(g, i / steps); bundle.lineTo(x, y); }
+        }
         const k = 1 / Math.sqrt(Math.max(1, N / 8));                   // thinner/fainter per strand as the bundle thickens
         ctx.globalAlpha = (.06 + .06 * h) * k; ctx.lineWidth = 3.5; ctx.stroke(bundle);       // additive glow
         ctx.globalCompositeOperation = 'source-over';                  // cores keep their true star colour (no white-out)
@@ -138,8 +155,8 @@ Object.assign(Mesh.prototype, {
       if (work) {                                                      // light pulses run down the main link and ~1 in 6 strands
         const gs = glowSprite(starHex), list = [g0, ...n._bundle.filter((_, i) => i % 6 === 0)].slice(0, 18);
         list.forEach((g, i) => {
-          const kk = (t * (.3 + h * .9) + i * .37 + n.seed) % 1, q = 1 - kk, sz = 5 + 4 * h;
-          const px = q * q * g.x0 + 2 * q * kk * g.mx + kk * kk * g.x1, py = q * q * g.y0 + 2 * q * kk * g.my + kk * kk * g.y1;
+          const kk = (t * (.3 + h * .9) + i * .37 + n.seed) % 1, sz = 5 + 4 * h;
+          const [px, py] = this.strandPoint(g, kk);
           ctx.globalAlpha = .55 + .4 * h; ctx.drawImage(gs, px - sz, py - sz, sz * 2, sz * 2);
         });
       }

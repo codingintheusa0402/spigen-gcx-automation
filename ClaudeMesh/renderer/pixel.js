@@ -84,7 +84,7 @@ Object.assign(Mesh.prototype, {
       for (let j = 0; j < N; j++) {
         const g = this.strandGeom(n, j, t), L = Math.hypot(g.x1 - g.x0, g.y1 - g.y0), steps = Math.max(8, L * k / 3 | 0);
         ctx.fillStyle = j === 0 || Math.floor(t * 6 + j) % 3 ? col : shade(col, .55);
-        for (let i = 0; i < steps; i++) { const kk = (i + off) / steps, q = 1 - kk; ctx.fillRect(Math.round((q * q * g.x0 + 2 * q * kk * g.mx + kk * kk * g.x1) * k), Math.round((q * q * g.y0 + 2 * q * kk * g.my + kk * kk * g.y1) * k), 1, 1); }
+        for (let i = 0; i < steps; i++) { const [px, py] = this.strandPoint(g, (i + off) / steps); ctx.fillRect(Math.round(px * k), Math.round(py * k), 1, 1); }
       }
     }
     for (const m of this.ambient) {
