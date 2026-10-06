@@ -120,10 +120,10 @@ Object.assign(Mesh.prototype, {
     return [x + g.nx * off, y + g.ny * off];
   },
 
-  // Load lines: 1 strand when idle, up to 100 under heavy load, ageing young → old star colour.
+  // Load lines: 1 strand when idle, up to 50 under heavy load, ageing young → old star colour.
   // Strand 0 is the bright main link; the rest are batched into one path per session (one stroke).
   drawLinks(ctx) {
-    const t = this.time, cap = this.pixel ? 24 : 100;
+    const t = this.time, cap = this.pixel ? 24 : 50;
     ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
     for (const n of this.nodes.values()) {
       if (n.dying) continue;
