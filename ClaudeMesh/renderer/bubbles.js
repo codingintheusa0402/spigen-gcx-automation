@@ -99,9 +99,14 @@ Object.assign(Mesh.prototype, {
     const live = [...this.nodes.values()].filter(n => !n.dying);
     for (const n of live) if (!orb[n.sid]) this.autoOrbit(n, live);
     // recency: the most recently active session → 1, the stalest → 0 (rank by time since last transcript write)
+    // prominence = 65% how often it runs (replies in the last 24 h, recent weighted) + 35% how recently it ran
     const ages = [...new Set(live.map(n => Math.round((n.s.sinceWrite ?? 1e9) / 5)))].sort((a, b) => a - b);   // 5 s buckets → ties share a rank
-    live.forEach(n => { const i = ages.indexOf(Math.round((n.s.sinceWrite ?? 1e9) / 5)), target = ages.length > 1 ? 1 - i / (ages.length - 1) : 1;
-      n.rec = (n.rec ?? target) + (target - (n.rec ?? target)) * Math.min(1, realDt * 2); });
+    const fmax = Math.max(1, ...live.map(n => n.s.freq || 0));
+    live.forEach(n => {
+      const i = ages.indexOf(Math.round((n.s.sinceWrite ?? 1e9) / 5)), recency = ages.length > 1 ? 1 - i / (ages.length - 1) : 1;
+      const often = Math.sqrt((n.s.freq || 0) / fmax), target = .65 * often + .35 * recency;
+      n.rec = (n.rec ?? target) + (target - (n.rec ?? target)) * Math.min(1, realDt * 2);
+    });
     // focus: the session whose terminal tab is the one you're typing in (dock below the mesh)
     const at = typeof activeTerm !== 'undefined' && document.body.dataset.view !== 'mesh' ? activeTerm : null;   // only while the terminal dock is visible
     live.forEach(n => { const f = at && n.s.owner === at ? 1 : 0; n.focus = (n.focus || 0) + (f - (n.focus || 0)) * Math.min(1, realDt * 3); });

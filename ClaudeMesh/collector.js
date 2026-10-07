@@ -64,6 +64,7 @@ class SessionStats {
     this.lastError = '';
     this.log = [];              // [{t, kind, text}]
     this.turns = 0;
+    this.turnTimes = [];        // timestamps of replies in the last 24 h (activity frequency)
   }
   pushLog(t, kind, text) {
     this.log.push({ t, kind, text: String(text).replace(/\s+/g, ' ').slice(0, 220) });
@@ -241,7 +242,7 @@ class Collector {
       rec = { model: m.model, start: t.prevTs || ts, end: ts, cost: 0, out: 0, inp: 0, cr: 0, cw: 0, ev: null };
       t.msgs.set(id, rec);
       if (t.msgs.size > 400) t.msgs.delete(t.msgs.keys().next().value);
-      if (!t.isSub) s.turns++;
+      if (!t.isSub) { s.turns++; if (ts > Date.now() - 864e5) s.turnTimes.push(ts); }   // for 24 h frequency
     }
     // Same message is re-logged once per content block with cumulative usage → apply deltas.
     const cost = costOf(m.model, u);
@@ -298,6 +299,7 @@ class Collector {
       for (const s of this.stats.values()) {
         s.events = s.events.filter(e => e.t > now - 15 * 60e3);
         s.errors = s.errors.filter(e => e > now - 3600e3);
+        if (s.turnTimes.length && s.turnTimes[0] < now - 864e5) s.turnTimes = s.turnTimes.filter(x => x > now - 864e5);
       }
       this.ready = true;
     } finally { this.scanning = false; }
@@ -347,6 +349,8 @@ class Collector {
         totalUsd: s.total.usd, todayUsd: s.today.usd, tokIn: s.total.in, tokOut: s.total.out,
         tokCacheRead: s.total.cr, tokCacheWrite: s.total.cw,
         byModel: s.byModel, tps, lastSpeed: s.lastSpeed, usdHr, turns: s.turns,
+        // activity frequency: replies over 24 h, recent ones weigh more (half-life 3 h)
+        freq: s.turnTimes.reduce((a, x) => a + Math.pow(.5, (now - x) / 108e5), 0),
         subagents: subActive, errors5m: err5, errors1h: s.errors.length, lastError: s.lastError, serverUses: s.serverUses || 0, serverAt: s.serverAt || 0,
         sinceWrite, spark, log: s.log.slice(-40), owner,
       });
