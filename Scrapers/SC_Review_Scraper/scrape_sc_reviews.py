@@ -11,6 +11,16 @@ from datetime import datetime, timezone, timedelta
 sys.stdout.reconfigure(line_buffering=True)  # flush every print immediately when running in background
 from playwright.async_api import async_playwright
 import requests
+# GCX server (Linux/WSL, gcx-server): turn on the unattended login + phone-OTP flow automatically
+# when its config files exist, so a session started from the phone needs no extra env vars.
+# The files never exist on the Mac, so nothing changes there.
+if sys.platform.startswith("linux"):
+    _srv = os.path.expanduser("~/.config/sc_scraper")
+    if not os.environ.get("SC_SCRAPER_CREDENTIALS_FILE") and os.path.exists(f"{_srv}/credentials.txt"):
+        os.environ["SC_SCRAPER_CREDENTIALS_FILE"] = f"{_srv}/credentials.txt"
+    if not os.environ.get("SC_SCRAPER_CHAT_WEBHOOK") and os.path.exists(f"{_srv}/otp_chat_webhook.txt"):
+        os.environ["SC_SCRAPER_CHAT_WEBHOOK"] = open(f"{_srv}/otp_chat_webhook.txt").read().strip()
+    os.environ.setdefault("DISPLAY", ":0")
 from sc_auth import load_credentials, ensure_logged_in
 
 # Unattended-login support (EC2/server deployment only). Unset on the Mac —
