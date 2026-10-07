@@ -81,17 +81,20 @@ function makeOrb(fam, seed) {
 }
 
 Object.assign(Mesh.prototype, {
-  nodeRadius(n) { return 30 + Math.min(28, Math.log10(1 + (n.s.totalUsd || 0)) * 10); },
+  // size: base by lifetime spend × recency (latest-run biggest) × focus (the session you're typing in)
+  nodeRadius(n) { return (30 + Math.min(28, Math.log10(1 + (n.s.totalUsd || 0)) * 10)) * (.8 + .36 * (n.rec ?? 1)) * (1 + .14 * (n.focus || 0)); },
 
   drawMote(n, dt) {
     const ctx = this.ctx, s = n.s, t = this.time, fam = s.serverUses ? 'server' : ORB_PAL[s.family] ? s.family : 'other';
     const orb = makeOrb(fam, n.seed), P = orb.P;
-    const alive = n.dying ? Math.max(0, 1 - (t - n.dying) / 2.5) : Math.min(1, (t - n.born) / 1.2);
+    const grow = n.dying ? Math.max(0, 1 - (t - n.dying) / 2.5) : Math.min(1, (t - n.born) / 1.2);
+    // opacity 50% by default, up to 100% for the most recently run session (and the focused one)
+    const op = .5 + .5 * Math.max(n.rec ?? 1, n.focus || 0), alive = grow * op;
     const work = s.health === 'working', energy = { working: 1, idle: .55, quiet: .7, waiting: .8, error: .9 }[s.health] ?? .5;
     n.phase *= Math.pow(.1, dt); n.flash *= Math.pow(.25, dt);
     n.spin += dt * (work ? .5 + Math.min(1.2, (s.tps || 0) / 150) : .08) * (n.seed > .5 ? 1 : -1);
     const breathe = 1 + .025 * Math.sin(t * (work ? 3.4 : 1.3) + n.seed * 9) + .012 * Math.sin(t * 7.1 + n.seed * 3);
-    const R = this.nodeRadius(n) * (.5 + .5 * alive) * (1 + n.swell * .1) * breathe;
+    const R = this.nodeRadius(n) * (.5 + .5 * grow) * (1 + n.swell * .1) * breathe;
     const dim = spendDim(s), shim = .78 + .22 * Math.sin(t * 2.6 + n.seed * 17) * Math.sin(t * 1.3 + n.seed * 5);
     const rimCol = s.health === 'error' ? '#ff4d6a' : P.rim;
 
@@ -167,7 +170,11 @@ Object.assign(Mesh.prototype, {
       ctx.beginPath(); ctx.arc(n.x, n.y, R + 17, t * .6, t * .6 + 6.283); ctx.stroke(); ctx.setLineDash([]);
     }
     // label pill
-    ctx.globalAlpha = alive * (.85 + .15 * n.swell);
+    if (n.focus > .02) {                               // focused: a calm bright halo ring
+      ctx.globalAlpha = grow * n.focus * (.55 + .2 * Math.sin(t * 2.4)); ctx.strokeStyle = mix(P.rim, .6); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(n.x, n.y, R + 22, 0, 6.29); ctx.stroke();
+    }
+    ctx.globalAlpha = grow * Math.max(.75, op) * (.85 + .15 * n.swell);
     const name = s.name.length > 30 ? s.name.slice(0, 29) + '…' : s.name;
     const l2 = `${(s.model || '—').replace('claude-', '')}  ·  $${s.todayUsd.toFixed(2)}`;
     const l3 = (work ? `working · ${Math.round(s.tps)} tok/s` : s.health) + (s.owner ? '  ·  in-app' : '') + (s.serverUses ? '  ·  ⇄ server' : '');

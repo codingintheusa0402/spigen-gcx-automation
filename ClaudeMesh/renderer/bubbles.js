@@ -98,10 +98,23 @@ Object.assign(Mesh.prototype, {
     const orb = this.loadOrbits();
     const live = [...this.nodes.values()].filter(n => !n.dying);
     for (const n of live) if (!orb[n.sid]) this.autoOrbit(n, live);
+    // recency: the most recently active session → 1, the stalest → 0 (rank by time since last transcript write)
+    const ages = [...new Set(live.map(n => Math.round((n.s.sinceWrite ?? 1e9) / 5)))].sort((a, b) => a - b);   // 5 s buckets → ties share a rank
+    live.forEach(n => { const i = ages.indexOf(Math.round((n.s.sinceWrite ?? 1e9) / 5)), target = ages.length > 1 ? 1 - i / (ages.length - 1) : 1;
+      n.rec = (n.rec ?? target) + (target - (n.rec ?? target)) * Math.min(1, realDt * 2); });
+    // focus: the session whose terminal tab is the one you're typing in (dock below the mesh)
+    const at = typeof activeTerm !== 'undefined' && document.body.dataset.view !== 'mesh' ? activeTerm : null;   // only while the terminal dock is visible
+    live.forEach(n => { const f = at && n.s.owner === at ? 1 : 0; n.focus = (n.focus || 0) + (f - (n.focus || 0)) * Math.min(1, realDt * 3); });
+    const F = live.find(n => n.focus > .05);
     live.forEach(n => {
       n.swell += ((this.hover === n.sid || n.dragging ? 1 : 0) - n.swell) * Math.min(1, realDt * 8);
       if (n.dragging) { n.vx = n.vy = 0; return; }
-      const h = this.fitInView(n, this.orbitPos(orb[n.sid]));   // each session follows only its own orbit, kept on-screen
+      let p = this.orbitPos(orb[n.sid]);
+      if (F && n !== F) {                              // others step back from the focused session, giving it room
+        const dx = p.x - F.x, dy = p.y - F.y, d = Math.hypot(dx, dy) || 1, D = this.nodeRadius(F) + this.nodeRadius(n) + 260;
+        if (d < D) { const k = (D - d) * F.focus; p = { x: p.x + dx / d * k, y: p.y + dy / d * k }; }
+      }
+      const h = this.fitInView(n, p);                  // each session follows only its own orbit, kept on-screen
       n.vx += (h.x - n.x) * 2.2 * dt; n.vy += (h.y - n.y) * 2.2 * dt;
       const damp = Math.pow(.12, dt); n.vx *= damp; n.vy *= damp;
       n.x += n.vx * dt; n.y += n.vy * dt;
@@ -177,16 +190,16 @@ Object.assign(Mesh.prototype, {
           const grad = ctx.createLinearGradient(g.x0, g.y0, g.x1, g.y1); grad.addColorStop(0, hexA(rim, .9)); grad.addColorStop(.3, `rgba(${c},.95)`); grad.addColorStop(1, `rgba(${c},1)`);
           ctx.strokeStyle = grad;
         } else ctx.strokeStyle = `rgb(${c})`;
-        ctx.globalAlpha = (.08 + .07 * work) * vis; ctx.lineWidth = w * 3.2; ctx.stroke(path);        // soft glow
+        ctx.globalAlpha = (.08 + .07 * work) * vis * .5; ctx.lineWidth = w * 3.2; ctx.stroke(path);        // soft glow
         ctx.globalCompositeOperation = 'source-over';
-        ctx.globalAlpha = (j === 0 ? .9 : .6 + .25 * h) * vis; ctx.lineWidth = w; ctx.stroke(path);    // true-colour core
+        ctx.globalAlpha = (j === 0 ? .9 : .6 + .25 * h) * vis * .5; ctx.lineWidth = w; ctx.stroke(path);    // true-colour core
         ctx.globalCompositeOperation = 'lighter';
         G.push({ g, c });
       }
       if (work) {                                                      // light pulses run down every 3rd strand
         G.filter((_, i) => i % 3 === 0).slice(0, 8).forEach(({ g, c }, i) => {
           const kk = (t * (.3 + h * .9) + i * .37 + n.seed) % 1, sz = 5 + 4 * h, [px, py] = this.strandPoint(g, kk);
-          ctx.globalAlpha = .55 + .4 * h; ctx.drawImage(glowSprite('#' + c.map(v => v.toString(16).padStart(2, '0')).join('')), px - sz, py - sz, sz * 2, sz * 2);
+          ctx.globalAlpha = (.55 + .4 * h) * .5; ctx.drawImage(glowSprite('#' + c.map(v => v.toString(16).padStart(2, '0')).join('')), px - sz, py - sz, sz * 2, sz * 2);
         });
       }
     }
