@@ -105,12 +105,13 @@ Object.assign(Mesh.prototype, {
     const [sx, sy] = rot(ux, uy, u * .42), [ex, ey] = rot(-ux, -uy, -u * .22);       // a narrow bundle around the centre line
     const x0 = n.x + sx * R, y0 = n.y + sy * R, x1 = hub.x + ex * MR * 1.03, y1 = hub.y + ey * MR * 1.03;
     const bend = (side * .2 + u * .07 + .015 * Math.sin(t * (.9 + (j % 7) * .23) + n.seed * 9 + j)) * L;
-    // outer strands dangle: they sag outward and wiggle, more the farther they sit from the centre line;
-    // about a third are extra squiggly
-    const far = Math.abs(u), h = ((j * 7919 + Math.round(n.seed * 1e4)) % 97) / 97, squig = j > 0 && h < .33;
-    const amp = j === 0 ? 0 : L * (.004 + .03 * Math.pow(far, 1.6)) * (squig ? 1.35 : 1);
+    // most strands follow a smooth path to the star, each with its own slight random bow (a gentle
+    // outward sag that grows with distance from the centre line); only ~1 in 8 squiggles
+    const far = Math.abs(u), h = ((j * 7919 + Math.round(n.seed * 1e4)) % 97) / 97, squig = j > 0 && h < .125;
+    const amp = squig ? L * (.012 + .028 * Math.pow(far, 1.4)) : 0;
+    const sag = j === 0 ? 0 : (Math.sign(u || 1) * .045 * far * far + (h - .5) * .03) * L;
     return { x0, y0, x1, y1, mx: (x0 + x1) / 2 - uy * bend, my: (y0 + y1) / 2 + ux * bend, nx: -uy, ny: ux,
-      amp, sag: j === 0 ? 0 : Math.sign(u || 1) * L * .06 * far * far, freq: squig ? 3 + h * 4 : 1.2 + far * 1.8, ph: h * 6.283 + t * (squig ? 1.9 : .8) * (h > .5 ? 1 : -1), wobbly: j > 0 };
+      amp, sag, squig, freq: 2.2 + h * 16, ph: h * 6.283 + t * 1.3 * (h > .06 ? 1 : -1), wobbly: j > 0 };
   },
   // point at s∈[0,1] along a strand: the quadratic curve plus its dangle/wiggle (zero at both ends)
   strandPoint(g, s) {
@@ -141,7 +142,7 @@ Object.assign(Mesh.prototype, {
       if (N > 1) {                                                     // the bundle: one path, two passes (glow + core)
         const bundle = new Path2D(), G = [];
         for (let j = 1; j < N; j++) {
-          const g = this.strandGeom(n, j, t), steps = Math.min(56, Math.max(14, Math.ceil(g.freq * 8))); G.push(g);   // ~8 points per wave → smooth
+          const g = this.strandGeom(n, j, t), steps = g.squig ? Math.ceil(g.freq * 10) : 12; G.push(g);   // smooth: ~10 points per wave
           bundle.moveTo(g.x0, g.y0);
           for (let i = 1; i <= steps; i++) { const [x, y] = this.strandPoint(g, i / steps); bundle.lineTo(x, y); }
         }
