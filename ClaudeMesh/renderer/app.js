@@ -68,6 +68,9 @@ function select(sid) {
   $('#panelBody').innerHTML = sid ? '<div id="pStatic"></div><div id="pCtl"></div>' : '';
   if (sid) { renderCtl(); renderPanel(); }
   renderList();
+  // an in-app session: bring its terminal tab to the front in the dock (Split / Grid views)
+  const s = sid && snap.sessions.find(x => x.sid === sid);
+  if (s && s.owner && terms.has(s.owner) && s.owner !== activeTerm && document.body.dataset.view !== 'mesh') activate(s.owner);
   requestAnimationFrame(() => viz.resize());
 }
 
