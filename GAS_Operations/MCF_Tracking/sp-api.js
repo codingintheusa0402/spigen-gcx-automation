@@ -256,7 +256,9 @@ function spapiFetchWithRetry(method, path, opts, attempts, waitMs) {
 
 /***** ========= FBA OUTBOUND HELPERS (with 429 retry) ========= *****/
 function getFulfillmentOrderRaw(sellerFulfillmentOrderId, endpoint) {
-  var path = '/fba/outbound/2020-07-01/fulfillmentOrders/' + encodeURIComponent(sellerFulfillmentOrderId);
+  // Trim: a stray trailing \r/newline (e.g. pasted into the cell) makes Amazon reject the URL with a bare
+  // HTML 400 ("<title>x</title>") instead of a JSON error — looked like a JP credential problem, wasn't.
+  var path = '/fba/outbound/2020-07-01/fulfillmentOrders/' + encodeURIComponent(String(sellerFulfillmentOrderId).trim());
   // 3 attempts, 5s apart
   var res = spapiFetchWithRetry('GET', path, { endpoint: endpoint }, 3, 5000);
   return res.payload || res;
@@ -352,6 +354,7 @@ function _isErrorValue(v) {
 
 /***** ========= SHEET FUNCTIONS ========= *****/
 function AMZTK(orderId) {
+  orderId = String(orderId || '').trim();
   if (!orderId) return '';
 
   var cache = CacheService.getScriptCache();
@@ -381,6 +384,7 @@ function AMZTK(orderId) {
 }
 
 function AMZTK_JP(orderId) {
+  orderId = String(orderId || '').trim();
   if (!orderId) return '';
 
   var cache = CacheService.getScriptCache();
