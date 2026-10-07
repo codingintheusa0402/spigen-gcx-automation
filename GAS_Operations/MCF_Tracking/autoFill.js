@@ -299,15 +299,21 @@ var GSTORE_COL_TRACK  = 16;   // P — Tracking Number
 // Sheets resolveBlankTrackingNumbers() covers. retry429: "MCF 발송 로그" leaves 429-text cells to
 // retryR429Errors(); GStore has no such companion, so its 429/ERR cells are retried here directly.
 var TRACKING_SHEETS = [
-  { name: BF_SHEET_NAME, startRow: BF_START_ROW, colRegion: BF_COL_REGION, colSent: BF_COL_SENT,
-    colOrder: BF_COL_ORDER, colTrack: RETRY_R_COL, retry429: false },
+  // GStore first: it's tiny, so it always gets its lookups before the main sheet can use up the shared budget.
   { name: GSTORE_SHEET_NAME, startRow: GSTORE_START_ROW, colRegion: GSTORE_COL_REGION, colSent: GSTORE_COL_SENT,
-    colOrder: GSTORE_COL_ORDER, colTrack: GSTORE_COL_TRACK, retry429: true }
+    colOrder: GSTORE_COL_ORDER, colTrack: GSTORE_COL_TRACK, retry429: true },
+  { name: BF_SHEET_NAME, startRow: BF_START_ROW, colRegion: BF_COL_REGION, colSent: BF_COL_SENT,
+    colOrder: BF_COL_ORDER, colTrack: RETRY_R_COL, retry429: false }
 ];
 
 function resolveBlankTrackingNumbers() {
   var budget = { apiCalls: 0 }; // BLANK_R_MAX_ROWS_PER_RUN is shared across all sheets
   _warmLwaTokens();
+  try {
+    _topUpGStoreTrackingFormulas_();
+  } catch (e) {
+    Logger.log('_topUpGStoreTrackingFormulas_ failed: ' + (e.message || e));
+  }
   for (var s = 0; s < TRACKING_SHEETS.length; s++) {
     try {
       _resolveBlankTrackingForSheet_(TRACKING_SHEETS[s], budget);
@@ -420,34 +426,59 @@ function _ageHours_(v, now) {
 }
 
 /**
- * One-off / re-runnable: writes the live AMZTK tracking formula into "GStore MCF 발송 로그" col P
- * from GSTORE_START_ROW down to GSTORE_FORMULA_LAST_ROW. Only touches cells that are empty —
- * never overwrites an already-frozen tracking number or anything typed by hand.
+ * Writes the live AMZTK tracking formula into "GStore MCF 발송 로그" col P, empty cells only — never
+ * overwrites a frozen tracking number or anything typed by hand.
+ *   installGStoreTrackingFormulas()  — manual, rows GSTORE_START_ROW..GSTORE_FORMULA_LAST_ROW
+ *   _topUpGStoreTrackingFormulas_()  — hourly, the GSTORE_TOPUP_ROWS rows BELOW the last data row, so
+ *     new rows always have the formula waiting. Stays below the data on purpose: a row the hourly job
+ *     gave up on is frozen blank, and must not get a fresh formula (and fresh retries) every hour.
  */
 var GSTORE_FORMULA_LAST_ROW = 1000;
+var GSTORE_TOPUP_ROWS       = 200;
 
 function installGStoreTrackingFormulas() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(GSTORE_SHEET_NAME);
   if (!sheet) throw new Error('Sheet not found: ' + GSTORE_SHEET_NAME);
+  var written = _writeGStoreTrackingFormulas_(sheet, GSTORE_START_ROW, GSTORE_FORMULA_LAST_ROW);
+  Logger.log('installGStoreTrackingFormulas: wrote ' + written + ' formula(s) into ' + GSTORE_SHEET_NAME + ' col P');
+}
 
-  var n    = GSTORE_FORMULA_LAST_ROW - GSTORE_START_ROW + 1;
-  var cells = sheet.getRange(GSTORE_START_ROW, GSTORE_COL_TRACK, n, 1);
+function _topUpGStoreTrackingFormulas_() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(GSTORE_SHEET_NAME);
+  if (!sheet) return;
+  // Last row with an MCF Order ID (getLastRow() would count the pre-filled formula rows).
+  var n   = Math.max(sheet.getLastRow() - GSTORE_START_ROW + 1, 1);
+  var ids = sheet.getRange(GSTORE_START_ROW, GSTORE_COL_ORDER, n, 1).getValues();
+  var lastData = GSTORE_START_ROW - 1;
+  for (var i = ids.length - 1; i >= 0; i--) {
+    if (String(ids[i][0]).trim() !== '') { lastData = GSTORE_START_ROW + i; break; }
+  }
+  var from = lastData + 1, to = lastData + GSTORE_TOPUP_ROWS;
+  if (to > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), to - sheet.getMaxRows());
+  var written = _writeGStoreTrackingFormulas_(sheet, from, to);
+  if (written) Logger.log('_topUpGStoreTrackingFormulas_: wrote ' + written + ' formula(s), rows ' + from + '-' + to);
+}
+
+function _writeGStoreTrackingFormulas_(sheet, fromRow, toRow) {
+  var n = toRow - fromRow + 1;
+  if (n <= 0) return 0;
+  var cells = sheet.getRange(fromRow, GSTORE_COL_TRACK, n, 1);
   var vals = cells.getValues(), fs = cells.getFormulas();
   var written = 0, runStart = -1, run = [];
   function flushRun() {
-    if (run.length) sheet.getRange(GSTORE_START_ROW + runStart, GSTORE_COL_TRACK, run.length, 1).setFormulas(run);
+    if (run.length) sheet.getRange(fromRow + runStart, GSTORE_COL_TRACK, run.length, 1).setFormulas(run);
     written += run.length; run = []; runStart = -1;
   }
   for (var i = 0; i <= n; i++) {
     var empty = i < n && !fs[i][0] && String(vals[i][0]).trim() === '';
     if (!empty) { flushRun(); continue; }
     if (runStart < 0) runStart = i;
-    var r = GSTORE_START_ROW + i;
+    var r = fromRow + i;
     run.push(['=IF(OR(B' + r + '="",O' + r + '=""),"",IF(B' + r + '<>"JP",' +
       'HYPERLINK("https://www.swiship.de/track?id="&AMZTK(O' + r + '),AMZTK(O' + r + ')),' +
       'HYPERLINK("https://www.swiship.jp/track?id="&AMZTK_JP(O' + r + '),AMZTK_JP(O' + r + '))))']);
   }
-  Logger.log('installGStoreTrackingFormulas: wrote ' + written + ' formula(s) into ' + GSTORE_SHEET_NAME + ' col P');
+  return written;
 }
 
 /***** ========= RETRY $0 TRANSPORTATION FEES IN COL Y ========= *****/

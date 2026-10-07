@@ -467,5 +467,10 @@ B = MCF 발송 국가, N = 발송일자, O = MCF Order ID, **P = Tracking Number
   (both sheets) and freezes resolved cells to a static `=HYPERLINK(...)`, retries blanks older than
   24h, and gives up after 3 days. For GStore it also retries 429/`ERR:` cells itself (there's no
   `retryR429Errors` pass for that sheet). The SP-API call budget (60/run) is shared across both sheets.
+- Each hourly run first tops up the formula in the 200 empty P cells below the last row with an MCF Order ID
+  (`_topUpGStoreTrackingFormulas_`), so new rows never need it pasted by hand. GStore is processed before
+  the main sheet so the shared lookup budget can't starve it.
+- Order ids are trimmed before the SP-API call — a trailing `\r` in the cell produced a bare HTML 400
+  (`<title>x</title>`) that looked like a JP credential problem.
 - Cells showing `EU ERR:`/`JP ERR:` (non-429) are no longer frozen as if they were tracking numbers —
   they're retried instead.
