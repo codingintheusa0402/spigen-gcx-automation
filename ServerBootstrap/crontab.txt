@@ -1,0 +1,18 @@
+# GCX server jobs — converted 1:1 from the Mac launchd agents (TZ = Asia/Seoul)
+SHELL=/bin/bash
+PATH=/home/kevinkim/.local/bin:/usr/local/bin:/usr/bin:/bin
+G=/home/kevinkim/Desktop/GCX
+
+# BadReview broadcast: weekdays 10:30, retry 11:00, catch-up every 5 min
+30 10 * * 1-5  cd $G/GAS_Operations/BadReview_ChatReport && python3 auto_broadcast.py >> logs/launchd.out.log 2>> logs/launchd.err.log
+0  11 * * 1-5  cd $G/GAS_Operations/BadReview_ChatReport && python3 auto_broadcast.py --retry-if-held >> logs/launchd.out.log 2>> logs/launchd.err.log
+*/5 * * * *    cd $G/GAS_Operations/BadReview_ChatReport && python3 auto_broadcast.py --catchup >> logs/launchd.out.log 2>> logs/launchd.err.log
+
+# Caspi 판매량 backfill + discoloration report: every 30 min (scripts gate themselves)
+*/30 * * * *   cd $G/GAS_Operations/CaspiSalesBackfill && python3 backfill.py >> logs/launchd.out.log 2>> logs/launchd.err.log
+*/30 * * * *   cd $G/GAS_Operations/DiscolorationReport && python3 report.py >> logs/launchd.out.log 2>> logs/launchd.err.log
+
+# SKU/ASIN filler: every 5 min
+*/5 * * * *    cd $G/Scrapers/SKU_ASIN_Filler && python3 scheduler_gate.py >> launchd.out.log 2>> launchd.err.log
+
+# Pull skill/memory updates pushed from the Mac every 5 min is done by the Mac (push), nothing here.
