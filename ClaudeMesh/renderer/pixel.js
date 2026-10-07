@@ -30,7 +30,7 @@ Object.assign(Mesh.prototype, {
     this.pw = Math.max(1, Math.ceil(r.width / PX)); this.ph = Math.max(1, Math.ceil(r.height / PX));
     this.c.width = this.pw; this.c.height = this.ph;
     this.ctx.setTransform(1, 0, 0, 1, 0, 0); this.ctx.imageSmoothingEnabled = false;
-    this.hub.x = this.w / 2; this.hub.y = this.h / 2;
+    this.hub.x = this.w / 2; this.hub.y = this.motherY();
     if (this.cam) this.clampCam();
     if (!this.tc) {
       this.tc = document.createElement('canvas'); this.tc.id = 'meshText';
