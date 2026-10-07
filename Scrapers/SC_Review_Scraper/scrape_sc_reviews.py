@@ -66,7 +66,7 @@ DOMAINS = ([d.strip().upper() for d in os.environ["SC_SCRAPER_DOMAINS"].split(",
 # "EU" automatically scrapes UK + DE + FR + IT + ES in sequence using each
 # country's marketplaceId and writes all reviews into one EU_*.csv file.
 
-PAGES = int(os.environ.get("SC_SCRAPER_PAGES", "5"))
+PAGES = int(os.environ.get("SC_SCRAPER_PAGES", "30"))
 # Default max pages to scrape per domain. Overridable via SC_SCRAPER_PAGES.
 # Total reviews ≈ PAGES × PAGE_SIZE.
 # Override per-domain with PAGES_OVERRIDE below.
@@ -523,6 +523,27 @@ def _apply_column_filter(path):
     _csv_rewrite(path, [header[k] for k in keep_idx], [[row[k] for k in keep_idx] for row in rows])
 
 
+async def _dismiss_blocking_modal(page, timeout=3000):
+    """Amazon occasionally shows a first-visit announcement modal (e.g.
+    "Discover the new selling experience") whose overlay (#modal .modal-overlay)
+    intercepts all pointer events on the page beneath it, silently breaking
+    any click-based automation (e.g. the account-switcher dropdown) until
+    dismissed. Close it via its 'modal-close' button if present; harmless
+    no-op if no modal is showing.
+    """
+    try:
+        close_btn = await page.wait_for_selector(
+            '#modal button.modal-close', timeout=timeout, state="visible"
+        )
+        if close_btn:
+            await close_btn.click()
+            await page.wait_for_timeout(300)
+            return True
+    except Exception:
+        pass
+    return False
+
+
 async def _switch_sc_marketplace(page, display_name, prof):
     """Switch SC Europe to a specific marketplace via the two-level account switcher.
 
@@ -562,6 +583,7 @@ async def _switch_sc_marketplace(page, display_name, prof):
                             wait_until="domcontentloaded", timeout=30000)
 
         await page.wait_for_selector('.dropdown-account-switcher-header', timeout=15000)
+        await _dismiss_blocking_modal(page)
         await asyncio.sleep(0.5)
 
         # Run the full dropdown interaction in a single JS evaluate to avoid CDP
@@ -589,7 +611,14 @@ async def _switch_sc_marketplace(page, display_name, prof):
                             }});
 
                             const spigen = await waitFor('.dropdown-account-switcher-list-item-label', 'Spigen EU');
-                            spigen.click();
+                            // Amazon now auto-expands the currently-active top-level
+                            // account (Spigen EU) as soon as the dropdown opens. If we
+                            // unconditionally click it again here, that TOGGLES it back
+                            // closed (hiding the country sub-list) instead of opening it
+                            // — only click when it isn't already expanded.
+                            if (!spigen.classList.contains('dropdown-account-switcher-list-item-label-expanded')) {{
+                                spigen.click();
+                            }}
 
                             const country = await waitFor('.dropdown-account-switcher-list-item-indented', '{display_name}');
                             country.click();
