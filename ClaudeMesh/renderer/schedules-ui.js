@@ -126,6 +126,7 @@ function gasHtml() {
     <button class="sc-mini" id="gasRefresh">${G && G.at ? '↻ Re-read from Google' : '🔑 Sign in & read triggers'}</button></div>`;
   if (!G || !G.triggers) return head;
   const by = new Map();
+  for (const p of (due && due.projects) || []) if (p.dueDates.length) by.set(p.scriptId, { project: p.name, list: [] });   // date-driven projects even with no live trigger
   for (const t of G.triggers) { if (!by.has(t.scriptId)) by.set(t.scriptId, { project: t.project, list: [] }); by.get(t.scriptId).list.push(t); }
   const proj = [...by.entries()].sort((a, b) => a[1].project.localeCompare(b[1].project));
   return head + proj.map(([id, p]) => {
@@ -140,11 +141,11 @@ function gasHtml() {
           .map(([k, v]) => `<span class="${v.off === v.n ? 'dis' : ''}">${esc(k)}${v.n > 1 ? ` ×${v.n}` : ''}${v.off ? ` <i>(${v.off} disabled)</i>` : ''}${errPct(v.err) > 0 ? ` <b>${errPct(v.err)}% errors</b>` : ''}</span>`).join('')}</div>
         ${meta && meta.schedule ? `<div class="sc-dim">${esc(meta.schedule)}</div>` : ''}
         ${dupes.length ? `<div class="sc-warn">⚠ ${dupes.map(([k, n]) => `${esc(k.split('|')[0])} has ${n} active triggers`).join(' · ')} — possible duplicate runs</div>` : ''}
-        ${meta && meta.dueDates && meta.dueDates.length ? meta.dueDates.map((d, i) => `<div class="sc-due"><span>📅 ${esc(d.label)}</span><input type="date" data-due="${esc(id)}" data-i="${i}" value="${esc(d.value)}"><button class="sc-mini" data-due-save="${esc(id)}" data-i="${i}">Save → Apps Script</button><code>${esc(d.file)}</code></div>`).join('') : ''}
+        ${meta && meta.dueDates && meta.dueDates.length ? meta.dueDates.map((d, i) => `<div class="sc-due"><span>📅 ${esc(d.label)}</span><input type="date" data-due="${esc(id)}" data-i="${i}" value="${esc(d.value)}"><button class="sc-mini" data-due-save="${esc(id)}" data-i="${i}">Save → Apps Script</button>${d.value && d.value < new Date().toISOString().slice(0, 10) ? '<b class="sc-past">date has passed</b>' : ''}<code>${esc(d.file)}</code>${d.note ? `<div class="sc-dim" style="flex-basis:100%">${esc(d.note)}</div>` : ''}</div>`).join('') : ''}
       </div>
       <div class="sc-col"><span class="sc-where w-cloud">Google</span></div>
       <div class="sc-col sc-when"><b>${active.length} active${off ? ` · ${off} off` : ''}</b><span>${lastRun ? 'last run ' + rel(lastRun) : 'no recent run'}</span></div>
-      <div class="sc-col"><button class="sc-mini" data-gas-edit="${esc(id)}">✎ Edit triggers</button></div></div>`;
+      <div class="sc-col"><button class="sc-mini" data-gas-edit="${esc(id)}">✎ Edit triggers</button>${meta && meta.setupFn ? `<button class="sc-mini" data-gas-code="${esc(id)}" title="Open the code to run ${esc(meta.setupFn)}">▶ ${esc(meta.setupFn)}</button>` : ''}</div></div>`;
   }).join('');
 }
 function wireInfraGas(b) {
@@ -154,6 +155,7 @@ function wireInfraGas(b) {
     await act(window.api.sched.infraEnable(id, on), `${id.replace(/^(win|cron):/, '')} ${on ? 'on' : 'off'}`);
   });
   const gr = b.querySelector('#gasRefresh'); if (gr) gr.onclick = async () => { gr.disabled = true; gr.textContent = 'Reading… (a Google window opens if you need to sign in)'; const r = await window.api.gas.refresh(); if (r && r.ok === false) toast(r.err); await loadSchedules(); };
+  b.querySelectorAll('[data-gas-code]').forEach(btn => btn.onclick = () => { const m = schedData.gasDue.projects.find(x => x.scriptId === btn.dataset.gasCode); toast(`In the editor pick “${m.setupFn}” in the function list and press Run`); window.api.gas.open(`https://script.google.com/home/projects/${encodeURIComponent(m.scriptId)}/edit`); });
   b.querySelectorAll('[data-gas-edit]').forEach(btn => btn.onclick = async () => { toast('Opening the project’s triggers in Apps Script — re-reading when you close it'); await window.api.gas.edit(btn.dataset.gasEdit); await window.api.gas.refresh(); await loadSchedules(); });
   b.querySelectorAll('[data-due-save]').forEach(btn => btn.onclick = async () => {
     const id = btn.dataset.dueSave, i = +btn.dataset.i, inp = b.querySelector(`[data-due="${id}"][data-i="${i}"]`);

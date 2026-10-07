@@ -1,0 +1,225 @@
+{
+ "_about": "Apps Script projects for GCX Mesh Schedules: descriptions + editable due-date constants (match = regex with the date as group 1). Editing rewrites the literal, clasp-pushes and commits; triggers built from a date need their setup function re-run in the editor.",
+ "projects": [
+  {
+   "dir": "GAS_ReviewAutomation/MasterTrigger",
+   "scriptId": "1AWrX0Xl8feD-AzYRbGVBb9kLRQra2ppE547i_Ghys4lLU9l28pkMUf9O",
+   "name": "MasterTrigger (Apify Master daily job)",
+   "what": "Daily: starts every Apify review scraper, polls, distributes new reviews to the product sheets, posts a status card to Chat.",
+   "schedule": "One trigger per working day at 04:00 KST (skips weekends + KR holidays) up to MASTER_END_DATE; pollApifyRuns every 1 min while runs are pending.",
+   "setupFn": "createTriggers",
+   "dueDates": [
+    {
+     "label": "Daily job end date (MASTER_END_DATE)",
+     "file": "GAS_ReviewAutomation/MasterTrigger/trigger.js:2",
+     "match": "const MASTER_END_DATE = '([0-9-]+)'",
+     "note": "After saving, run createTriggers in the Apps Script editor to rebuild the per-day triggers."
+    }
+   ]
+  },
+  {
+   "dir": "GAS_ReviewAutomation/Apify/Auto_Acc_Apify",
+   "scriptId": "1rUwC_XwGUjZvu5ileGo_jAhihoMaio4wfdtjSnqO0VIclG0OByVDyoco",
+   "name": "Auto Acc. / SDA Apify (shared project)",
+   "what": "Starts the Auto Accessories Apify product task and writes results to the sheet (SDA folder is the same project).",
+   "schedule": "One trigger per weekday 04:00 KST until endDate — but its handler runApifyNowAndPollAfter2Hours doesn't exist, so these fail (all currently disabled).",
+   "setupFn": "createApifyWeekdayTriggers",
+   "dueDates": [
+    {
+     "label": "Weekday trigger end date (APIFY_TRIGGER_WINDOW.endDate)",
+     "file": "GAS_ReviewAutomation/Apify/Auto_Acc_Apify/Trigger.js:7",
+     "match": "endDate: '([0-9-]+)'",
+     "note": "Run createApifyWeekdayTriggers afterwards."
+    }
+   ]
+  },
+  {
+   "dir": "GAS_ReviewAutomation/Apify/Power_Acc_Apify",
+   "scriptId": "1xQhzIcvjP2n2zp5RFDOwckB5HOnBCvJXLlw1aRjaXF8ie2JLKX8MHVWt",
+   "name": "Power Acc. Apify",
+   "what": "Starts the Power Accessories Apify product run, polls and writes the review sheet.",
+   "schedule": "runProductNowAndPollRecurring (polling); weekday 04:00 triggers until endDate.",
+   "setupFn": "createApifyWeekdayTriggers",
+   "dueDates": [
+    {
+     "label": "Weekday trigger end date (APIFY_TRIGGER_WINDOW.endDate)",
+     "file": "GAS_ReviewAutomation/Apify/Power_Acc_Apify/trigger.js:7",
+     "match": "endDate: '([0-9-]+)'",
+     "note": "Run createApifyWeekdayTriggers afterwards."
+    }
+   ]
+  },
+  {
+   "dir": "GAS_ReviewAutomation/Apify/iPh17e_Apify",
+   "scriptId": "1oIR6d9_cjLXpRLMvpVfU0WSIPOZba3S1m7DGc1eAx8VmPMzxqjm7eU-6",
+   "name": "iPhone 17e Apify",
+   "what": "iPhone 17e review sheet Apify run + poll (retired from MasterTrigger 2026-07-28).",
+   "schedule": "Weekday 04:00 triggers until endDate.",
+   "setupFn": "createApifyWeekdayTriggers",
+   "dueDates": [
+    {
+     "label": "Weekday trigger end date",
+     "file": "GAS_ReviewAutomation/Apify/iPh17e_Apify/Trigger.js:7",
+     "match": "endDate: '([0-9-]+)'",
+     "note": "Run createApifyWeekdayTriggers afterwards."
+    }
+   ]
+  },
+  {
+   "dir": "GAS_ReviewAutomation/Apify/전략폰_Apify",
+   "scriptId": "1b9TGawGmcDUj0sm2OswDEfkUjSIi8C0b90vsMqkmkTGiYpUlH_TEtoZN",
+   "name": "전략폰 Apify",
+   "what": "전략폰 review sheet Apify run + poll; writes a dated sheet.",
+   "schedule": "runProductNowAndPollRecurring (polling); weekday 05:30 triggers until endDate (expired 2026-01-14).",
+   "setupFn": "createApifyWeekdayTriggers",
+   "dueDates": [
+    {
+     "label": "Weekday trigger end date",
+     "file": "GAS_ReviewAutomation/Apify/전략폰_Apify/trigger.js:7",
+     "match": "endDate: '([0-9-]+)'",
+     "note": "Run createApifyWeekdayTriggers afterwards."
+    }
+   ]
+  },
+  {
+   "dir": "GAS_Operations/Bi-Weekly",
+   "scriptId": "15U2Db0iWmLAA7Z8l2FVZ5rHe8617jrufJ5Hdc9r4oHneWC_Bpl4hF7Hs",
+   "name": "Bi-Weekly report builder",
+   "what": "Deck-bound script that builds the Bi-weekly claim/review cards and Overview charts.",
+   "schedule": "Menu only (onOpen).",
+   "setupFn": null,
+   "dueDates": [
+    {
+     "label": "Report period start (BW_RUN.start)",
+     "file": "GAS_Operations/Bi-Weekly/Code.js:6",
+     "match": "start: '([0-9-]+)'"
+    },
+    {
+     "label": "Report period end (BW_RUN.end)",
+     "file": "GAS_Operations/Bi-Weekly/Code.js:6",
+     "match": "end: '([0-9-]+)'"
+    }
+   ]
+  },
+  {
+   "dir": "GAS_Operations/TicketDailyReport",
+   "scriptId": "1GNowLPF82wfWIrHc1Q9xIDr_L0Kz5iv_YxuNRb7Pzioe9OpsS_O_J5L6",
+   "name": "Ticket Daily Report (오전보고)",
+   "what": "Weekday 9AM: fetches Zendesk views, appends All_Graph and posts the morning report images to Chat; hosts the /report Chat app.",
+   "schedule": "Rolling: autoExtendZendeskTriggers daily ~06:00 keeps one-off Mon–Fri 09:00 triggers 30 days ahead; catch-up retries 5 min after failures (max 3/day).",
+   "setupFn": "setupAutoExtendZendeskTrigger",
+   "dueDates": [
+    {
+     "label": "Legacy one-off triggers end (superseded by the rolling schedule)",
+     "file": "GAS_Operations/TicketDailyReport/trigger.js:2",
+     "match": "const endDate = new Date\\('([0-9-]+)'\\)"
+    }
+   ]
+  },
+  {
+   "dir": "GAS_Operations/TCTChatLog_GCX",
+   "scriptId": "15E1ZJabPc7bQ4aKptxmPfCzOXryCDibhtYdZpKb6x1R-U6G_e8eHeqBm",
+   "name": "TCT Chat Log GCX",
+   "what": "Lazada/Shopee TCT log: Esc T2 alerts on edit, weekday close report (Thu 15:30, other days 17:30), Monday sync every 30 min (weekdays 08:00–17:30).",
+   "schedule": "Rolling: autoExtendEscT2Triggers daily ~06:00 keeps 30 days of one-off report triggers; syncListingIssuesToMonday every 30 min.",
+   "setupFn": "setupAutoExtendEscT2Trigger",
+   "dueDates": [
+    {
+     "label": "Legacy one-off triggers end (superseded by the rolling schedule)",
+     "file": "GAS_Operations/TCTChatLog_GCX/trigger.js:15",
+     "match": "const endDate = new Date\\('([0-9-]+)'\\)"
+    }
+   ]
+  },
+  {
+   "dir": "",
+   "scriptId": "1WwwnwKuPbpdTGG6Uozx1Mr0AZU9mD_hc3UzHq82e_t-GjRe2eQ_4K-Fp",
+   "name": "ASIN Master (먼데이보드)",
+   "what": "Pulls Monday board 7606389164 into ASIN_Master; deletes ABM_Relay_Log rows older than 15 days.",
+   "schedule": "cleanupOldAbmRelayLogRows daily ~04:00.",
+   "setupFn": null,
+   "dueDates": []
+  },
+  {
+   "dir": "",
+   "scriptId": "1kDfEUVEEJ7TCA3HOMF6EYFTjbeZZKIeg_X84wCbLT1-tQqJI2ZlPUCxp",
+   "name": "MCF automation",
+   "what": "MCF 발송 로그: SP-API tracking/fee lookups, onEdit automation, daily missing-tracking Chat report.",
+   "schedule": "backfillMCFFeesRecent every 30 min, retryR429Errors hourly, MCFReporter weekdays 9AM (installed by hand).",
+   "setupFn": null,
+   "dueDates": []
+  },
+  {
+   "dir": "",
+   "scriptId": "1u_4_2QI9fEy8vSV9F0Nv9NlvoxtizPoWAVFMd6J3gwK2UpkTxlIfmmb3",
+   "name": "Galaxy Z8 Monday → Sheet",
+   "what": "Full refresh of the Z8 sheet from Monday board 18421346787.",
+   "schedule": "syncMondayToSheet daily ~17:00 KST (RUN_TRIGGER_HOUR).",
+   "setupFn": null,
+   "dueDates": []
+  },
+  {
+   "dir": "",
+   "scriptId": "12VOkxNXwDDZIxu7xrMese-XHoUUPUYs5CXSwmTh9gYHQcvxpDNZcJqzJ",
+   "name": "Pixel 11 Monday → Sheet",
+   "what": "Full refresh of the Pixel 11 sheet from Monday board 18425190666.",
+   "schedule": "syncMondayToSheet daily ~17:00 KST (RUN_TRIGGER_HOUR).",
+   "setupFn": null,
+   "dueDates": []
+  },
+  {
+   "dir": "",
+   "scriptId": "1gJu9O-8MNYWVItLYsr48eym0afY1P9n8lUjSwM_p457DIisZLwOXIWAj",
+   "name": "ABM Ticket Merge",
+   "what": "Zendesk webhook that merges duplicate Amazon Buyer Message tickets; reconciles relays.",
+   "schedule": "reconcileAbmRelays_ every 30 min.",
+   "setupFn": null,
+   "dueDates": []
+  },
+  {
+   "dir": "",
+   "scriptId": "1xi5UnQ9zcPm_QjiahGvfTwZXTDSsCFH_EZkA4E_8jwON3M7HSKXHIGks",
+   "name": "GCX Reply backend",
+   "what": "Web app backend for the GCX Reply Tampermonkey tool (SP-API lookups, ABM relay log).",
+   "schedule": "keepWarm every 5 min, refreshProductIndex every 15 min.",
+   "setupFn": null,
+   "dueDates": []
+  },
+  {
+   "dir": "",
+   "scriptId": "1f5Ky77H9LT0-9R6ZIuCsoWuZwXqJHGcQbs_RvV4kRbVBKYnMghLnilL1",
+   "name": "PurchaseDate_Sync (Zendesk→monday)",
+   "what": "Copies Zendesk 'Purchase Date' into the Z8 / Pixel 11 / iPhone 18 Monday boards.",
+   "schedule": "scheduledPurchaseDateSync daily ~09:00 and ~21:00 KST (SYNC_HOURS_KST).",
+   "setupFn": null,
+   "dueDates": []
+  },
+  {
+   "dir": "",
+   "scriptId": "1raDTNlZmzaDr82KMm7v4J9jzNGNdHeOWdR120Eh1yu1HiMTYk8jMY4aq",
+   "name": "SKU Sales Rating (Amazon.de)",
+   "what": "Weekly Apify run writing Amazon.de ratings per ASIN; syncs new ASINs into the task.",
+   "schedule": "runApifyRatingRefreshNow Mon ~08:00; syncNewAsinsToApifyTask Sun ~07:00.",
+   "setupFn": null,
+   "dueDates": []
+  },
+  {
+   "dir": "",
+   "scriptId": "1poT2qFL17BNrU2jxfenGlhN7xufWB_ID5pGYfUaQtCn2SlOXVc6ngljs",
+   "name": "주요 디바이스별 아마존 세일즈 현황 (ratings)",
+   "what": "Weekday Apify run writing Amazon.de ratings into 4 device sheets; syncs new ASINs.",
+   "schedule": "dailyWeekdayKickoff ~08:00 (skips weekends); syncNewAsinsToApifyTask Sun ~07:00.",
+   "setupFn": null,
+   "dueDates": []
+  },
+  {
+   "dir": "",
+   "scriptId": "1UZ5NzqtjTa5nHW17w0vOOgbrFG6Zn2TpxVqkfFc4WdZHfR7upLVz_lmO",
+   "name": "유지훈P Apify",
+   "what": "Daily Apify review + product scrapes; Chat alert on US sheet col K edits.",
+   "schedule": "dailyScrapeJob daily ~04:00 KST; onEditAlertToGoogleChat on edit.",
+   "setupFn": null,
+   "dueDates": []
+  }
+ ]
+}
