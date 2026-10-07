@@ -300,6 +300,16 @@ async function sessionDetails(sid) {
 }
 ipcMain.handle('sess:details', (_e, sid) => sessionDetails(sid));
 
+// ---------------- schedules (Mac launchd + server cron) — schedules.js ----------------
+const schedules = require('./schedules');
+const syncToServer = () => new Promise(res => { const f = path.join(HOME, '.claude', 'skills', 'run-on-server', 'sync_to_server.sh');
+  if (!fs.existsSync(f)) return res(); execFile('/bin/bash', [f], { timeout: 180000 }, () => res()); });
+ipcMain.handle('sched:list', () => schedules.list().catch(e => ({ error: String(e.message || e) })));
+ipcMain.handle('sched:set', (_e, id, s) => schedules.setSchedule(id, s));
+ipcMain.handle('sched:enable', (_e, id, on) => schedules.setEnabled(id, on));
+ipcMain.handle('sched:move', (_e, id, to) => schedules.move(id, to, syncToServer));
+ipcMain.handle('sched:run', (_e, id) => schedules.runNow(id));
+
 // ---------------- background agents (`claude agents`, `claude --bg`) ----------------
 let claudeBin = null;            // resolved once through a login shell (PATH from the user's profile)
 function resolveClaude() {

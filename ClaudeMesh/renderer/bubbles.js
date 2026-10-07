@@ -93,6 +93,8 @@ Object.assign(Mesh.prototype, {
   heaviness(n) {
     const target = n.s.health === 'working' ? Math.min(1, Math.sqrt((n.s.tps || 0) / 300)) : 0;
     n.heavy = (n.heavy || 0) + (target - (n.heavy || 0)) * .04;      // eases over ~1–2 s
+    // wiggle phase advances faster the harder the session works (accumulated, so speed changes stay smooth)
+    const now = this.time; n.wig = (n.wig || 0) + Math.max(0, now - (n._wt ?? now)) * (.35 + 5.5 * n.heavy); n._wt = now;
     return n.heavy;
   },
   // Strand j has a fixed place in the bundle (golden-ratio spread), so new strands fan in
@@ -111,7 +113,7 @@ Object.assign(Mesh.prototype, {
     const amp = squig ? L * (.012 + .028 * Math.pow(far, 1.4)) : 0;
     const sag = j === 0 ? 0 : (Math.sign(u || 1) * .045 * far * far + (h - .5) * .03) * L;
     return { x0, y0, x1, y1, mx: (x0 + x1) / 2 - uy * bend, my: (y0 + y1) / 2 + ux * bend, nx: -uy, ny: ux,
-      amp, sag, squig, freq: 2.2 + h * 16, ph: h * 6.283 + t * 1.3 * (h > .06 ? 1 : -1), wobbly: j > 0 };
+      amp, sag, squig, freq: 2.2 + h * 16, ph: h * 6.283 + (n.wig || 0) * (1 + h * 3) * (h > .06 ? 1 : -1), wobbly: j > 0 };
   },
   // point at s∈[0,1] along a strand: the quadratic curve plus its dangle/wiggle (zero at both ends)
   strandPoint(g, s) {

@@ -1,0 +1,72 @@
+{
+  "_about": "GCX scheduled jobs — the single catalog Claude Mesh's Schedules menu reads. 'dir' is repo-relative; 'state' lists files/dirs (repo-relative or ~/…) that must move with a job when it switches between the Mac and the server; 'movable': false = needs something only one machine has. Schedules: {\"every\": minutes} or {\"at\": [\"HH:MM\", …], \"days\": [1-7 Mon=1] | null}.",
+  "jobs": [
+    {
+      "id": "badreview-broadcast",
+      "name": "Bad-review broadcast",
+      "what": "Posts today's Pixel 11 · Galaxy Z8 · iPhone 18 1–3★ bad-review carousel to all 12 GCX Chat rooms. Holds the send if Z8 KR rows aren't tagged yet (the 11:00 retry sends it).",
+      "skills": ["badreview-chat-broadcast", "pixel11-badreview-chat-report", "glxz8-badreview-chat-report", "iphone18-badreview-chat-report"],
+      "dir": "GAS_Operations/BadReview_ChatReport", "cmd": "python3 auto_broadcast.py",
+      "log": "GAS_Operations/BadReview_ChatReport/logs/launchd", "state": ["GAS_Operations/BadReview_ChatReport/state"],
+      "default": { "at": ["10:30"], "days": [1, 2, 3, 4, 5] }, "runAtLoad": false, "movable": true
+    },
+    {
+      "id": "badreview-broadcast-retry",
+      "name": "Bad-review broadcast · retry",
+      "what": "If the 10:30 run was held back by the KR tagging gate, re-checks and sends the carousel.",
+      "skills": ["badreview-chat-broadcast"],
+      "dir": "GAS_Operations/BadReview_ChatReport", "cmd": "python3 auto_broadcast.py --retry-if-held",
+      "log": "GAS_Operations/BadReview_ChatReport/logs/launchd", "state": ["GAS_Operations/BadReview_ChatReport/state"],
+      "default": { "at": ["11:00"], "days": [1, 2, 3, 4, 5] }, "runAtLoad": false, "movable": true
+    },
+    {
+      "id": "badreview-broadcast-catchup",
+      "name": "Bad-review broadcast · catch-up",
+      "what": "Sends today's carousel if the 10:30 run was missed (machine asleep/off). No-op once today is done.",
+      "skills": ["badreview-chat-broadcast"],
+      "dir": "GAS_Operations/BadReview_ChatReport", "cmd": "python3 auto_broadcast.py --catchup",
+      "log": "GAS_Operations/BadReview_ChatReport/logs/launchd", "state": ["GAS_Operations/BadReview_ChatReport/state"],
+      "default": { "every": 5 }, "runAtLoad": false, "movable": true
+    },
+    {
+      "id": "caspi-sales-backfill",
+      "name": "Caspi 판매량 backfill",
+      "what": "Fills the 판매량(EU) column in the iPhone 18 / Pixel 11 / Galaxy Z8 monitoring sheets from Caspi sales data. Self-gates to once per day per sheet.",
+      "skills": [],
+      "dir": "GAS_Operations/CaspiSalesBackfill", "cmd": "python3 backfill.py",
+      "log": "GAS_Operations/CaspiSalesBackfill/logs/launchd", "state": ["~/.config/caspi_sales_backfill"],
+      "default": { "every": 30 }, "runAtLoad": true, "movable": true
+    },
+    {
+      "id": "discoloration-report",
+      "name": "이염/변색 report",
+      "what": "Mon/Fri ≥10:00: discoloration claims + bad reviews from Caspi, classified with claude -p, posted as a Chat report (runs every 30 min, sends once per due day).",
+      "skills": ["claude -p classifier"],
+      "dir": "GAS_Operations/DiscolorationReport", "cmd": "python3 report.py",
+      "log": "GAS_Operations/DiscolorationReport/logs/launchd", "state": ["~/.config/discoloration_report"],
+      "default": { "every": 30 }, "runAtLoad": true, "movable": true
+    },
+    {
+      "id": "sku-asin-filler",
+      "name": "SKU ↔ ASIN filler",
+      "what": "Fills blank SKU/ASIN cells in the monitoring sheets by looking them up in Seller Central inventory (Chrome, Playwright).",
+      "skills": [],
+      "dir": "Scrapers/SKU_ASIN_Filler", "cmd": "python3 scheduler_gate.py",
+      "log": "Scrapers/SKU_ASIN_Filler/launchd", "state": ["Scrapers/SKU_ASIN_Filler/last_run.json"],
+      "default": { "every": 5 }, "runAtLoad": true, "movable": false,
+      "pinnedReason": "Needs the Seller Central inventory login (with OTP) in ~/.chrome-sc-inventory-profile — sign in on the server first."
+    }
+  ],
+  "sessions": [
+    {
+      "id": "ticket-monitor",
+      "name": "Ticket monitor (Zendesk + TCT log)",
+      "what": "Claude session looping the ticket-reporter skill: scans the two Zendesk pending views and the Lazada/Shopee TCT log, posts TCK pre-reports to Chat.",
+      "skills": ["ticket-reporter", "loop"],
+      "where": "server", "tmux": "gcx:ticket-monitor", "remote": "gcx-ticket-monitor", "schedule": "every 5 min (Claude /loop)"
+    }
+  ],
+  "cloud": [
+    { "name": "Google Apps Script triggers", "what": "MasterTrigger daily review distribution, TicketDailyReport 9AM, PurchaseDate_Sync 9AM/9PM, Monday↔Sheet syncs 17:00, MCF_Tracking, ABM_TicketMerge, TicketReporterCard Chat app — run in Google's cloud, need neither machine." }
+  ]
+}

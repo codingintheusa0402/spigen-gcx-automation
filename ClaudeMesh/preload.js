@@ -23,6 +23,13 @@ contextBridge.exposeInMainWorld('api', {
   listCommands: cwd => ipcRenderer.invoke('cmds:list', cwd),
   pathForFile: f => webUtils.getPathForFile(f),
   history: () => ipcRenderer.invoke('hist:list'),
+  sched: {
+    list: () => ipcRenderer.invoke('sched:list'),
+    set: (id, s) => ipcRenderer.invoke('sched:set', id, s),
+    enable: (id, on) => ipcRenderer.invoke('sched:enable', id, on),
+    move: (id, to) => ipcRenderer.invoke('sched:move', id, to),
+    run: id => ipcRenderer.invoke('sched:run', id),
+  },
   details: sid => ipcRenderer.invoke('sess:details', sid),
   rename: (sid, name) => ipcRenderer.invoke('hist:rename', sid, name),
   agents: {

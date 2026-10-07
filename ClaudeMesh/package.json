@@ -51,6 +51,7 @@
       "preload.js",
       "collector.js",
       "phone-server.js",
+      "schedules.js",
       "renderer/**",
       "phone/**",
       "build/icon.png",

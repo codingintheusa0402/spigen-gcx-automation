@@ -227,7 +227,7 @@ async function openNew() {
   };
 }
 
-function modal(html) { $('#modalCard').innerHTML = html; $('#modal').classList.remove('hidden'); const c = $('#mCancel'); if (c) c.onclick = closeModal; }
+function modal(html) { $('#modalCard').classList.remove('wide'); $('#modalCard').innerHTML = html; $('#modal').classList.remove('hidden'); const c = $('#mCancel'); if (c) c.onclick = closeModal; }
 function closeModal() { $('#modal').classList.add('hidden'); }
 $('#modal').onclick = e => { if (e.target.id === 'modal') closeModal(); };
 
