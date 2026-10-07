@@ -133,7 +133,7 @@ Object.assign(Mesh.prototype, {
       const h = this.heaviness(n), N = Math.max(1, Math.round(1 + h * (cap - 1))), work = n.s.health === 'working' ? 1 : 0;
       const star = starColor('outer', .08 + h * .92, 1.7).map(Math.round), starRGB = `${star}`;
       const starHex = '#' + star.map(v => v.toString(16).padStart(2, '0')).join('');
-      const rim = (ORB_PAL[n.s.family] || ORB_PAL.other).rim;
+      const rim = (ORB_PAL[n.s.serverUses ? "server" : n.s.family] || ORB_PAL.other).rim;
       const g0 = this.strandGeom(n, 0, t), grad = ctx.createLinearGradient(g0.x0, g0.y0, g0.x1, g0.y1);
       grad.addColorStop(0, hexA(rim, .85)); grad.addColorStop(.35, `rgba(${starRGB},.9)`); grad.addColorStop(1, `rgba(${starRGB},.95)`);
       ctx.strokeStyle = grad;

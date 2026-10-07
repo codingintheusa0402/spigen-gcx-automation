@@ -45,6 +45,8 @@ function costOf(model, u) {
 
 const dayKey = (t) => { const d = new Date(t); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
 
+const SERVER_RE = /(\b(ssh|scp|rsync|sftp|mosh)\b[^\n]*\b(gcx-server|claude-server|100\.115\.156\.121|laptop-n9abvord)\b)|tailscale ssh|run-on-server|run_on_server\.sh|sync_to_server\.sh|skill:run-on-server|\bpeek\.sh\b.*gcx|gcx-server:/i;
+
 class SessionStats {
   constructor(sid) {
     this.sid = sid;
@@ -259,6 +261,13 @@ class Collector {
       if (!rec.ev) { rec.ev = { t: ts, out: 0, usd: 0, model: m.model, sub: t.isSub }; s.events.push(rec.ev); }
       rec.ev.t = ts; rec.ev.out = out; rec.ev.usd = cost; rec.ev.dur = dur;
     }
+    // does this session reach the 24/7 server? (ssh/scp/rsync to gcx-server / claude-server, Tailscale SSH,
+    // the run-on-server skill or its scripts) — sticky per session, with the time of the latest use
+    for (const b of m.content || []) {
+      if (b.type !== 'tool_use') continue;
+      const inp = b.input || {}, txt = b.name === 'Skill' ? 'skill:' + (inp.skill || '') : String(inp.command || inp.cmd || '');
+      if (SERVER_RE.test(txt)) { s.serverUses = (s.serverUses || 0) + 1; s.serverAt = Math.max(s.serverAt || 0, ts || Date.now()); }
+    }
     if (!t.isSub) {
       s.lastModel = m.model;
       s.lastCtx = inp + cr + cw;
@@ -338,7 +347,7 @@ class Collector {
         totalUsd: s.total.usd, todayUsd: s.today.usd, tokIn: s.total.in, tokOut: s.total.out,
         tokCacheRead: s.total.cr, tokCacheWrite: s.total.cw,
         byModel: s.byModel, tps, lastSpeed: s.lastSpeed, usdHr, turns: s.turns,
-        subagents: subActive, errors5m: err5, errors1h: s.errors.length, lastError: s.lastError,
+        subagents: subActive, errors5m: err5, errors1h: s.errors.length, lastError: s.lastError, serverUses: s.serverUses || 0, serverAt: s.serverAt || 0,
         sinceWrite, spark, log: s.log.slice(-40), owner,
       });
     }

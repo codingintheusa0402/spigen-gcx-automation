@@ -4,6 +4,9 @@
 // fibres, and a soft glowing glass rim with light crescents. Each frame they're composited with
 // counter-rotation and breathing, plus 3-D orbiting sparks and a pulsing heart-knot.
 const ORB_PAL = {
+  // sessions that use the 24/7 server (user's reference orb): thick magenta-violet glass, fiery red-orange
+  // nebula with swirling flame fibres, a dense swarm of golden sparks and a small green-gold knot at the core
+  server: { rim: '#e055dc', deep: [150, 16, 14], mid: [236, 62, 24], hot: [255, 196, 64], fib: '#ff6a2a', spark: '#ffe04a', knot: '#b6ff6a', sparks: 210, fibres: 320, rimWide: true, sparkBoost: 1.6, bigRatio: .82 },
   fable:  { rim: '#ff4fd8', deep: [120, 8, 18],  mid: [214, 36, 30],  hot: [255, 176, 46], fib: '#ff8a3a', spark: '#ffe9a6', knot: '#ffd36b' },
   mythos: { rim: '#ff4fd8', deep: [120, 8, 18],  mid: [214, 36, 30],  hot: [255, 176, 46], fib: '#ff8a3a', spark: '#ffe9a6', knot: '#ffd36b' },
   opus:   { rim: '#4fd0ff', deep: [62, 22, 128], mid: [140, 52, 205], hot: [255, 96, 176], fib: '#7a6cff', spark: '#ffffff', knot: '#ff7ad1' },
@@ -37,7 +40,7 @@ function makeOrb(fam, seed) {
   nx.putImageData(img, 0, 0);
 
   // fibres: curved radial filaments (dense for the green "creature", sparse veils for the others)
-  const fib = mk(), fx = fib.getContext('2d'), nF = fam === 'sonnet' ? 420 : 170;
+  const fib = mk(), fx = fib.getContext('2d'), nF = P.fibres || (fam === 'sonnet' ? 420 : 170);
   fx.globalCompositeOperation = 'lighter'; fx.lineCap = 'round';
   for (let i = 0; i < nF; i++) {
     const a = r() * 6.283, r0 = R * (.08 + r() * .3), r1 = R * (.55 + r() * .42), bend = (r() - .5) * .7;
@@ -56,8 +59,13 @@ function makeOrb(fam, seed) {
   const RS = 384, RC = RS / 2, RR = RS / 2 / 1.45, rim = mk(RS), rx = rim.getContext('2d');
   const g = rx.createRadialGradient(RC, RC, RR * .6, RC, RC, RR * 1.45);   // stop k ↔ radius (.6 + .85k)·R; peak at the sphere's edge
   const rc = P.rim, rw = mix(P.rim, .55);
-  g.addColorStop(0, hexA(rc, 0)); g.addColorStop(.28, hexA(rc, .14)); g.addColorStop(.42, hexA(rc, .5));
-  g.addColorStop(.47, hexA(rw, .95)); g.addColorStop(.52, hexA(rc, .65)); g.addColorStop(.62, hexA(rc, .2)); g.addColorStop(1, hexA(rc, 0));
+  if (P.rimWide) {                                       // the reference's thick, soft glass band + inner pink haze
+    g.addColorStop(0, hexA(rc, 0)); g.addColorStop(.18, hexA(rc, .12)); g.addColorStop(.34, hexA(rc, .42)); g.addColorStop(.43, hexA(rw, .9));
+    g.addColorStop(.5, hexA(rc, .95)); g.addColorStop(.56, hexA(rc, .6)); g.addColorStop(.68, hexA(rc, .22)); g.addColorStop(1, hexA(rc, 0));
+  } else {
+    g.addColorStop(0, hexA(rc, 0)); g.addColorStop(.28, hexA(rc, .14)); g.addColorStop(.42, hexA(rc, .5));
+    g.addColorStop(.47, hexA(rw, .95)); g.addColorStop(.52, hexA(rc, .65)); g.addColorStop(.62, hexA(rc, .2)); g.addColorStop(1, hexA(rc, 0));
+  }
   rx.fillStyle = g; rx.fillRect(0, 0, RS, RS);
   rx.filter = 'blur(4px)'; rx.lineCap = 'round';
   rx.strokeStyle = 'rgba(255,255,255,.42)'; rx.lineWidth = RR * .09;
@@ -67,7 +75,7 @@ function makeOrb(fam, seed) {
   rx.filter = 'none';
 
   // per-orb animated sparks on a sphere + the heart-knot's lobes
-  const sparks = Array.from({ length: 70 }, () => ({ th: r() * 6.283, ph: Math.acos(2 * r() - 1), rr: .35 + r() * .6, sp: (.2 + r() * .8) * (r() > .5 ? 1 : -1), tw: r() * 6.28, big: r() > .86 }));
+  const sparks = Array.from({ length: P.sparks || 70 }, () => ({ th: r() * 6.283, ph: Math.acos(2 * r() - 1), rr: .3 + r() * .65, sp: (.2 + r() * .8) * (r() > .5 ? 1 : -1), tw: r() * 6.28, big: r() > (P.bigRatio || .86) }));
   const orb = { neb, fib, rim, sparks, P, lobes: 3 + (r() * 3 | 0), RK: 1.45 };
   orbCache.set(key, orb); return orb;
 }
@@ -76,7 +84,7 @@ Object.assign(Mesh.prototype, {
   nodeRadius(n) { return 30 + Math.min(28, Math.log10(1 + (n.s.totalUsd || 0)) * 10); },
 
   drawMote(n, dt) {
-    const ctx = this.ctx, s = n.s, t = this.time, fam = ORB_PAL[s.family] ? s.family : 'other';
+    const ctx = this.ctx, s = n.s, t = this.time, fam = s.serverUses ? 'server' : ORB_PAL[s.family] ? s.family : 'other';
     const orb = makeOrb(fam, n.seed), P = orb.P;
     const alive = n.dying ? Math.max(0, 1 - (t - n.dying) / 2.5) : Math.min(1, (t - n.born) / 1.2);
     const work = s.health === 'working', energy = { working: 1, idle: .55, quiet: .7, waiting: .8, error: .9 }[s.health] ?? .5;
@@ -109,11 +117,11 @@ Object.assign(Mesh.prototype, {
       const th = p.th + n.spin * p.sp * spd * 1.6, x = Math.sin(p.ph) * Math.cos(th), z = Math.sin(p.ph) * Math.sin(th), y = Math.cos(p.ph);
       const front = .35 + .65 * (z + 1) / 2, tw = .55 + .45 * Math.sin(t * (2 + p.sp * 3) + p.tw);
       const px = x * p.rr * R, py = y * p.rr * R, a = front * tw;
-      if (p.big) { const g = R * .16 * front; ctx.globalAlpha = alive * a * .8 * (.45 + .55 * energy); ctx.drawImage(gs, px - g, py - g, g * 2, g * 2); }
-      const z2 = p.big ? 1.8 : 1.1; B[Math.min(3, a * 4 | 0)].rect(px - z2 / 2, py - z2 / 2, z2, z2);
+      if (p.big) { const g = R * .16 * front; ctx.globalAlpha = Math.min(1, alive * a * .8 * (.45 + .55 * energy) * (P.sparkBoost || 1)); ctx.drawImage(gs, px - g, py - g, g * 2, g * 2); }
+      const z2 = (p.big ? 1.05 : .62) * Math.max(1, R / 40), bk = B[Math.min(3, a * 4 | 0)]; bk.moveTo(px + z2, py); bk.arc(px, py, z2, 0, 6.283);   // round, glowing dots
     }
     ctx.fillStyle = P.spark;
-    B.forEach((path, i) => { ctx.globalAlpha = alive * (i + .6) / 4 * (.45 + .55 * energy); ctx.fill(path); });
+    B.forEach((path, i) => { ctx.globalAlpha = Math.min(1, alive * (i + .6) / 4 * (.45 + .55 * energy) * (P.sparkBoost || 1)); ctx.fill(path); });
     // the heart: a slowly turning rose-knot that beats faster while the session works
     const beat = .8 + .2 * Math.sin(t * (work ? 6 : 2) + n.seed * 7), kr = R * .3 * beat, L = orb.lobes;
     ctx.globalAlpha = alive * (.35 + .5 * energy); ctx.strokeStyle = P.knot; ctx.lineWidth = 1.1;
@@ -167,7 +175,7 @@ Object.assign(Mesh.prototype, {
     ctx.globalAlpha = alive * (.85 + .15 * n.swell);
     const name = s.name.length > 30 ? s.name.slice(0, 29) + '…' : s.name;
     const l2 = `${(s.model || '—').replace('claude-', '')}  ·  $${s.todayUsd.toFixed(2)}`;
-    const l3 = (work ? `working · ${Math.round(s.tps)} tok/s` : s.health) + (s.owner ? '  ·  in-app' : '');
+    const l3 = (work ? `working · ${Math.round(s.tps)} tok/s` : s.health) + (s.owner ? '  ·  in-app' : '') + (s.serverUses ? '  ·  ⇄ server' : '');
     ctx.font = '600 12px system-ui, "Apple SD Gothic Neo"'; const w1 = ctx.measureText(name).width;
     ctx.font = '400 10.5px system-ui'; const pw = Math.max(w1, ctx.measureText(l2).width, ctx.measureText(l3).width) + 22;
     const py = n.y + R + 22, ph = 46;

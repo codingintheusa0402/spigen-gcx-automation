@@ -121,7 +121,7 @@ Object.assign(Mesh.prototype, {
 
     // session motes: dithered body, outline, inner sparkles, ctx gauge
     for (const n of this.nodes.values()) {
-      const s = n.s, col = shade(PAL[s.family] || PAL.other, 1 - spendDim(s)), alive = n.dying ? Math.max(0, 1 - (t - n.dying) / 2.5) : Math.min(1, (t - n.born) / 1.2);
+      const s = n.s, col = shade(s.serverUses ? '#d84cf2' : PAL[s.family] || PAL.other, 1 - spendDim(s)), alive = n.dying ? Math.max(0, 1 - (t - n.dying) / 2.5) : Math.min(1, (t - n.born) / 1.2);
       if (alive <= 0) continue;
       const R = this.nodeRadius(n) * k * (.5 + .5 * alive) * (1 + n.swell * .12), x = n.x * k, y = n.y * k;
       const dim = s.health === 'idle' ? .55 : 1;
