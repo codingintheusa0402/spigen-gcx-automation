@@ -49,7 +49,14 @@ ipcMain.handle('pty:spawn', (_e, opts) => {
   let args = ['-l'];
   let title = opts.title || 'shell';
   if (opts.kind === 'claude') {
-    const flags = (opts.flags || '').trim();
+    let flags = (opts.flags || '').trim();
+    // every Claude session started from GCX Mesh runs with bypass-permissions + Remote Control
+    // (not for subcommands like `attach <id>`, which take no session flags)
+    if (!/^(attach|agents|logs|stop|rm|respawn)\b/.test(flags)) {
+      if (!/--dangerously-skip-permissions|--permission-mode/.test(flags)) flags = '--dangerously-skip-permissions ' + flags;
+      if (!/--remote-control\b|(^|\s)--rc\b/.test(flags)) flags = '--remote-control ' + flags;
+      flags = flags.trim();
+    }
     // exec so the claude pid == pty pid; -i loads the user's PATH (~/.local/bin) like Terminal does
     args = ['-l', '-i', '-c', `exec claude ${flags}`];
     title = opts.title || 'claude';

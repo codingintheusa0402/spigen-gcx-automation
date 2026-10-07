@@ -1,7 +1,7 @@
 // All sessions (the same set `claude --resume` lists), background agents, rename and
 // convert-to-agent. Clicking a past session resumes it in an in-app terminal straight away,
-// with --dangerously-skip-permissions so it never stops to ask.
-const RESUME_FLAGS = '--dangerously-skip-permissions';
+// with --dangerously-skip-permissions (never stops to ask) and --remote-control (reachable from phone/web).
+const RESUME_FLAGS = '--dangerously-skip-permissions --remote-control';
 let hist = [], histShown = 60;
 const projName = cwd => !cwd ? '?' : cwd === HOME_DIR ? '~' : cwd.split('/').filter(Boolean).pop();
 let HOME_DIR = ''; window.api.home().then(h => { HOME_DIR = h; });

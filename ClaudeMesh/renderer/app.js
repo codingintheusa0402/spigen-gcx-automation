@@ -202,7 +202,7 @@ function openBroadcast() {
 // ---------------- new session ----------------
 async function openNew() {
   const home = await window.api.home();
-  const last = store.get('newOpts', { kind: 'claude', cwd: home, flags: '--dangerously-skip-permissions', model: '' });
+  const last = store.get('newOpts', { kind: 'claude', cwd: home, flags: '--dangerously-skip-permissions --remote-control', model: '' });
   modal(`<h2>New session</h2>
     <div class="choice"><button data-k="claude">Claude Code</button><button data-k="shell">Shell</button></div>
     <label>Working directory</label><div class="row"><input type="text" id="nCwd" value="${esc(last.cwd)}"><button id="nBrowse" style="flex:none">Browse…</button></div>
