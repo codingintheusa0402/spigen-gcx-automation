@@ -59,6 +59,16 @@ function onMessage(event) {
     return handleManualRequest_(event);
   }
 
+  // `/btw <question>` — general-purpose Q&A escape hatch, NOT the ticket-report flow.
+  // Anything after `/btw` is answered directly (e.g. "/btw 이번 주 PI 티켓 경향 어때?") instead
+  // of being parsed as a ticket trigger/report. Checked before the ticket-number regex for the
+  // same reason /revision and /manual are — a free-form question very often contains a digit
+  // sequence of its own (order numbers, dates, ticket numbers quoted as examples) that must not
+  // get misread as "open ticket card for this id". See handleBtwQuestion_.
+  if (/^\/btw\b/i.test(trimmed)) {
+    return handleBtwQuestion_(trimmed.replace(/^\/btw\s*/i, ''), event);
+  }
+
   // Thread-reply direct-post path: a reply inside a thread the monitor already mapped to a
   // ticket (see lookupTicketByThread_) is treated as the internal-note content itself — no
   // card round-trip needed. This is how a human replies under an auto-sent static report and
@@ -587,6 +597,110 @@ function handleManualRequest_(event) {
       }
     }]
   });
+}
+
+/**
+ * `/btw <question>` handler — free-form Q&A, deliberately separate from the ticket-report
+ * flow above. Answers via the Claude API (ANTHROPIC_API_KEY Script Property; never
+ * hardcoded — see feedback_no_hardcoded_secrets_in_docs memory).
+ *
+ * This app intentionally has no chat.bot scope / domain-wide delegation (see file header),
+ * so it cannot push more than one reply per invocation through the normal card-action
+ * response channel, and that one reply can't be "updated" mid-flight the way a card can be
+ * rebuilt in response to a click. To still satisfy "if the answer takes a long time,
+ * periodically say which step it's on", progress pings are posted PROACTIVELY through this
+ * same room's own incoming webhook (PROGRESS_WEBHOOK_URL Script Property — the exact
+ * mechanism send.py already uses to post ticket reports) as each stage of the pipeline
+ * completes, while the actual synchronous action response at the end carries the final
+ * answer. If PROGRESS_WEBHOOK_URL isn't set, postProgress_ no-ops silently — /btw still
+ * answers, just without the interim pings.
+ */
+function handleBtwQuestion_(question, event) {
+  question = String(question || '').trim();
+  if (!question) {
+    return chatCreate_({ text: '⚠️ /btw 뒤에 질문을 입력해 주세요. 예: "/btw 이번 주 접수된 PI 티켓 경향이 어때?"' });
+  }
+
+  var startedAt = new Date().getTime();
+  postProgress_('🤔 질문 확인 중… (' + truncate_(question, 120) + ')');
+  postProgress_('📡 답변 생성 중…');
+
+  var answer;
+  try {
+    answer = askClaude_(question);
+  } catch (err) {
+    postProgress_('❌ 답변 생성 실패: ' + err.message);
+    return chatCreate_({ text: '❌ /btw 답변 생성 실패: ' + err.message });
+  }
+
+  var elapsedSec = Math.round((new Date().getTime() - startedAt) / 1000);
+  if (elapsedSec >= 10) {
+    postProgress_('✅ 답변 생성 완료 (' + elapsedSec + '초 소요)');
+  }
+
+  return chatCreate_({
+    cardsV2: [{
+      cardId: 'ticket-reporter-btw-' + new Date().getTime(),
+      card: {
+        header: { title: '/btw 답변', subtitle: elapsedSec + '초 소요' },
+        sections: [{ widgets: [
+          { textParagraph: { text: escapeHtml_(answer).replace(/\n/g, '<br>') } }
+        ]}]
+      }
+    }]
+  });
+}
+
+/**
+ * Proactively posts a short plain-text status line into this app's room via its incoming
+ * webhook (Script Property PROGRESS_WEBHOOK_URL) — NOT the synchronous card-action response
+ * (that channel only accepts a single reply per invocation; see handleBtwQuestion_). Any
+ * failure here is swallowed — a progress ping is best-effort and must never break /btw's
+ * actual answer.
+ */
+function postProgress_(text) {
+  var url = PropertiesService.getScriptProperties().getProperty('PROGRESS_WEBHOOK_URL');
+  if (!url) return;
+  try {
+    UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ text: text }),
+      muteHttpExceptions: true
+    });
+  } catch (err) {
+    // best-effort only
+  }
+}
+
+/** Minimal single-turn Claude call for /btw. ANTHROPIC_API_KEY lives in Script Properties. */
+function askClaude_(question) {
+  var apiKey = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set in Script Properties');
+
+  var resp = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+    payload: JSON.stringify({
+      model: 'claude-sonnet-5',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: question }]
+    }),
+    muteHttpExceptions: true
+  });
+  var code = resp.getResponseCode();
+  if (code < 200 || code >= 300) {
+    throw new Error('Claude API ' + code + ': ' + resp.getContentText().slice(0, 300));
+  }
+  var body = JSON.parse(resp.getContentText());
+  var text = (body.content && body.content[0] && body.content[0].text) || '(응답 없음)';
+  return text;
+}
+
+function truncate_(s, n) {
+  s = String(s || '');
+  return s.length > n ? s.slice(0, n) + '…' : s;
 }
 
 function getManualText_() {

@@ -7,6 +7,13 @@
  *
  * Secrets (ZENDESK_EMAIL / ZENDESK_API_TOKEN) live in Script Properties, never in code —
  * set once via Apps Script editor: Project Settings → Script Properties, or run setupOnce_().
+ *
+ * `/btw` Q&A (see handleBtwQuestion_ in Code.gs) needs two more Script Properties:
+ *   ANTHROPIC_API_KEY    — Claude API key for askClaude_.
+ *   PROGRESS_WEBHOOK_URL — this room's own Chat incoming-webhook URL (same kind send.py
+ *                          already posts reports through), used only for proactive
+ *                          "진행 중" pings via postProgress_ — never for the final answer,
+ *                          which still goes back through the normal card-action response.
  */
 
 var ZENDESK_SUBDOMAIN = 'spigenhelp';                 // https://spigenhelp.zendesk.com
