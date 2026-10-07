@@ -283,33 +283,65 @@ var BLANK_R_MAX_CONSEC_429   = 5;    // abort early if quota is clearly still ex
 var BLANK_R_MIN_AGE_HOURS    = 24;   // don't even attempt a row shipped more recently than this
 var BLANK_R_GIVE_UP_DAYS     = 3;    // past this age, stop retrying and freeze the cell blank
 
+/***** "GStore MCF 발송 로그" — Google Store MCF replacements, same live-formula + freeze scheme as
+ * "MCF 발송 로그" col R, just different columns. Its P cells hold
+ *   =IF(OR(B5="",O5=""),"",IF(B5<>"JP",HYPERLINK("https://www.swiship.de/track?id="&AMZTK(O5),AMZTK(O5)),
+ *                                      HYPERLINK("https://www.swiship.jp/track?id="&AMZTK_JP(O5),AMZTK_JP(O5))))
+ * (written by installGStoreTrackingFormulas()), and resolveBlankTrackingNumbers() freezes them.
+ */
+var GSTORE_SHEET_NAME = 'GStore MCF 발송 로그';
+var GSTORE_START_ROW  = 5;    // rows 1-4 are notes + header
+var GSTORE_COL_REGION = 2;    // B — MCF 발송 국가
+var GSTORE_COL_SENT   = 14;   // N — 발송일자
+var GSTORE_COL_ORDER  = 15;   // O — MCF Order ID
+var GSTORE_COL_TRACK  = 16;   // P — Tracking Number
+
+// Sheets resolveBlankTrackingNumbers() covers. retry429: "MCF 발송 로그" leaves 429-text cells to
+// retryR429Errors(); GStore has no such companion, so its 429/ERR cells are retried here directly.
+var TRACKING_SHEETS = [
+  { name: BF_SHEET_NAME, startRow: BF_START_ROW, colRegion: BF_COL_REGION, colSent: BF_COL_SENT,
+    colOrder: BF_COL_ORDER, colTrack: RETRY_R_COL, retry429: false },
+  { name: GSTORE_SHEET_NAME, startRow: GSTORE_START_ROW, colRegion: GSTORE_COL_REGION, colSent: GSTORE_COL_SENT,
+    colOrder: GSTORE_COL_ORDER, colTrack: GSTORE_COL_TRACK, retry429: true }
+];
+
 function resolveBlankTrackingNumbers() {
+  var budget = { apiCalls: 0 }; // BLANK_R_MAX_ROWS_PER_RUN is shared across all sheets
+  _warmLwaTokens();
+  for (var s = 0; s < TRACKING_SHEETS.length; s++) {
+    try {
+      _resolveBlankTrackingForSheet_(TRACKING_SHEETS[s], budget);
+    } catch (e) {
+      Logger.log('resolveBlankTrackingNumbers [' + TRACKING_SHEETS[s].name + '] failed: ' + (e.message || e));
+    }
+  }
+}
+
+function _resolveBlankTrackingForSheet_(cfg, budget) {
   var ss    = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(BF_SHEET_NAME);
-  if (!sheet) throw new Error('Sheet not found: ' + BF_SHEET_NAME);
+  var sheet = ss.getSheetByName(cfg.name);
+  if (!sheet) throw new Error('Sheet not found: ' + cfg.name);
 
   var lastRow = sheet.getLastRow();
-  if (lastRow < BF_START_ROW) return;
+  if (lastRow < cfg.startRow) return;
 
-  var numRows   = lastRow - BF_START_ROW + 1;
-  var rValues   = sheet.getRange(BF_START_ROW, RETRY_R_COL, numRows, 1).getDisplayValues();
-  var rFormulas = sheet.getRange(BF_START_ROW, RETRY_R_COL, numRows, 1).getFormulas();
-  var regions   = sheet.getRange(BF_START_ROW, BF_COL_REGION, numRows, 1).getValues();
-  var orderIds  = sheet.getRange(BF_START_ROW, BF_COL_ORDER,  numRows, 1).getValues();
-  var sentDates = sheet.getRange(BF_START_ROW, BF_COL_SENT,   numRows, 1).getValues();
-
-  _warmLwaTokens();
+  var numRows   = lastRow - cfg.startRow + 1;
+  var rValues   = sheet.getRange(cfg.startRow, cfg.colTrack,  numRows, 1).getDisplayValues();
+  var rFormulas = sheet.getRange(cfg.startRow, cfg.colTrack,  numRows, 1).getFormulas();
+  var regions   = sheet.getRange(cfg.startRow, cfg.colRegion, numRows, 1).getValues();
+  var orderIds  = sheet.getRange(cfg.startRow, cfg.colOrder,  numRows, 1).getValues();
+  var sentDates = sheet.getRange(cfg.startRow, cfg.colSent,   numRows, 1).getValues();
 
   var now = new Date();
-  var apiCalls = 0, frozenGood = 0, fixed = 0, gaveUp = 0, consec429 = 0;
+  var frozenGood = 0, fixed = 0, gaveUp = 0, consec429 = 0, calls = 0;
 
   for (var i = 0; i < numRows; i++) {
     var formula = rFormulas[i][0];
     // No formula at all, or already frozen to a static value (no AMZTK() call left in it) —
     // nothing for this function to do either way.
-    if (!formula || formula.indexOf('AMZTK(') < 0) continue;
+    if (!formula || formula.indexOf('AMZTK') < 0) continue;
 
-    var row     = BF_START_ROW + i;
+    var row     = cfg.startRow + i;
     var display = String(rValues[i][0] || '').trim();
     var orderId = String(orderIds[i][0] || '').trim();
     if (!orderId) continue;
@@ -317,25 +349,26 @@ function resolveBlankTrackingNumbers() {
     var isJP      = String(regions[i][0] || '').trim().toUpperCase() === 'JP';
     var endpoints = isJP ? ['FE', 'EU'] : ['EU', 'FE'];
     var domain    = isJP ? 'jp' : 'de';
+    var isErr     = _is429ErrorValue(display) || _isErrorValue(display);
 
     // --- Pass 1: already resolved, just needs freezing before its cache can expire ---
-    if (display && !_is429ErrorValue(display)) {
+    if (display && !isErr) {
       var url = 'https://www.swiship.' + domain + '/track?id=' + display;
-      sheet.getRange(row, RETRY_R_COL).setFormula('=HYPERLINK("' + url + '","' + display + '")');
+      sheet.getRange(row, cfg.colTrack).setFormula('=HYPERLINK("' + url + '","' + display + '")');
       frozenGood++;
       continue;
     }
 
-    // 429-error-text cells are retryR429Errors()'s job above — don't double-handle them here.
-    if (display && _is429ErrorValue(display)) continue;
+    // 429-error-text cells on "MCF 발송 로그" are retryR429Errors()'s job — don't double-handle them.
+    if (display && _is429ErrorValue(display) && !cfg.retry429) continue;
 
-    // --- Pass 2: genuinely blank — only attempt if old enough, and within this run's API budget ---
-    var sentDate = sentDates[i][0];
-    var ageHours = (sentDate instanceof Date) ? (now - sentDate) / 3600000 : null;
+    // --- Pass 2: blank (or error) — only attempt if old enough, and within this run's API budget ---
+    var ageHours = _ageHours_(sentDates[i][0], now);
     if (ageHours === null || ageHours < BLANK_R_MIN_AGE_HOURS) continue;
-    if (apiCalls >= BLANK_R_MAX_ROWS_PER_RUN) continue;
+    if (budget.apiCalls >= BLANK_R_MAX_ROWS_PER_RUN) continue;
 
-    apiCalls++;
+    budget.apiCalls++;
+    calls++;
     var tn = '', got429 = false, gotNoInfo = false;
     try {
       var tracks = _tracksWithFallbacks(orderId, endpoints);
@@ -344,13 +377,13 @@ function resolveBlankTrackingNumbers() {
     } catch (e) {
       if (_isRateLimit429(e))        { got429 = true; }
       else if (_isNoOrderInfoError(e)) { gotNoInfo = true; }
-      else { Logger.log('resolveBlankTrackingNumbers row ' + row + ': unexpected error — ' + (e.message || e)); }
+      else { Logger.log('resolveBlankTrackingNumbers [' + cfg.name + '] row ' + row + ': unexpected error — ' + (e.message || e)); }
     }
 
     if (got429) {
       consec429++;
       if (consec429 >= BLANK_R_MAX_CONSEC_429) {
-        Logger.log('resolveBlankTrackingNumbers: quota exhausted after ' + consec429 + ' consecutive 429s — stopping this run.');
+        Logger.log('resolveBlankTrackingNumbers [' + cfg.name + ']: quota exhausted after ' + consec429 + ' consecutive 429s — stopping this run.');
         break;
       }
       continue;
@@ -359,24 +392,62 @@ function resolveBlankTrackingNumbers() {
 
     if (tn) {
       var url2 = 'https://www.swiship.' + domain + '/track?id=' + tn;
-      sheet.getRange(row, RETRY_R_COL).setFormula('=HYPERLINK("' + url2 + '","' + tn + '")');
+      sheet.getRange(row, cfg.colTrack).setFormula('=HYPERLINK("' + url2 + '","' + tn + '")');
       fixed++;
-      Logger.log('resolveBlankTrackingNumbers row ' + row + ': resolved → ' + tn);
+      Logger.log('resolveBlankTrackingNumbers [' + cfg.name + '] row ' + row + ': resolved → ' + tn);
       continue;
     }
 
     if (gotNoInfo && ageHours >= BLANK_R_GIVE_UP_DAYS * 24) {
-      sheet.getRange(row, RETRY_R_COL).setValue('');
+      sheet.getRange(row, cfg.colTrack).setValue('');
       gaveUp++;
-      Logger.log('resolveBlankTrackingNumbers row ' + row + ': gave up (order info permanently unavailable, ' +
+      Logger.log('resolveBlankTrackingNumbers [' + cfg.name + '] row ' + row + ': gave up (order info permanently unavailable, ' +
         Math.round(ageHours / 24) + 'd old) — froze blank to stop future retries');
     }
     // else: genuinely still not ready, or a transient error — leave the live formula for next run
   }
 
   SpreadsheetApp.flush();
-  Logger.log('resolveBlankTrackingNumbers done — locked-in good: ' + frozenGood + ', newly resolved: ' + fixed +
-    ', gave up: ' + gaveUp + ', SP-API calls made: ' + apiCalls);
+  Logger.log('resolveBlankTrackingNumbers [' + cfg.name + '] done — locked-in good: ' + frozenGood +
+    ', newly resolved: ' + fixed + ', gave up: ' + gaveUp + ', SP-API calls made: ' + calls);
+}
+
+// Sent-date cell → hours since then. Accepts a Date, or a date serial number (cell not date-formatted).
+function _ageHours_(v, now) {
+  if (v instanceof Date) return (now - v) / 3600000;
+  if (typeof v === 'number' && v > 0) return (now - new Date(Date.UTC(1899, 11, 30) + v * 86400000)) / 3600000;
+  return null;
+}
+
+/**
+ * One-off / re-runnable: writes the live AMZTK tracking formula into "GStore MCF 발송 로그" col P
+ * from GSTORE_START_ROW down to GSTORE_FORMULA_LAST_ROW. Only touches cells that are empty —
+ * never overwrites an already-frozen tracking number or anything typed by hand.
+ */
+var GSTORE_FORMULA_LAST_ROW = 1000;
+
+function installGStoreTrackingFormulas() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(GSTORE_SHEET_NAME);
+  if (!sheet) throw new Error('Sheet not found: ' + GSTORE_SHEET_NAME);
+
+  var n    = GSTORE_FORMULA_LAST_ROW - GSTORE_START_ROW + 1;
+  var cells = sheet.getRange(GSTORE_START_ROW, GSTORE_COL_TRACK, n, 1);
+  var vals = cells.getValues(), fs = cells.getFormulas();
+  var written = 0, runStart = -1, run = [];
+  function flushRun() {
+    if (run.length) sheet.getRange(GSTORE_START_ROW + runStart, GSTORE_COL_TRACK, run.length, 1).setFormulas(run);
+    written += run.length; run = []; runStart = -1;
+  }
+  for (var i = 0; i <= n; i++) {
+    var empty = i < n && !fs[i][0] && String(vals[i][0]).trim() === '';
+    if (!empty) { flushRun(); continue; }
+    if (runStart < 0) runStart = i;
+    var r = GSTORE_START_ROW + i;
+    run.push(['=IF(OR(B' + r + '="",O' + r + '=""),"",IF(B' + r + '<>"JP",' +
+      'HYPERLINK("https://www.swiship.de/track?id="&AMZTK(O' + r + '),AMZTK(O' + r + ')),' +
+      'HYPERLINK("https://www.swiship.jp/track?id="&AMZTK_JP(O' + r + '),AMZTK_JP(O' + r + '))))']);
+  }
+  Logger.log('installGStoreTrackingFormulas: wrote ' + written + ' formula(s) into ' + GSTORE_SHEET_NAME + ' col P');
 }
 
 /***** ========= RETRY $0 TRANSPORTATION FEES IN COL Y ========= *****/

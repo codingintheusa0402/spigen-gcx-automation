@@ -455,3 +455,17 @@ git add MCF_Tracking/
 git commit -m "..."
 git push
 ```
+
+## GStore MCF 발송 로그 — Tracking Number (col P)
+
+Same scheme as "MCF 발송 로그" col R, on the Google Store replacement sheet:
+B = MCF 발송 국가, N = 발송일자, O = MCF Order ID, **P = Tracking Number**, data from row 5.
+
+- P5:P1000 hold a live formula (`installGStoreTrackingFormulas()` re-creates it in empty cells only):
+  `=IF(OR(B5="",O5=""),"",IF(B5<>"JP",HYPERLINK("https://www.swiship.de/track?id="&AMZTK(O5),AMZTK(O5)),HYPERLINK("https://www.swiship.jp/track?id="&AMZTK_JP(O5),AMZTK_JP(O5))))`
+- `resolveBlankTrackingNumbers()` (hourly, via `retryR429Errors`) now loops over `TRACKING_SHEETS`
+  (both sheets) and freezes resolved cells to a static `=HYPERLINK(...)`, retries blanks older than
+  24h, and gives up after 3 days. For GStore it also retries 429/`ERR:` cells itself (there's no
+  `retryR429Errors` pass for that sheet). The SP-API call budget (60/run) is shared across both sheets.
+- Cells showing `EU ERR:`/`JP ERR:` (non-429) are no longer frozen as if they were tracking numbers —
+  they're retried instead.
