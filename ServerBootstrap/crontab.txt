@@ -12,7 +12,8 @@ G=/home/kevinkim/Desktop/GCX
 */30 * * * *   cd $G/GAS_Operations/CaspiSalesBackfill && python3 backfill.py >> logs/launchd.out.log 2>> logs/launchd.err.log
 */30 * * * *   cd $G/GAS_Operations/DiscolorationReport && python3 report.py >> logs/launchd.out.log 2>> logs/launchd.err.log
 
-# SKU/ASIN filler: every 5 min
-*/5 * * * *    cd $G/Scrapers/SKU_ASIN_Filler && python3 scheduler_gate.py >> launchd.out.log 2>> launchd.err.log
+# SKU/ASIN filler stays on the MAC for now (needs the Seller Central inventory login + OTP in its Chrome profile).
+# Uncomment once ~/.chrome-sc-inventory-profile on the server is signed in, and boot out com.spigen.gcx.sku-asin-filler on the Mac.
+# */5 * * * *    cd $G/Scrapers/SKU_ASIN_Filler && python3 scheduler_gate.py >> launchd.out.log 2>> launchd.err.log
 
 # Pull skill/memory updates pushed from the Mac every 5 min is done by the Mac (push), nothing here.
