@@ -8,12 +8,10 @@
  * Secrets (ZENDESK_EMAIL / ZENDESK_API_TOKEN) live in Script Properties, never in code —
  * set once via Apps Script editor: Project Settings → Script Properties, or run setupOnce_().
  *
- * `/btw` Q&A (see handleBtwQuestion_ in Code.gs) needs two more Script Properties:
- *   ANTHROPIC_API_KEY    — Claude API key for askClaude_.
- *   PROGRESS_WEBHOOK_URL — this room's own Chat incoming-webhook URL (same kind send.py
- *                          already posts reports through), used only for proactive
- *                          "진행 중" pings via postProgress_ — never for the final answer,
- *                          which still goes back through the normal card-action response.
+ * `/btw` Q&A (see handleBtwQuestion_ in Code.gs) needs no Script Properties at all — by
+ * design (사용자 지시 2026-10-07) it never calls an LLM API directly from Apps Script. It only
+ * appends the question to the BtwQueue sheet tab; the ticket-reporter monitor Claude Code
+ * session answers it on its next 5-minute tick and replies in-thread via send.py --thread.
  */
 
 var ZENDESK_SUBDOMAIN = 'spigenhelp';                 // https://spigenhelp.zendesk.com
@@ -23,6 +21,7 @@ var FEEDBACK_TAB = 'Feedback';                        // /revision submissions (
 var UNMAPPED_TAB = 'UnmappedThreads';                 // thread replies with no TicketQueue row (see logUnmappedThread_)
 var MANUAL_TAB = 'Manual';                            // full SKILL.md text mirror for /manual (see handleManualRequest_)
 var MANUAL_TAB_GID = '2076587794';                    // Manual tab's sheetId, for the direct #gid= deep link in /manual's reply
+var BTW_TAB = 'BtwQueue';                             // /btw question queue, answered by the monitor session (see handleBtwQuestion_)
 
 /**
  * Lazada/Shopee TCT log sheet — the second monitor source (사용자 지시 2026-09-18). A thread

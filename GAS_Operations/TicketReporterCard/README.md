@@ -70,21 +70,20 @@ link button straight to that tab. A full-text card was tried first but silently 
 `SKILL.md` passed ~24KB (Chat's payload limit, with no error surfaced on the Apps Script side).
 
 ### 5. `/btw <question>` → general Q&A, not a ticket action
-Anything after `/btw` is answered directly via the Claude API instead of being parsed as a
-ticket trigger/report — also checked before the ticket-number regex, since a free-form
-question often contains its own digit sequences (order numbers, dates, example ticket
-numbers) that must not get misread as "open ticket card for this id". `handleBtwQuestion_`
-calls `askClaude_` (needs the `ANTHROPIC_API_KEY` Script Property) and returns the answer as a
-card through the normal synchronous reply.
+Anything after `/btw` is a free-form question, not a ticket trigger/report — checked before
+the ticket-number regex for the same reason as `/revision`/`/manual`, since a question often
+contains its own digit sequences (order numbers, dates, example ticket numbers) that must not
+get misread as "open ticket card for this id".
 
-Because this app has no `chat.bot` scope (see limitation below), a single invocation can only
-return one reply — there's no way to "stream" progress inside that one card. So if the answer
-takes a while, `postProgress_` posts short interim status lines ("🤔 질문 확인 중…", "📡 답변
-생성 중…", and — only past a 10s threshold — "✅ 답변 생성 완료 (N초 소요)") **proactively**
-through the room's own incoming webhook (`PROGRESS_WEBHOOK_URL` Script Property, same kind of
-URL `send.py` already posts reports through), as separate plain-text messages. The final
-answer always arrives through the normal card reply, never through the webhook. If
-`PROGRESS_WEBHOOK_URL` isn't set, these pings just no-op — `/btw` still answers.
+By design (사용자 지시 2026-10-07), this app never calls an LLM API directly — no Anthropic key
+lives in Script Properties. `handleBtwQuestion_` just appends `{question, threadId, email}` to
+a lazily-created `BtwQueue` tab in the same `TicketQueue` sheet and immediately acks "⏳ 질문
+접수됨". The actual answer comes from the **ticket-reporter monitor session itself** — the
+already-running Claude Code `/loop` on the server — which checks `BtwQueue` every tick
+(`check_btw_queue.py list`), answers using its own reasoning, and replies in-thread with
+`send.py --thread "<threadId>"` (no `--ticket-id` — this never touches Zendesk), then stamps
+`answeredAt` via `check_btw_queue.py mark-answered <row>`. So the answer lands on the
+monitor's normal cadence rather than instantly — worst case ~5 minutes during business hours.
 
 ---
 
