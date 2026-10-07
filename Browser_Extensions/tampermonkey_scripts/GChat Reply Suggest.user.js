@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GChat Reply Suggest
 // @namespace    https://spigen.com/gcx
-// @version      3.6.0
+// @version      3.7.0
 // @description  Alt+G offers T3 Esc (deterministic ticket-forward, no AI) / Gratitude / Reminder templates in every Google Chat room by default; only in designated rooms does it suggest AI-generated reply sentences instead
 // @author       Spigen GCX
 // @updateURL    https://raw.githubusercontent.com/codingintheusa0402/spigen-gcx-automation/main/Browser_Extensions/tampermonkey_scripts/GChat%20Reply%20Suggest.user.js
@@ -43,11 +43,16 @@
     PRODUCT_NAME: 360022185891,
     INQUIRY_1: 360022182831, // "1차 Defect Reason or Inquiries"
     ESC_REASON: 900007557523, // "ESC. 사유"
+    ORDER_ID: 360021934132,
   };
+  // "Requested Channel type*" has no ID recorded anywhere in this repo, so
+  // it's resolved by title from ticket_fields.json (see getFieldOptsCached).
+  const CHANNEL_FIELD_TITLE_RE = /^Requested Channel type/i;
+  const ORDER_ID_CHANNELS = ["Shopify EU"];
 
   const RECENT_TICKETS_KEY = "grs_recent_tickets";
   const MAX_RECENT_TICKETS = 10;
-  const FIELD_OPTS_CACHE_KEY = "grs_zd_field_opts_cache";
+  const FIELD_OPTS_CACHE_KEY = "grs_zd_field_opts_cache_v2"; // v2: + channel field
   const FIELD_OPTS_TTL_MS = 24 * 60 * 60 * 1000;
   const PENDING_CONFIRM_PREFIX = "grs_pending_confirm_";
   const DAILY_INDEX_PREFIX = "grs_idx_";
@@ -74,7 +79,9 @@
     const wantedIds = [ZD.COUNTRY, ZD.DEVICE, ZD.PRODUCT_NAME, ZD.INQUIRY_1, ZD.ESC_REASON];
     const out = {};
     for (const f of data.ticket_fields) {
-      if (!wantedIds.includes(f.id)) continue;
+      const isChannel = CHANNEL_FIELD_TITLE_RE.test(f.title || "");
+      if (isChannel) out.channelFieldId = f.id;
+      if (!wantedIds.includes(f.id) && !isChannel) continue;
       const map = {};
       for (const o of f.custom_field_options || []) map[o.value] = o.name;
       out[f.id] = map;
@@ -113,6 +120,8 @@
         productName: resolve(ZD.PRODUCT_NAME),
         asin: cfMap[ZD.ASIN] || "",
         inquiryReason: resolve(ZD.INQUIRY_1) || resolve(ZD.ESC_REASON) || "",
+        channel: fieldOpts.channelFieldId ? resolve(fieldOpts.channelFieldId) : "",
+        orderId: String(cfMap[ZD.ORDER_ID] || "").trim(),
         visitedAt: Date.now(),
       };
 
@@ -431,11 +440,20 @@
     return tail.replace(/^\((.*)\)$/, "$1") || "문의";
   }
 
+  // Shopify EU tickets carry a Shopify order number (e.g. "1763" / "#1763")
+  // in the Order ID field — append it so the receiver can look it up.
+  function orderIdSuffix(t) {
+    const norm = (v) => String(v || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!ORDER_ID_CHANNELS.map(norm).includes(norm(t.channel))) return "";
+    const id = (t.orderId || "").replace(/^#+/, "").trim();
+    return id ? ` (주문번호: #${id})` : "";
+  }
+
   function buildForwardText(t, index, mentionName, title) {
     const reason = extractReasonLabel(t.inquiryReason);
     const prefix = mentionName ? `@${mentionName} ` : "";
     const honorific = title || DEFAULT_HONORIFIC;
-    return `${prefix}안녕하세요 ${honorific}님, 담당하시는 제품 관련 (${reason}) 문의가 들어와 전달드립니다. 확인 후 회신해 주시면 감사하겠습니다!\n\n${referenceBlock(t, index)}`;
+    return `${prefix}안녕하세요 ${honorific}님, 담당하시는 제품 관련 (${reason}) 문의가 들어와 전달드립니다. 확인 후 회신해 주시면 감사하겠습니다!${orderIdSuffix(t)}\n\n${referenceBlock(t, index)}`;
   }
 
   function buildConfirmText(pending, mentionName, title) {
