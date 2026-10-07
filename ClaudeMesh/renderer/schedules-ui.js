@@ -145,7 +145,7 @@ function gasHtml() {
       </div>
       <div class="sc-col"><span class="sc-where w-cloud">Google</span></div>
       <div class="sc-col sc-when"><b>${active.length} active${off ? ` · ${off} off` : ''}</b><span>${lastRun ? 'last run ' + rel(lastRun) : 'no recent run'}</span></div>
-      <div class="sc-col"><button class="sc-mini" data-gas-edit="${esc(id)}">✎ Edit triggers</button>${meta && meta.setupFn ? `<button class="sc-mini" data-gas-code="${esc(id)}" title="Open the code to run ${esc(meta.setupFn)}">▶ ${esc(meta.setupFn)}</button>` : ''}</div></div>`;
+      <div class="sc-col"><button class="sc-mini" data-gas-edit="${esc(id)}">✎ Edit triggers</button>${meta && meta.setupFn ? `<button class="sc-mini" data-gas-code="${esc(id)}" title="Open the editor to run ${esc(meta.setupFn)}">▶ Run setup</button>` : ''}</div></div>`;
   }).join('');
 }
 function wireInfraGas(b) {
