@@ -38,8 +38,33 @@ Object.assign(Mesh.prototype, {
   loadOrbits() { if (!this.orbits) { try { this.orbits = JSON.parse(localStorage.getItem(PIN_KEY)) || {}; } catch { this.orbits = {}; } } return this.orbits; },
   saveOrbits() { try { localStorage.setItem(PIN_KEY, JSON.stringify(this.orbits)); } catch { } },
   orbitShape() {                          // the automatic orbit ellipse (also the speed reference)
-    const rx = Math.max(this.motherRadius() + 130, this.w / 2 - 130), ry = Math.max(this.motherRadius() + 100, this.h / 2 - 90);
+    const rx = Math.max(this.motherRadius() + 130, this.w / 2 - 130), ry = Math.max(this.motherRadius() + 100, this.h / 2 - 120);
     return { rx, ry, k: ry / rx };
+  },
+  // keep a session's whole footprint (glow ring above, label pill + hint line below) inside the mesh
+  // window at any window/dock size — orbits that would leave it slide along the edge instead
+  fitInView(n, p) {
+    const R = this.nodeRadius(n) * 1.12, half = Math.max(R + 20, (n.labelW || 200) / 2) + 8;
+    const top = R + 22, bottom = R + 22 + 46 + 10 + 26;       // ring | label gap + pill + pad + #meshHint
+    const x0 = half, x1 = this.w - half, y0 = top, y1 = this.h - bottom;
+    const cx = v => x1 > x0 ? Math.min(x1, Math.max(x0, v)) : this.w / 2;
+    let x = cx(p.x); const y = y1 > y0 ? Math.min(y1, Math.max(y0, p.y)) : (y0 + y1) / 2;
+    // squeezed into the mother's column (short window)? slide sideways so neither covers the other
+    const m = this.motherBox(), nTop = y - top, nBot = y + R + 22 + 46;
+    if (nBot > m.y0 && nTop < m.y1 && x + half > m.x0 && x - half < m.x1)
+      x = cx(x < this.hub.x ? m.x0 - half - 6 : m.x1 + half + 6);
+    return { x, y };
+  },
+  // screen box of the mother bubble + its usage card + "$ today" line (see drawMotherInfo)
+  motherBox() {
+    const R = this.motherRadius(), L = (this.hub.usage && this.hub.usage.limits) || [];
+    const cardH = 22 + Math.max(1, L.length) * 24, hw = Math.max(R * 1.22, 107) + 4;
+    return { x0: this.hub.x - hw, x1: this.hub.x + hw, y0: this.hub.y - R * 1.22, y1: this.hub.y + R * 1.22 + 8 + cardH + 24 };
+  },
+  // mother sits at the centre unless that would push its usage card below the mesh (short window/tall dock)
+  motherY() {
+    const R = this.motherRadius(), below = R * 1.22 + 8 + (22 + 3 * 24) + 24 + 30;   // card + today line + #meshHint
+    return Math.max(R * 1.22 + 6, Math.min(this.h / 2, this.h - below));
   },
   omegaAt(rx) {                           // rad/s; reference speed at the automatic orbit, ∝ r^-1.5
     const ref = this.orbitShape().rx, w0 = 6.283 / ORBIT_LAP;
@@ -76,7 +101,7 @@ Object.assign(Mesh.prototype, {
     live.forEach(n => {
       n.swell += ((this.hover === n.sid || n.dragging ? 1 : 0) - n.swell) * Math.min(1, realDt * 8);
       if (n.dragging) { n.vx = n.vy = 0; return; }
-      const h = this.orbitPos(orb[n.sid]);             // each session follows only its own orbit
+      const h = this.fitInView(n, this.orbitPos(orb[n.sid]));   // each session follows only its own orbit, kept on-screen
       n.vx += (h.x - n.x) * 2.2 * dt; n.vy += (h.y - n.y) * 2.2 * dt;
       const damp = Math.pow(.12, dt); n.vx *= damp; n.vy *= damp;
       n.x += n.vx * dt; n.y += n.vy * dt;

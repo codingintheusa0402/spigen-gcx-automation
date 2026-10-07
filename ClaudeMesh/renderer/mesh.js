@@ -178,7 +178,7 @@ class Mesh {
     this.w = r.width; this.h = r.height;
     this.c.width = Math.max(1, r.width * d); this.c.height = Math.max(1, r.height * d);
     this.ctx.setTransform(d, 0, 0, d, 0, 0);
-    this.hub.x = this.w / 2; this.hub.y = this.h / 2;
+    this.hub.x = this.w / 2; this.hub.y = this.motherY();
     if (this.cam) { this.clampCam(); Object.assign(this.cam, { tx: this.cam.ttx, ty: this.cam.tty }); }
   }
 
