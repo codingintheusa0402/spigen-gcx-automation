@@ -2,6 +2,11 @@
 
 Async Playwright scraper for Amazon `/dp/` product detail pages. Scrapes rating, review count, title, brand, color, size, compatibility, "About this item", and all spec table attributes across up to 8 Amazon domains simultaneously. Outputs a live-written `.xlsx` file with two sheets — English results and local-language results.
 
+## Screenshots
+
+![One-ASIN run against amazon.com](docs/run.jpg)
+*One-ASIN run against amazon.com*
+
 ## Features
 
 - **Headless Chromium** — no visible browser windows
@@ -12,6 +17,8 @@ Async Playwright scraper for Amazon `/dp/` product detail pages. Scrapes rating,
 - **Keyboard controls** (macOS, requires `pynput`): `⌥P` pause · `⌥R` resume · `⌥Q` quit
 
 ## Output
+
+Written to `$AMAZON_DP_OUT_DIR` if set, else `~/Desktop` (env var added 2026-09-11 for the 24/7 server, together with a missing `import os` fix). If `openpyxl` isn't installed the script falls back to two CSVs, `amazon_dp_<ts>_en.csv` and `amazon_dp_<ts>_locale.csv`.
 
 ```
 amazon_dp_YYYYMMDD_HHMMSS.xlsx
@@ -40,7 +47,7 @@ Columns captured (minimum; grows with new spec keys found):
 ## Usage
 
 ```bash
-# Scrape default ASIN list across all 8 domains
+# Scrape the built-in ASIN list (RAW_ASINS: 92 Spigen ASINs; KR* internal codes are skipped) across all 8 domains
 python3 amazon_dp_scraper.py
 
 # Specific ASINs only
@@ -48,6 +55,12 @@ python3 amazon_dp_scraper.py B0G7QZ7RMD B0G7RYP439
 
 # Specific ASINs + specific domains
 python3 amazon_dp_scraper.py B0G7QZ7RMD B0G7RYP439 --domains US UK DE
+
+# custom output folder
+AMAZON_DP_OUT_DIR=/tmp/dp python3 amazon_dp_scraper.py B0G7QZ7RMD --domains US
+
+# list the options (no browser is started)
+python3 amazon_dp_scraper.py --help
 ```
 
 ## Configuration
@@ -58,6 +71,8 @@ python3 amazon_dp_scraper.py B0G7QZ7RMD B0G7RYP439 --domains US UK DE
 | `LOCAL_TABS` | `2` | Slots per non-English language pool |
 | `PAGE_WAIT` | `2500 ms` | Wait after navigation before scraping |
 | `PAGE_TIMEOUT` | `60000 ms` | Max page load time |
+| `RAW_ASINS` | 102 codes | Default input list (entries starting with `KR` are dropped) |
+| env `AMAZON_DP_OUT_DIR` | `~/Desktop` | Output folder |
 
 ## Dependencies
 

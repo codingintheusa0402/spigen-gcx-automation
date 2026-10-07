@@ -2,12 +2,26 @@
 
 Tampermonkey userscripts for the Spigen GCX Amazon operations workflow.
 
+## Screenshots
+
+![GCX Reply v3.7.2 panel docked in a Zendesk ticket (order ID replaced with a placeholder)](docs/gcx_reply_panel.jpg)
+*GCX Reply v3.7.2 panel docked in a Zendesk ticket (order ID replaced with a placeholder)*
+
+| Script | Version | Runs on |
+|--------|---------|---------|
+| [GCX Reply](#gcx-reply-v372) | 3.7.2 | Zendesk agent UI + Seller Central MCF create-order |
+| [Amazon MCF Autofill](#amazon-mcf-autofill-v143) | 1.4.3 | Seller Central (EU/US) MCF create-order |
+| [Amazon JP MCF Autofill](#amazon-jp-mcf-autofill-v152) | 1.5.2 | Seller Central JP MCF create-order |
+| [Amazon Invoice Automation](#amazon-invoice-automation-v15) | 1.5 | Seller Central DE order pages |
+| [GChat Reply Suggest](#gchat-reply-suggest-v370) | 3.7.0 | Google Chat + Zendesk tickets |
+
 ---
 
 ## Scripts
 
-### GCX Reply (`v3.5.2`)
-**Matches:** `spigenhelp.zendesk.com/agent/tickets/*`
+### GCX Reply (`v3.7.2`)
+**Matches:** `spigenhelp.zendesk.com/agent/*` (panel on `/agent/tickets/*`) and Seller Central `…/mcf/orders/create-order*` pages (US/UK/DE/FR/IT/ES and `sellercentral-europe`), where it runs its embedded MCF autofill instead of the panel.
+**Backend:** [GAS_Zendesk/GCXReply_GAS](../../GAS_Zendesk/GCXReply_GAS/) (`GAS_URL` at the top of the script). Every released version is also archived there as `v{version}.gs`.
 
 Floating panel on Zendesk tickets. Fetches Amazon order data and Spigen product info, then fills all relevant ticket fields in one click. Also handles Amazon Buyer Message (ABM) replies and "No Response Needed" directly against Seller Central — no ChannelReply dependency.
 
@@ -24,6 +38,7 @@ Floating panel on Zendesk tickets. Fetches Amazon order data and Spigen product 
 - Auto-detects ASIN from Zendesk custom fields or page text
 - Looks up: SKU, 모델명, 브랜드, 제조사명, 기종명, 색상명, 대분류, 생산업체, 원산지정보
 - Data source priority: ASIN Master (Sheet1) → market sheet (Sheet2) → Amazon product page (fallback scrape)
+- Caching (v3.7.0 / v3.7.1): each ASIN's backend product response is kept 6 h in GM storage, and the Amazon `/dp/` page fetch is deduped, prefetched in parallel with the GAS lookup, and cached 12 h (successful fetches only). The manual **Product** button always bypasses the cache and refreshes it.
 - 판매 마켓 badges showing which marketplaces carry the product
 - ASIN Sources panel (collapsed by default): shows Sheet1, Sheet2, and Amazon data side by side
 
@@ -34,16 +49,27 @@ Floating panel on Zendesk tickets. Fetches Amazon order data and Spigen product 
 - Device and Product Name fields are matched to dropdown options using token similarity, with a candidate picker shown when genuinely ambiguous
 - A "what's new" popup shows once per version bump after Auto-Fill/panel changes ship
 
+**AI 인입사유 분석 button**: asks the backend's `inferReason` (Gemini) for the defect/inquiry-reason label of the current ticket text.
+
+**Notes / Seller Notes**: read-only views of the Zendesk user notes and the Seller Central Seller Notes for the order. Each can be toggled in ⚙.
+
 **→ MCF button** (appears after order data loads):
 - Opens the Amazon MCF create-order page (global or JP) in a new tab
 - Pre-fills recipient name, address, ASIN, and order ID via URL hash, picked up by the MCF Autofill script
 - Also runs its own embedded MCF-page autofill (SKU search + auto-select highest-fulfillable-quantity result, shipping speed, Order ID lookup) independent of the standalone MCF Autofill script below
+- **MCF 담당자** (v3.6.8+): the first time an agent sends to MCF in a browser, the SC MCF page asks "누구세요?" (양숙랑 / 나아름 / 임영신 / 김지우 / TCK). The pick is written to the `MCF 발송 로그` sheet's 담당자 column and can be changed later in ⚙. All three entry paths end up at the same prompt: the button, the Netlify-redirect link, and a direct or macro hyperlink.
+- The Order ID write on the SC page retries until the field renders (v3.6.15). v3.6.17 fixed silent sheet-write failures for 담당자 values that were missing from the sheet's validation list.
 
 **Amazon Buyer Message (ABM) handling:**
 - "Mark as NRN" button calls Seller Central's own internal messaging API directly (no ChannelReply) to mark a case resolved — works on any ABM ticket, order or not (case resolved from the buyer proxy address's embedded case ID)
 - Public replies to ABM tickets are auto-relayed to the matching Seller Central case via the agent's own SC session; a reconciliation sweep catches replies that failed to relay (no SC session, page not open, etc.)
 - Relay success/failure toasts and the floating "N replies not yet delivered" badge can be muted per-agent (⚙ → Alerts → ABM 전송 알림); the panel header's static **ABM** button always shows the undelivered count and opens the full relay-status log on demand — per-ticket links, per-row Retry / Mark delivered, checkbox selection with "Retry selected" (plus select-all) alongside "Retry all"
-- Persistent banner warns when a required marketplace's Seller Central login session is missing, with direct login links
+- Persistent banner warns when a required marketplace's Seller Central login session is missing, with direct login links. JP uses `sellercentral-japan.amazon.com` (fixed 2026-08-14). EU marketplaces including IE and BE are redirected to the DE Seller Central, on both the initial send and the retry path.
+- The badge and the header count only alert on replies that have gone **undelivered for more than 1 hour** (v3.6.1), so in-flight sends don't show as failures.
+- Relay detection matches the reply comment's shape inside Zendesk's GraphQL POST, including batched operations, instead of relying on the `UpdateTicketMutation` operation name. This catches macro-driven solve+reply (v3.6.19). The duplicate-send guard (`claimAbmSend`) keys on **normalized** reply text, because Zendesk re-serializes the same visible text with different HTML (v3.6.20).
+- Every open ticket tab also runs a background **retry sweep** every 5 min. It claims and delivers queued `ABM_Relay_Log` rows, including ones queued by ABM_TicketMerge's reconciliation.
+- **Raw ABM email collapse:** ABM_TicketMerge posts a clean text copy next to each raw Amazon-template comment. The script folds each raw comment behind a "▶ Show original Amazon email" toggle, but only when its own clean copy directly follows it (v3.6.18). Unpaired raw messages stay visible.
+- **Detected-language auto-correct** (v3.6.2): once the buyer's country is known, the script sets Zendesk's "Detected language" picker to match (for example FR → French). This changes UI state only and makes no network write.
 
 **Panel UX:**
 - Draggable (grab header) and resizable (drag bottom-right corner)
@@ -51,7 +77,8 @@ Floating panel on Zendesk tickets. Fetches Amazon order data and Spigen product 
 - Compact layout mode auto-activates when panel width < 260px
 - Auto-resets when navigating between tickets (SPA-aware)
 - Load log at the bottom shows live fetch steps for debugging
-- Settings drawer (⚙): Liquid Glass effect toggle, per-section data-fetch toggles (Order/Shipping/Product Info)
+- Header always stays on-screen: saved positions are clamped on restore, drag, resize and window resize (v3.7.2). This keeps ⚙ reachable on small screens.
+- Settings drawer (⚙): **Dock in Apps panel**, data-fetch toggles (Order Info / Shipping Address / Product Info), Notes, Seller Notes, Debug log, **Alerts → ABM 전송 알림**, **MCF 담당자**. The Liquid Glass (html2canvas/WebGL) effect was removed; the old build is kept as `GCX Reply - Liquid Glass backup.user.js` (v2.17.20, reference only, don't install alongside).
 
 **Fallbacks:**
 - If SP-API lacks buyer PII permission, fetches buyer email and 2-year order/item stats from the agent's existing Seller Central session
@@ -133,10 +160,29 @@ Alt+G behaves differently depending on the Chat room. **The deterministic ticket
 
 ---
 
+## Files
+
+| File | Purpose |
+|------|---------|
+| `*.user.js` | The installable scripts |
+| `GCX Reply - Liquid Glass backup.user.js` | Frozen v2.17.20 build with the old Liquid Glass UI. Reference only: it shares GCX Reply's `@updateURL`, so installing it would overwrite itself with the current GCX Reply. |
+| `*.options.json` / `*.storage.json` | Tampermonkey per-script export (settings, empty storage) |
+| `Amazon MCF Autofill.meta.js` | Stale v1.1.0 metadata stub. The current `.user.js` points `@updateURL` at itself, so this file is unused. |
+| `../gchat_reply_suggest_server.py` | Local backend for GChat Reply Suggest's AI mode (`127.0.0.1:8765`). Finds the Claude CLI via `$CLAUDE_BIN`, then `PATH`, then the per-user install, so it also runs on the Windows server. |
+
 ## Installation
 
 1. Install the [Tampermonkey extension](https://www.tampermonkey.net/) in Chrome.
 2. Get the `.user.js` file for the script you want to install.
 3. Drag the file into the Tampermonkey Dashboard, or open it and click "Install" when prompted.
 
-Once installed, Tampermonkey checks the `@updateURL` in the script header and auto-updates when a new version is pushed.
+Once installed, Tampermonkey checks the `@updateURL` in the script header (raw GitHub `main` of `codingintheusa0402/spigen-gcx-automation`) and auto-updates when a new version is pushed. Amazon Invoice Automation has no `@updateURL`, so it must be reinstalled by hand.
+
+**Zendesk is a single-page app.** After an update, open Zendesk tabs keep running the old script until they are hard-reloaded (Cmd+Shift+R).
+
+## Releasing a GCX Reply change
+
+1. Bump `@version` **and** `CURRENT_VERSION` in `GCX Reply.user.js`. If the change should show a "what's new" popup, add a `CHANGELOG_` entry.
+2. Copy the file verbatim to `GAS_Zendesk/GCXReply_GAS/v{version}.gs`.
+3. If the backend changed too, `clasp push --force` and `clasp deploy -i <deployment id>` in `GCXReply_GAS` (see that README).
+4. Commit and push to `main`. Agents pick up the change through Tampermonkey's auto-update.

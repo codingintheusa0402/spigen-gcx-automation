@@ -1,8 +1,6 @@
 # TriggerAlert
 
-Google Apps Script project that syncs a Monday.com board into a Google Spreadsheet. Opens a live-log sidebar in the sheet UI showing sync progress, and writes board items and their column values as rows.
-
-**Script ID:** `1WwwnwKuPbpdTGG6Uozx1Mr0AZU9mD_hc3UzHq82e_t-GjRe2eQ_4K-Fp`
+⚠️ **Legacy / do-not-push folder.** Despite the name, this project contains no trigger-alerting logic — `Code.js` is an **older copy of the Monday.com → Sheet sync** template (board `7606389164`), and its `.clasp.json` points at the **same script ID as [ASIN_Master_MondaySync](../ASIN_Master_MondaySync/)** (`1WwwnwKuPbpdTGG6Uozx1Mr0AZU9mD_hc3UzHq82e_t-GjRe2eQ_4K-Fp`). Running `clasp push` here would overwrite the live ASIN_Master project and remove its ABM_Relay_Log cleanup and its stale run-lock fix. Make changes in `ASIN_Master_MondaySync/` (or `Monday_CX_Board/`) instead.
 
 ---
 
@@ -10,41 +8,30 @@ Google Apps Script project that syncs a Monday.com board into a Google Spreadshe
 
 | File | Purpose |
 |------|---------|
-| `Code.js` | `syncMondayBoardToSheet()`, sidebar UI HTML, progress logger |
+| `Code.js` | `syncMondayBoardToSheet()`, modeless-dialog UI HTML, progress logger (pre-2026-08-12 version) |
 | `appsscript.json` | GAS manifest |
 
 ---
 
-## Configuration (top of `Code.js`)
+## What the code does
 
-| Constant | Default | Notes |
-|----------|---------|-------|
-| `BOARD_ID` | `7606389164` | Monday.com board ID — change per sheet |
-| `MONDAY_API_KEY_HARDCODED` | `''` | Set here or in Script Property `MONDAY_API_KEY` |
-| `PAGE_LIMIT` | `500` | Max items fetched per run |
+Identical to the Monday-sync half of ASIN_Master_MondaySync as it was before 2026-08-12:
+
+- `onOpen()` → **Monday.com → 업데이트하기** → `showMondaySyncDialog()` → `syncMondayBoardToSheet(reqId)`.
+- 3-pass GraphQL fetch (items → formula columns → per-item fill-in), written to the **active sheet** with header formatting preserved.
+
+| Constant | Value | Notes |
+|----------|-------|-------|
+| `BOARD_ID` | `7606389164` | Same board as ASIN_Master |
+| `MONDAY_API_KEY_HARDCODED` | `''` | Otherwise Script Property `MONDAY_API_KEY` |
+| `PAGE_LIMIT` | `500` | `items_page` page size (not a total cap) |
 | `RESPECT_SHEET_FORMATS` | `true` | Preserve existing cell formatting on write |
+| `RUN_LOCK_KEY` | `MONDAY_SYNC_LOCK` | ⚠️ No staleness check — a killed run leaves the lock set forever (the bug fixed in ASIN_Master_MondaySync / Monday_CX_Board) |
 
----
-
-## Usage
-
-Open the linked spreadsheet → **Monday.com → 업데이트하기**.
-
-A modeless dialog opens showing a live sync log. The script fetches all items from the configured board (paginated, up to `PAGE_LIMIT`) and writes them to the active sheet.
-
-To sync a different board, update `BOARD_ID` in `Code.js` and redeploy.
-
----
-
-## Script Property (alternative to hardcoded key)
-
-Set `MONDAY_API_KEY` in **Extensions → Apps Script → Project Settings → Script Properties** instead of hardcoding it in `Code.js`.
+No ABM_Relay_Log cleanup, no `RUN_LOCK_STALE_MS`, no triggers in code.
 
 ---
 
 ## Deployment
 
-```bash
-cd ~/Desktop/GCX/GAS_Operations/TriggerAlert
-clasp push --force
-```
+Don't. If this folder is ever repurposed, first point `.clasp.json` at its own new script ID.

@@ -8,6 +8,11 @@ Monday.com **Galaxy Z8 Case+CP** 보드(`18421346787`)를 매일 오후 5시(KST
 **Pixel 11 버전:** [Pixel11_MondayToSheet](../Pixel11_MondayToSheet/) — 같은 코드, 보드 `18425190666`
 **Monday 보드:** `18421346787` (📌Galaxy Z8 Case+CP)
 
+## Screenshots
+
+![`해외&국내 리뷰+클레임 데이터` tab pulled from the monday board (order IDs blurred)](docs/board_export.jpg)
+*`해외&국내 리뷰+클레임 데이터` tab pulled from the monday board (order IDs blurred)*
+
 ---
 
 ## 동작 방식
@@ -51,40 +56,35 @@ Monday.com **Galaxy Z8 Case+CP** 보드(`18421346787`)를 매일 오후 5시(KST
 
 ---
 
-## 최초 설정 방법
+## 메뉴 / 함수
 
-1. 대상 스프레드시트 열기 → **확장 프로그램 → Apps Script**
-2. 기본 `Code.gs` 내용을 지우고 이 폴더의 `Code.js` 내용을 붙여넣기
-3. `appsscript.json`은 편집기 좌측 ⚙ 프로젝트 설정에서 "appsscript.json 매니페스트 파일을 편집기에 표시" 체크 후 내용 반영
-4. **프로젝트 설정 → 스크립트 속성**에서 속성 추가:
-   - 키: `MONDAY_API_KEY`
-   - 값: Monday.com API 토큰 (코드에 직접 넣지 마세요)
-5. 함수 선택 드롭다운에서 `setupDailyTrigger` 선택 후 ▶ 실행 (최초 1회, 권한 승인 필요)
-   → 매일 오후 5시경(KST) 자동 실행되는 트리거가 등록됩니다
-6. 바로 테스트하려면 시트를 새로고침한 뒤 메뉴 **Monday.com → 지금 동기화 (전체 새로고침)** 클릭
-   → 진행 상황과 결과(성공/실패, 처리 행 수)를 보여주는 팝업 창이 뜹니다
+| 메뉴 (Monday.com) | 함수 | 설명 |
+|---|---|---|
+| 지금 동기화 (전체 새로고침) | `openSyncDialogAndRun()` → `syncMondayToSheet()` | 진행 팝업과 함께 즉시 전체 새로고침 |
+| 일일 자동 실행 설정 (최초 1회) | `setupDailyTrigger()` | 기존 `syncMondayToSheet` / `appendNewMondayItems` 트리거 삭제 후 매일 `RUN_TRIGGER_HOUR`(17)시 KST 트리거 등록 |
+| 보드 컬럼 ID 목록 보기 (진단용) | `listBoardColumns()` | 보드 컬럼 id/title/type을 `_diag_columns` 탭에 기록 |
+| 항목 1개 전체 컬럼 덤프 (진단용) | `dumpItemColumns()` | 입력한 item_id의 모든 column_values를 `_diag_item_<id>` 탭에 기록 |
 
-> 이미 예전 버전(신규 항목만 append하던 버전)의 일일 트리거를 등록해둔 상태라면, 코드 업데이트 후 **`setupDailyTrigger`를 한 번 다시 실행**해서 트리거를 새 함수(`syncMondayToSheet`)로 갱신하세요. (기존 트리거는 자동으로 삭제되고 새로 등록됩니다)
+- `syncMondayToSheet()`는 `LockService` 스크립트 락을 사용 — 이미 실행 중이면 건너뜀.
+- 진행 로그는 `CacheService`(`MONDAY_SYNC_LOG` / `MONDAY_SYNC_DONE`, 6h TTL)로 팝업에 전달.
+- 대상 탭(`SHEET_NAME`)이 없으면 **활성 시트**에 씀 — 탭 이름을 바꾸면 `Code.js`도 같이 수정할 것.
+- Monday 조회는 `PAGE_LIMIT` = 500 단위 페이지네이션.
+
+---
+
+## 설정 / 배포
+
+- 코드 배포: 이 폴더에서 `clasp push --force` (로컬 `.clasp.json`에 스크립트 ID 포함 — git에는 추적되지 않음; 2026-09-11부터 clasp 관리)
+- **스크립트 속성** `MONDAY_API_KEY` 필요 (프로젝트 설정 → 스크립트 속성; 코드에 직접 넣지 않음)
+- 최초 1회 `setupDailyTrigger` 실행 (권한 승인 필요) → 매일 17:00(KST) `syncMondayToSheet` 트리거 등록
+- 예전 append 전용 버전(`appendNewMondayItems`) 트리거가 남아 있다면 `setupDailyTrigger`를 한 번 다시 실행하면 자동으로 교체됨
 
 ---
 
 ## 참고
 
 - Apps Script 트리거는 정확히 17:00이 아니라 17:00~17:15 사이 정도에 실행될 수 있습니다 (Google 스케줄러 특성).
-- 자동(매일) 실행은 팝업 없이 조용히 진행되며, 실행 기록/오류는 Apps Script 편집기의 **실행 로그**(왼쪽 시계 아이콘)에서 확인 가능합니다.
-- 수동 실행 시 뜨는 팝업은 실행 중에는 1초마다 진행 로그를 갱신해서 보여주고, 완료되면 성공/실패 여부와 처리된 행 수를 표시합니다.
-- ⚠️ Monday API 토큰이 이번 작업 중 채팅에 노출되었으니, Monday.com에서 토큰을 재발급(rotate)하고 위 스크립트 속성 값을 새 토큰으로 교체하는 것을 권장합니다.
-
-## clasp 연동 (선택)
-
-다른 프로젝트처럼 clasp로 관리하려면, 3번 과정에서 생성된 Apps Script 프로젝트의 스크립트 ID를 확인 후:
-
-```json
-// .clasp.json
-{
-  "scriptId": "<여기에 스크립트 ID>",
-  "rootDir": "."
-}
-```
-
-파일을 이 폴더에 추가하면 `clasp push`로 이후 업데이트를 배포할 수 있습니다.
+- 자동(매일) 실행은 팝업 없이 조용히 진행되며, 실행 기록/오류는 Apps Script 편집기의 **실행 로그**에서 확인 가능합니다.
+- 수동 실행 시 뜨는 팝업은 실행 중에는 1초마다 진행 로그를 갱신하고, 완료되면 성공/실패 여부와 처리된 행 수를 표시합니다.
+- 2026-09-11 변경: 로컬 `Code.js`를 라이브와 일치시킴 — 탭 이름 `Sheet1` → `해외&국내 리뷰+클레임 데이터`, `사진 유무`(`formula_mm7184wc`)·`Review Ratings`(`text_mm0fn5c0`) 컬럼 추가, `데이터 출처`를 `formula_mm5hrmzb`로 정정.
+- ⚠️ 과거 작업 중 Monday API 토큰이 채팅에 노출된 적이 있으므로, 아직 교체하지 않았다면 Monday.com에서 토큰을 재발급(rotate)하고 스크립트 속성 값을 교체하는 것을 권장합니다.

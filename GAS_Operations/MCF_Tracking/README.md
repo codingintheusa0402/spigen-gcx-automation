@@ -1,23 +1,48 @@
 # MCF_Tracking
 
-Google Apps Script project for Spigen GCX — Multi-Channel Fulfillment (MCF) order tracking, stock lookup, fee estimation, and daily reporting to Google Chat.
+Google Apps Script project for Spigen GCX — Multi-Channel Fulfillment (MCF) order tracking, fee
+backfill, stock lookup and a daily Google Chat report, bound to the `MCF 발송 로그` spreadsheet. It
+resolves Amazon tracking numbers via SP-API custom formulas (`=AMZTK()` / `=AMZTK_JP()`), writes
+settled MCF fulfillment fees into col Y from Settlement Reports, keeps the `GStore MCF 발송 로그`
+tab's tracking column filled, and serves the web-app endpoint the GCX Reply Tampermonkey script uses
+to mark a row as MCF and read back its Order ID.
 
-**GAS Script ID:** `1kDfEUVEEJ7TCA3HOMF6EYFTjbeZZKIeg_X84wCbLT1-tQqJI2ZlPUCxp`  
-**Linked sheet:** `MCF 발송 로그` (Spreadsheet ID: `1g6a-S7eeA1oY19aTEFhTNAyp2A5nLqLNkPRqOqriWfc`)
+**GAS Script ID:** `1kDfEUVEEJ7TCA3HOMF6EYFTjbeZZKIeg_X84wCbLT1-tQqJI2ZlPUCxp` (bound)  
+**Spreadsheet:** `1g6a-S7eeA1oY19aTEFhTNAyp2A5nLqLNkPRqOqriWfc` — tabs `MCF 발송 로그` (gid 1608794212,
+header row 3, data from row 4), `GStore MCF 발송 로그` (data from row 5), hidden `_SettlementFeeCache`
+
+## Screenshots
+
+![`MCF 발송 로그` tab (customer names and tracking numbers blurred)](docs/mcf_log.jpg)
+*`MCF 발송 로그` tab (customer names and tracking numbers blurred)*
 
 ---
+
+## Active triggers (live script)
+
+| Handler | Schedule | What it does |
+|---|---|---|
+| `backfillMCFFeesRecent()` | every 30 min | Col Y fees from the last ~89 days of Settlement Reports + `getFulfillmentPreview` estimate fallback |
+| `retryR429Errors()` | hourly | Re-fetches col R cells showing 429, then calls `resolveBlankTrackingNumbers()` (GStore top-up + both sheets) |
+| `MCFReporter()` | weekdays 9 AM KST | Chat card listing rows with a Tracking No. but empty col S |
+| `onEdit_mcf(e)` | installable on-edit | Row automation (see `onEdit` section) |
+
+Triggers were created from the Apps Script **Triggers** UI (there is no installer in the code except
+`triggerTester()`); manage them there. `dailyTrackingMaintenance()` was removed on 2026-07-31.
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `sp-api.js` | SP-API auth (LWA + AWS SigV4), core fetch, retry logic, and all custom sheet formulas (`AMZTK`, `AMZTK_JP`, `MCFFee`, `MCFFee_JP`, `getMcfStockByAsin`, `MCFFeeDebug`) |
-| `autoFill.js` | `onEdit` trigger, `backfillMCFFees()`/`backfillMCFFeesRecent()` (batch fee writes to col Y via Settlement Reports). `backfillTrackingNumbers()`, `freezeTrackingColumnR()`, `dailyTrackingMaintenance()` are **disabled** (col Z is not a tracking-number cache — see `retryR429Errors()` section) |
-| `main.js` | `MCFReporter` — daily Google Chat card alert listing rows missing a tracking number |
-| `MCFGen.js` | (Archived / commented out) MCF order creation and stock-check helpers via SP-API |
-| `triggerGen.js` | `triggerTester()` — schedules a one-off `MCFReporter` test run 1 minute out |
-| `tamperMonkey.js` | TamperMonkey-related helpers |
-| `appsscript.json` | GAS manifest (timezone, OAuth scopes) |
+| `sp-api.js` | SP-API auth (LWA + AWS SigV4), core fetch/retry, custom formulas (`AMZTK`, `AMZTK_JP`, `MCFFee`, `MCFFee_JP`, `MCFFeeDebug`, `MCFFeeDebugWide`, `getMcfStockByAsin`), Settlement Report fee map + `_SettlementFeeCache`, cache-clear utilities (`clearMcfFeeCache`, `clearAmztkCache`, `clearSettlementScanCache`, `pruneFeeCacheToGcxOnly`) |
+| `autoFill.js` | `onEdit_mcf`, fee backfills (`backfillMCFFees`, `backfillMCFFeesRecent`, `fillPreviewEstimatesForRange`, `retryZeroTransportationFees`, `recoverAllZeroTransportationFees`, `auditYColumnFees`), tracking maintenance (`retryR429Errors`, `resolveBlankTrackingNumbers`, `installGStoreTrackingFormulas`, `unfreezeAmztkFormulas` / `freezeAmztkFormulas`). `backfillTrackingNumbers()`, `freezeTrackingColumnR()`, `dailyTrackingMaintenance()` are **disabled** stubs (see below) |
+| `tamperMonkey.js` | Web app `doGet` used by GCX Reply's MCF autofill (see below) |
+| `main.js` | `MCFReporter` — daily Google Chat card of rows missing a tracking entry |
+| `MCFGen.js` | Archived — MCF order creation / stock-check helpers, **entirely commented out** |
+| `triggerGen.js` | `triggerTester()` — schedules a one-off `MCFReporter` run 1 minute out |
+| `_diag.js` | `diagCheckAug12PlusRows()` — read-only col Y diagnostic |
+| `_oneTime*Backfill.js` | One-time col Y fee backfills from locally parsed settlement reports (May 2026, Jul–Aug, JP Oct–Dec, UK, UK July). Each says "run once, then delete" |
+| `appsscript.json` | Manifest (`Asia/Seoul`, V8, scopes spreadsheets / external_request / scriptapp; web app `USER_DEPLOYING`, `ANYONE_ANONYMOUS`) |
 
 ---
 
@@ -104,6 +129,7 @@ Set these in **Extensions → Apps Script → Project Settings → Script Proper
 | `SPAPI_HOST_FE` | Defaults to `sellingpartnerapi-fe.amazon.com` |
 | `SPAPI_REGION_EU` | Defaults to `eu-west-1` |
 | `SPAPI_REGION_FE` | Defaults to `us-west-2` |
+| `SETTLEMENT_SCANNED_<endpoint>` | Written by the script — settlement report IDs already scanned (reset with `clearSettlementScanCache()`) |
 
 **Required SP-API roles:**
 - `Amazon Fulfillment` — tracking lookup (`AMZTK`), stock lookup, `MCFFee` (both methods)
@@ -409,26 +435,44 @@ the old 5-min trigger was deleted and replaced with a correct 30-min one.
 
 ---
 
-## `onEdit` Automation (`autoFill.js`)
+## `onEdit` Automation (`autoFill.js` → `onEdit_mcf`)
 
-Fires on any edit in the `MCF 발송 로그` sheet (rows 4+):
+Installable on-edit trigger; only acts on the `MCF 발송 로그` tab, rows 4+:
 
 | Trigger column | Action |
 |---------------|--------|
 | Col I (9) | Writes today's date to col M if empty |
 | Col N (14) | Sets col S to `Pending` if col S is empty |
 | Col U (21) | Writes today's date to col P (if empty) and sets col S to `MCF` |
-| Col F (6) | Calls `updateMcfStockForRow` to refresh stock in col H |
 | Col Y (25) | Writes today's date to col T (if empty) and sets col W to `MCF` |
-| Col AB (28) = `STOCK` | Runs stock check only (`runStockCheckOnly`) |
-| Col W (23) = `RUN` | Runs full MCF row processing (`processMCFRow`) |
+| Col F (6), Col AB (28) = `STOCK`, Col W (23) = `RUN` | Call `updateMcfStockForRow` / `runStockCheckOnly` / `processMCFRow` — ⚠️ these live in the commented-out `MCFGen.js`, so these branches currently throw `ReferenceError` (logged, no sheet change) |
+
+---
+
+## Web app for GCX Reply (`tamperMonkey.js`)
+
+`doGet(e)` — JSON endpoint called by the GCX Reply Tampermonkey script (Seller Central MCF flow).
+
+| Param | Meaning |
+|---|---|
+| `email` (required) | Customer email; matched against col H after stripping any `+<uuid>` segment on both sides (ABM proxy addresses are per-case — fixed 2026-08-14) |
+| `match` | `first` (default) or other match mode for duplicate emails |
+| `action=markMcf` + `person` | Writes 담당자 (col U; isolated so an off-list name in the strict dropdown can't abort the rest — fixed 2026-08-18), date (col P) and Status `MCF`, flushes, and returns the Order ID the col Q formula generates (`GCX-{B}-{YYMMDD}-{A}`) |
+| (no action) | Polls col Q for up to 10 s and returns the Order ID |
+
+Deployed as a web app (`USER_DEPLOYING`, anonymous access); after changes, redeploy the existing
+deployment so the URL the Tampermonkey script calls stays the same.
 
 ---
 
 ## Daily Report (`main.js`)
 
 `MCFReporter` runs on a time-based trigger (weekdays 9 AM KST).  
-It scans the `MCF 발송 로그` sheet for rows where col R is filled but col S is empty (order sent, tracking not yet entered) and posts a Google Chat card to the GCX T2 ESC. Ticket space with direct row-jump links.
+It scans the `MCF 발송 로그` sheet for rows where col R is filled but col S is empty and posts a cardsV2
+card (`MCF Daily Report`, subtitle `Tracking No. 미기입: N개 (date)`, one "N행 이동" row-jump button per
+row) to the GCX T2 ESC. Ticket space, retrying up to 5 times. The webhook URL is currently hard-coded in
+`main.js` (`<WEBHOOK_URL>`; a commented-out line points at the private test space) — moving it to a
+Script Property is recommended.
 
 ### Setting triggers
 
@@ -442,23 +486,22 @@ triggerTester()    // schedules MCFReporter 1 minute from now for testing
 ## Version Control & Deployment
 
 ```bash
-# Pull latest from GAS
 cd ~/Desktop/GCX/GAS_Operations/MCF_Tracking
-clasp pull
+clasp pull            # pull latest from GAS
+clasp push --force    # push changes (custom formulas + triggers use HEAD)
 
-# Push changes to GAS
-clasp push
-
-# Commit and push to GitHub
 cd ~/Desktop/GCX
-git add MCF_Tracking/
+git add GAS_Operations/MCF_Tracking/
 git commit -m "..."
 git push
 ```
 
+`clasp push` does not move the web-app deployment — for `tamperMonkey.js` changes also run
+`clasp deploy -i <deploymentId>`.
+
 ## GStore MCF 발송 로그 — Tracking Number (col P)
 
-Same scheme as "MCF 발송 로그" col R, on the Google Store replacement sheet:
+Added 2026-10-07. Same scheme as "MCF 발송 로그" col R, on the Google Store replacement sheet:
 B = MCF 발송 국가, N = 발송일자, O = MCF Order ID, **P = Tracking Number**, data from row 5.
 
 - P5:P1000 hold a live formula (`installGStoreTrackingFormulas()` re-creates it in empty cells only):

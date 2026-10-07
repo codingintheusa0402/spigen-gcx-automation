@@ -1,39 +1,68 @@
 # Caspi 판매량 Backfill
 
-`backfill.py` fills column Z (판매량, EU+UK Amazon FBA) on the `1-5점` tab of the
-three review-monitoring spreadsheets (iPhone 18 / Pixel 11 / Galaxy Z Fold8-Flip8-Fold8
-Ultra Series), from each product's fixed launch-date baseline through Caspi's latest
-available daily snapshot.
+`backfill.py` fills column **Z (판매량, EU+UK Amazon)** on the `1-5점` tab of the three
+review-monitoring spreadsheets (iPhone 18 / Pixel 11 / Galaxy Z Fold8-Flip8-Fold8 Ultra
+Series) with **cumulative units sold per base SKU** from each product's start date
+through Caspi's latest order day.
 
-Runs unattended via launchd (`~/Library/LaunchAgents/com.spigen.gcx.caspi-sales-backfill.plist`),
-fired every 30 min. Each tick is a no-op unless it's a weekday between 08:00-23:59 KST
-**and** a given product hasn't already succeeded that day — so a normal day writes once
-around 8-9AM, and if the Mac was off/asleep through the usual window, the first tick
-after it wakes catches up later the same day rather than skipping it.
+## Screenshots
 
-## Data source
+![iPhone 18 `1-5점` tab: SKU column Q that the backfill keys on (order IDs blurred)](docs/sku_column.jpg)
+*iPhone 18 `1-5점` tab: SKU column Q that the backfill keys on (order IDs blurred)*
 
-Caspi registered query `pq_bc4163d82dce2e4d38` ("판매량_EU_backfill_delta_by_baseline_date"),
-called headlessly via `POST https://caspilm.spigen.com/api/data-api/run` with an API key
-— no live Claude session needed. Underlying table:
-`S3.AMAZON_SELLER.RESTOCK_INVENTORY_RECOMMENDATIONS_REPORT` (Amazon Seller Central FBA
-restock report, DE/FR/ES/IT/GB only — no US/JP/IN despite those countries appearing
-elsewhere in the sheet).
+## Schedule
 
-Per SKU: `delta = SUM(Units Sold Last 30 Days @ latest snapshot) − SUM(... @ baseline date)`,
-grouped by the 8-char base SKU across all country/color variants. Negative deltas (return/
-report-recalc noise) are floored to 0; a SKU with no baseline-date row is treated as
-baseline=0 (its full latest value counts); a SKU with zero Caspi rows at all is left blank.
+Since 2026-10-07 it runs on the 24/7 GCX server crontab (`ServerBootstrap/crontab.txt`),
+every 30 min:
+
+```
+*/30 * * * *  cd $G/GAS_Operations/CaspiSalesBackfill && python3 backfill.py
+```
+
+The old Mac LaunchAgent (`com.spigen.gcx.caspi-sales-backfill.plist`) is parked in
+`~/Library/LaunchAgents/disabled-moved-to-server/` — don't run both.
+
+Each tick is a no-op unless it's a **weekday 08:00–23:59 KST** and a product hasn't
+already succeeded today (`state.json` → `last_success_date`). So a normal day writes once
+around 08:00, and a missed window is caught up later the same day.
+
+## How it works
+
+1. For each pending product, calls the Caspi registered query
+   **`판매량_EU_cumulative_since_start_date`** (queryId read from `secrets.json` →
+   `caspi_query_id_cumulative`; param `start_date`) via
+   `POST https://caspilm.spigen.com/api/data-api/run` (paged by `nextOffset`).
+   Source table: `S3.AMAZON_SELLER.FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL` —
+   EU+UK marketplaces (DE/FR/IT/ES/UK/NL/SE/PL/BE/IE), Cancelled excluded, deduped per
+   order+SKU, purchase date ≥ `start_date`. Returns `BASE_SKU`, `UNITS`.
+2. Reads `1-5점!A2:Z`, matches column **Q** (SKU) to `BASE_SKU`, writes `Z2:Z` (RAW).
+   SKUs with no orders are left blank.
+3. Sets a note on the Z header cell: `last updated <date> from <table> (accumulated from <start_date>)`.
+4. Saves state after each product, so a crash keeps partial progress.
+
+> **2026-10-01 change:** until then Z used `RESTOCK_INVENTORY_RECOMMENDATIONS_REPORT`
+> "Units Sold Last 30 Days" (latest minus a baseline snapshot). That was a rolling 30-day
+> FBA EU5 number, not cumulative, and the baseline never matched — replaced by the
+> cumulative orders query above.
 
 ## Config
 
-Per-product spreadsheet ID, sheet ID, and baseline/start date live in the `PRODUCTS` list
-at the top of `backfill.py`. Secrets (Caspi API key + registered queryId) and per-day
-success state live outside the repo at `~/.config/caspi_sales_backfill/` (`secrets.json`,
-`state.json`) — never committed.
+`PRODUCTS` at the top of `backfill.py`:
 
-Full method + caveats (this is a directional estimate, not Caspi's canonical `실판매`
-source): see memory `caspi_판매량_backfill_workflow.md`.
+| key | Spreadsheet ID | `1-5점` sheetId | start_date |
+|-----|----------------|-----------------|------------|
+| `iphone18` | `1aYxZRm7pf5Egx6fIoAGpGg8CWzHaZ_zsBRKsvh9U1iU` | `957652957` | 2026-09-18 |
+| `pixel11` | `12I6z_FFmDIMHa0rLanltKKFp7kI_yREQj3adkMamPgI` | `957652957` | 2026-08-18 |
+| `glxz8` | `19OhswglYMx_dxSFFDtWI1WYPWq2jONJn6RK84KITwy4` | `957652957` | 2026-07-27 |
+
+Outside the repo (never committed):
+
+- `~/.config/caspi_sales_backfill/secrets.json` — `caspi_api_key`, `caspi_query_id_cumulative`
+- `~/.config/caspi_sales_backfill/state.json` — per-product `last_success_date`, `last_run_at`
+- `~/.config/gws_shim/token.json` — Sheets API OAuth token (`kjw@spigen.com`, GCP `gcxbot`)
+
+Logs: `logs/launchd.{out,err}.log` (gitignored). This is a directional estimate, not
+Caspi's canonical `실판매` source — see memory `caspi_판매량_backfill_workflow.md`.
 
 ## Manual run
 
@@ -41,4 +70,6 @@ source): see memory `caspi_판매량_backfill_workflow.md`.
 python3 backfill.py
 ```
 
-Safe to re-run any time — it's a no-op for any product that already succeeded today.
+Writes to the live sheets (there is no dry-run flag). Safe to re-run — no-op for any
+product that already succeeded today; delete that product's entry in `state.json` to
+force a rewrite.

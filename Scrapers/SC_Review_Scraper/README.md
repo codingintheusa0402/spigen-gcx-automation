@@ -1,16 +1,25 @@
 # Seller Central Review Scraper
 
-Scrapes reviews from Amazon Seller Central and enriches each review with customer-attached image URLs. Top-level domains (US, EU, JP, IN) scrape in parallel; within EU, sub-countries scrape sequentially on one shared tab. Configurable per marketplace, star filter, detection avoidance level, and output columns.
+Scrapes reviews from Amazon Seller Central (Brand Customer Reviews) and enriches each review with customer-attached image URLs and the Amazon Order ID. Top-level domains (US, EU, JP, IN) scrape in parallel; within EU, sub-countries scrape sequentially on one shared tab. At the end of a run all domain CSVs are merged into a dated `SC_{yymmdd}` tab of the source review spreadsheet, append-only and deduplicated by Review ID. Configurable per marketplace, star filter, detection avoidance level, and output columns.
+
+The uploaded `SC_{yymmdd}` tab is then distributed to the product monitoring books by [`../SC_Master_Propagate`](../SC_Master_Propagate/README.md) (`sc-review-propagate` skill).
+
+## Screenshots
+
+![End of a real run (2026-10-07): per-marketplace review counts and the append-only `SC_261007` upload](docs/run_summary.jpg)
+*End of a real run (2026-10-07): per-marketplace review counts and the append-only `SC_261007` upload*
 
 ## How it works
 
-1. **Auto-launch Chrome** — Starts Chrome with a dedicated scraper profile (`~/.chrome-scraper-profile`) and remote debugging on port 9222. Sessions persist between runs — log in once, done.
+1. **Auto-launch Chrome** — Launches installed Google Chrome through Playwright's `launch_persistent_context(channel="chrome")` on a dedicated scraper profile (`~/.chrome-scraper-profile`). No CDP / remote-debugging port is used (CDP-attached sessions blocked downloads). Sessions persist between runs — log in once, done. On the unattended deployment (credentials file set) each account group gets its own profile, `~/.chrome-scraper-profile_<US|EU|JP|IN>`, because one Chrome profile can only hold one signed-in Amazon identity.
 2. **Session check** — Navigates to each SC portal and checks if the session is still valid. Skips the login step entirely for portals that are already authenticated.
 3. **Login tabs** — Only for portals that need login: opens one tab per SC endpoint (US, EU, JP, IN). Complete login + OTP on all tabs, then press Enter (interactive) or wait for the countdown (background run).
-4. **Parallel scraping** — Top-level domains (US, EU, JP, IN) each get their own tab and scrape simultaneously. EU sub-countries (DE → IT → FR → ES → UK) run **sequentially** on one shared tab — all EU countries share the same SC Europe session cookie so parallel tabs would race each other. DE scrapes first; all remaining countries reuse the same tab, switching marketplace via the account-switcher dropdown before each country. Reusing one tab keeps the SC Europe session active throughout the entire EU run. If the session expires between countries anyway, the script detects the login redirect, pauses up to `MID_RUN_LOGIN_WAIT_SECONDS` (default 120 s) for you to complete OTP, then retries the marketplace switch and current page automatically — no data is lost.
+4. **Parallel scraping** — Top-level domains (US, EU, JP, IN) each get their own tab and scrape simultaneously. EU sub-countries (DE → IT → FR → ES → UK) run **sequentially** on one shared tab — all EU countries share the same SC Europe session cookie so parallel tabs would race each other. DE scrapes first; all remaining countries reuse the same tab, switching marketplace via the account-switcher dropdown before each country (the switcher only clicks "Spigen EU" when it is not already expanded, and dismisses the first-visit "Discover the new selling experience" modal — fix of 2026-10-07; before it, every DE/IT/FR/ES switch silently fell back to UK). Reusing one tab keeps the SC Europe session active throughout the entire EU run. If the session expires between countries anyway, the script detects the login redirect, pauses up to `MID_RUN_LOGIN_WAIT_SECONDS` (default 120 s) for you to complete OTP, then retries the marketplace switch and current page automatically — no data is lost.
 5. **Incremental CSV write** — Reviews are flushed to CSV after every page so no data is lost if the run is interrupted.
-6. **Deduplication** — Removes duplicate Review IDs across page boundaries before image fetching.
-7. **Image enrichment** — Navigates to the Amazon domain and fetches each review's detail page using in-browser `fetch()` with session cookies to extract customer-attached image URLs. **EU limitation**: only DE reviews get image URLs because the scraper Chrome profile has a customer session on amazon.de only. IT, FR, ES, and UK are skipped for image fetch until customer sessions for those domains are added to the profile.
+6. **Deduplication** — Removes duplicate Review IDs across page boundaries before image fetching. Rows older than `MIN_REVIEW_DATE` and (optionally) ASINs outside `ASIN_FILTER_FILE` are dropped.
+7. **Order ID** (`FETCH_ORDER_ID`, default on) — calls Seller Central's internal `brandcustomerreviews/api/reviews` endpoint with the existing SC cookies to add the Amazon Order ID of verified-purchase reviews.
+8. **Image enrichment** — Navigates to the Amazon domain and fetches each review's detail page using in-browser `fetch()` with session cookies to extract customer-attached image URLs. **EU limitation**: only DE reviews get image URLs because the scraper Chrome profile has a customer session on amazon.de only. IT, FR, ES, and UK are skipped for image fetch until customer sessions for those domains are added to the profile.
+9. **Google Sheets upload** (`UPLOAD_TO_SHEETS`, default on) — combines all domain CSVs (EU → JP → US → IN) and writes them to the `SC_{yymmdd}` tab (KST date, or `SC_SCRAPER_RUN_DATE`) of spreadsheet `SHEETS_SPREADSHEET_ID`. If the tab doesn't exist yet it is created; if it does (same-day re-run) only rows whose Review ID isn't already in it are appended — existing rows are never rewritten. Prints `[XX] new N | already in sheet M` per country. Uses the OAuth token at `~/.config/gws_shim/token.json`.
 
 ## Prerequisites
 
@@ -25,11 +34,48 @@ playwright install chromium
 
 ```bash
 python3 scrape_sc_reviews.py
+
+# smoke test: one domain, few pages, no image/order-ID fetch, no Sheets write
+SC_SCRAPER_DOMAINS=US SC_SCRAPER_PAGES=1 SC_SCRAPER_FETCH_IMAGES=0 \
+SC_SCRAPER_FETCH_ORDER_ID=0 SC_SCRAPER_UPLOAD=0 python3 scrape_sc_reviews.py
 ```
+
+There are no CLI flags — everything is the USER CONFIG block plus the env overrides below. **Set `SC_SCRAPER_UPLOAD=0` for any test run**; the default writes a live `SC_{yymmdd}` tab to the production spreadsheet.
 
 Or use the `/sc-scraper` Claude Code skill — it asks for all options interactively, edits the config, and runs the script automatically.
 
-On first run Chrome opens automatically → log in to all SC accounts → press Enter. Subsequent runs reuse saved sessions and start scraping immediately.
+On first run Chrome opens automatically → log in to all SC accounts → press Enter. Subsequent runs reuse saved sessions and start scraping immediately. When started in the background the log goes to `/tmp/sc_scraper.log`.
+
+### Environment overrides
+
+| Env var | Default | Effect |
+|---|---|---|
+| `SC_SCRAPER_DOMAINS` | `EU,JP,US,IN` | Comma-separated domain list |
+| `SC_SCRAPER_PAGES` | `30` | Page limit per domain |
+| `SC_SCRAPER_FETCH_IMAGES` | `1` | `0` skips image enrichment |
+| `SC_SCRAPER_FETCH_ORDER_ID` | `1` | `0` skips the Order ID lookup |
+| `SC_SCRAPER_UPLOAD` | `1` | `0` skips the Google Sheets upload |
+| `SC_SCRAPER_RUN_DATE` | KST today | `yymmdd` used for the `SC_<date>` tab name (backfills / tests) |
+| `SC_SCRAPER_HEADLESS` | `0` | `1` = headless Chrome (servers with no display) |
+| `SC_SCRAPER_OUT_DIR` | `~/Desktop` | CSV output dir |
+| `SC_SCRAPER_SCREENSHOT_DIR` | `~/sc_scraper_screenshots` | Login-failure / diagnostic screenshots |
+| `SC_SCRAPER_CREDENTIALS_FILE` | unset | Enables automated login (see below). Never set on the Mac |
+| `SC_SCRAPER_CHAT_WEBHOOK` | unset | Private Chat space for OTP requests + failure alerts (read by `sc_auth.py`) |
+| `SC_SCRAPER_DIAGNOSE_ACCOUNTS` / `SC_SCRAPER_ISOLATED_TEST_DOMAIN` / `SC_SCRAPER_DIAGNOSE_CUSTOMER_LOGIN` | unset | Diagnostic-only modes: dump the account-picker HTML, try a fresh throwaway-profile login for one domain, or test only the storefront customer login for one domain — then exit without scraping |
+
+---
+
+## Hourly scheduling (currently disabled)
+
+`run_hourly.sh` is the wrapper for the `com.spigen.sc-scraper.hourly` LaunchAgent (`StartInterval` 3600). It skips a cycle if a previous run is still going, unsets the server-only env vars, runs the scraper with `/opt/homebrew/bin/python3`, and appends the per-country `new N | already in sheet M` lines to a permanent history log.
+
+| Log | Content |
+|---|---|
+| `/tmp/sc_scraper.log` | Full output of the latest run (overwritten each cycle) |
+| `/tmp/sc_scraper_hourly.log` | Trigger / skip / exit-code lines |
+| `~/.sc_scraper_new_reviews_history.log` | Per-run new-review counts, kept indefinitely |
+
+The plist is not loaded at the moment — it is parked in the local, untracked `disabled_launchagents/` folder. To re-enable, copy it to `~/Library/LaunchAgents/` and `launchctl bootstrap gui/$(id -u) <plist>`.
 
 ---
 
@@ -38,15 +84,23 @@ On first run Chrome opens automatically → log in to all SC accounts → press 
 For running daily without a local machine, set the `SC_SCRAPER_CREDENTIALS_FILE` env var to a local file (not committed anywhere) with one `DOMAIN|EMAIL|PASSWORD` line per top-level domain group (`US`, `EU`, `JP`, `IN` — EU covers all 5 sub-countries via the shared SC Europe login):
 
 ```
-US|au@spigen.com|<password>
-EU|spigende-az@spigen.com|<password>
-JP|sgd.sales4@spigen.com|<password>
-IN|spigenin-az@spigen.com|<password>
+US|<us-seller-central-email>|<password>
+EU|<eu-seller-central-email>|<password>
+JP|<jp-seller-central-email>|<password>
+IN|<in-seller-central-email>|<password>
 ```
 
 When set, `sc_auth.py` automatically fills email + password on any login/re-login prompt. It deliberately does **not** auto-generate the OTP from a stored TOTP secret — that would give a compromised server permanent, silent MFA bypass. Instead, whenever Amazon asks for a one-time code, it opens a `cloudflared` quick tunnel, posts a link to a private Google Chat webhook, and waits for a human to submit the live code from Google Authenticator via a small one-time web form. On the Mac, this env var is never set, so login stays fully manual as described above.
 
-Other env vars honored on the unattended deployment: `SC_SCRAPER_OUT_DIR` (CSV output dir, no `~/Desktop` on a server), `SC_SCRAPER_SCREENSHOT_DIR` (login-failure screenshots), `SC_SCRAPER_CHAT_WEBHOOK` (OTP-request + failure-alert messages — use a private space, not a shared team room).
+Other env vars honored on the unattended deployment: `SC_SCRAPER_OUT_DIR` (CSV output dir, no `~/Desktop` on a server), `SC_SCRAPER_SCREENSHOT_DIR` (login-failure screenshots), `SC_SCRAPER_CHAT_WEBHOOK` (OTP-request + failure-alert messages — use a private space, not a shared team room), `SC_SCRAPER_HEADLESS=1`.
+
+### Apify Actor packaging
+
+`.actor/` (`actor.json`, `input_schema.json`, `Dockerfile`) + `main.py` package the same scraper as the Apify Actor `sc-review-scraper`. `main.py` is a thin wrapper: it turns the Actor's secret inputs (`US/EU/JP/IN_EMAIL` + `_PASSWORD`, `CHAT_WEBHOOK_URL`, `GWS_TOKEN_JSON`, diagnostic toggles) into the env vars / credentials file above, restores each domain's Chrome profile from the Key-Value Store `sc-scraper-state` before the run and saves it back afterwards (cache dirs trimmed), and pushes the uploaded rows to the Actor's default dataset so they can be exported from the run's Output tab. `scrape_sc_reviews.py` itself runs unmodified.
+
+### 24/7 server
+
+The same script runs on the GCX Windows/WSL2 server (see [`../../ServerBootstrap`](../../ServerBootstrap/README.md)); `ServerBootstrap/test/sc_test_report.py` waits for a server run to finish and posts a result card to the private test room only.
 
 ---
 
@@ -70,7 +124,7 @@ Marketplaces to scrape in parallel.
 | `"JP"` | Japan | `JP_*.csv` | |
 | `"IN"` | India | `IN_*.csv` | |
 
-Default (all markets): `DOMAINS = ["US", "EU", "JP", "IN"]`
+Default (all markets): `DOMAINS = ["EU", "JP", "US", "IN"]` (or `SC_SCRAPER_DOMAINS`). Use `"EU"`, not a bare `"DE"`, for a normal run — a bare sub-country is treated as its own login group.
 
 ### `EU_COUNTRIES`
 
@@ -96,7 +150,7 @@ PAGES         = 50
 `PAGES` is the default page limit per domain. `PAGES_OVERRIDE` lets you set different limits per domain.
 
 ```python
-PAGES = 30                                    # 1,500 reviews at PAGE_SIZE=50
+PAGES = 30                                    # default (SC_SCRAPER_PAGES) — 1,500 reviews at PAGE_SIZE=50
 PAGES_OVERRIDE = {}                           # no overrides (default)
 PAGES_OVERRIDE = {"US": 49, "JP": 10}        # US gets 49 pages, JP gets 10, others use PAGES
 ```
@@ -131,12 +185,24 @@ STAR_FILTER = "1,2,3,4,5"   # all reviews (default)
 STAR_FILTER = "1,2,3"        # critical reviews only
 ```
 
-### `FETCH_IMAGES`
+### `MIN_REVIEW_DATE`
+
+`yyyy-mm-dd` (currently `"2026-07-25"`) or `None`. Only reviews created on/after this date are kept.
+
+### `FETCH_IMAGES` / `FETCH_ORDER_ID`
 
 ```python
-FETCH_IMAGES = True    # fetch reviewer-attached image URLs (default)
-FETCH_IMAGES = False   # skip image fetching (faster)
+FETCH_IMAGES = True    # fetch reviewer-attached image URLs (default; SC_SCRAPER_FETCH_IMAGES=0 to skip)
+FETCH_ORDER_ID = True  # add the Order ID column via the SC internal API (default; SC_SCRAPER_FETCH_ORDER_ID=0 to skip)
 ```
+
+### `UPLOAD_TO_SHEETS` / `SHEETS_SPREADSHEET_ID`
+
+`True` by default (`SC_SCRAPER_UPLOAD=0` to skip). Target spreadsheet `1tMbA_msRfCRY0KK40GnyZ_h1uNCldlnk9Cg-_MTcbsw`, tab `SC_{yymmdd}`; append-only dedupe by Review ID as described above. Token: `~/.config/gws_shim/token.json`.
+
+### `HEADLESS`
+
+`False` on the Mac (visible Chrome). `SC_SCRAPER_HEADLESS=1` for servers; Chrome must be fully closed first.
 
 ### `FETCH_IMAGES_ONLY`
 
@@ -153,6 +219,8 @@ Seconds to wait when a login redirect is detected mid-scrape (e.g. session expir
 
 ### `DETECTION_AVOIDANCE`
 
+Default: `"LOW"`.
+
 | Level | Nav delay | Batch delay | Jitter | Batch size | Scroll | Use when |
 |-------|-----------|-------------|--------|------------|--------|----------|
 | `"LOW"` | 0.5–1.5s | 0.5–1.5s | 0–150ms | 20–30 | No | Testing / one-off |
@@ -161,22 +229,25 @@ Seconds to wait when a login redirect is detected mid-scrape (e.g. session expir
 
 ### `ASIN_FILTER_FILE`
 
-Path to a plain-text file with one ASIN per line. Only reviews matching those ASINs appear in the output. `None` saves all reviews.
+Path to a plain-text file with one ASIN per line. Only reviews matching those ASINs appear in the output. `None` (default) saves all reviews. Local ASIN lists are kept in `filters/` (untracked).
 
 ### `OUT_DIR`
 
-Directory where CSVs are saved. Default: `~/Desktop`.
+Directory where CSVs are saved (`<OUT_DIR>/<DOMAIN>_seller_central_reviews.csv`). Default: `~/Desktop`, or `SC_SCRAPER_OUT_DIR`.
 
 ### `HEADERS_TO_INCLUDE`
 
-Columns to keep in the output. `None` includes all 14 columns.
+Columns to keep in the output, in this exact order. `None` includes all 15 columns. Default (only `Domain Code` excluded; this order is the 14-column A..N layout the `SC` master sheet and `SC_Master_Propagate` expect):
 
 ```python
-HEADERS_TO_INCLUDE = ['ASIN', 'Created 날짜', 'Reviewer', 'Review Ratings',
-                       'Review Title', '본문', 'Image URL']
+HEADERS_TO_INCLUDE = [
+    'ASIN', 'Created 날짜', '사진 유무', 'Reviewer', 'Review Ratings',
+    'Review Title', '본문', '국가', 'Review Link', 'Image URL', 'Review ID',
+    'Order ID', 'Product Rating', 'Ratings Count',
+]
 ```
 
-Full column list: `ASIN` · `Created 날짜` · `사진 유무` · `Reviewer` · `Review Ratings` · `Review Title` · `본문` · `Product Rating` · `Ratings Count` · `Domain Code` · `국가` · `Review Link` · `Image URL` · `Review ID`
+Full column list: `ASIN` · `Created 날짜` · `사진 유무` · `Reviewer` · `Review Ratings` · `Review Title` · `본문` · `Product Rating` · `Ratings Count` · `Domain Code` · `국가` · `Review Link` · `Image URL` · `Review ID` · `Order ID`
 
 ---
 
@@ -198,6 +269,7 @@ Full column list: `ASIN` · `Created 날짜` · `사진 유무` · `Reviewer` ·
 | `Review Link` | Direct link to the review |
 | `Image URL` | Pipe-delimited full-resolution image URLs (if any) |
 | `Review ID` | Amazon review ID (used for deduplication) |
+| `Order ID` | Amazon order ID for verified purchases (empty otherwise) |
 
 ---
 
@@ -220,7 +292,7 @@ Then add `"CA"` to `DOMAINS` and run.
 
 ## Anti-bot measures
 
-- Connects to an existing logged-in Chrome session (persistent profile, no bot fingerprint)
+- Real installed Chrome on a persistent, logged-in profile (no fresh-browser fingerprint)
 - Randomized delays between page navigations
 - Human-like scroll simulation before each extraction (MEDIUM / HIGH)
 - Random batch sizes for image fetching

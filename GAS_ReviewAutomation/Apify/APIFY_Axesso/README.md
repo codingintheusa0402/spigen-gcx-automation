@@ -1,102 +1,48 @@
-# APIFY_Axesso
+# APIFY_Axesso (legacy snapshot)
 
-Google Apps Script project for Apify/Axesso Amazon review scraping and daily distribution into Spigen product spreadsheets.
+Older copy of the Google Apps Script project that scrapes Amazon reviews via Apify/Axesso tasks and distributes them into the Spigen product monitoring spreadsheets. **It is superseded by [MasterTrigger](../../MasterTrigger/)** and kept only for reference/history — the code here was last changed on 2026-07-27 and has drifted from what is deployed.
 
-> **Legacy — do not push from here.** [MasterTrigger](../../MasterTrigger/) (scriptId `1AWrX0Xl8feD`, function `masterDailyJob`) is the canonical, currently-deployed version of this same `dailyJob()` logic. This project is kept for reference/history.
+> ⚠️ **Do not `clasp push` from this folder.** Its `.clasp.json` has the **same scriptId as MasterTrigger** (`1AWrX0Xl8feD-AzYRbGVBb9kLRQra2ppE547i_Ghys4lLU9l28pkMUf9O`), so a push here would overwrite the live `masterDailyJob` project with this stale code (re-enabling retired products, removing the pending-write retry, and reverting the AI columns to `=dr()` formulas).
+
+**Source spreadsheet:** `SRC_ID = 1tMbA_msRfCRY0KK40GnyZ_h1uNCldlnk9Cg-_MTcbsw`
+
+## Screenshots
+
+![Output of the live pipeline (GlxZ8 `1-3점` tab, reviewer names blurred)](../GlxZ8_Apify/docs/sheet_1-3.jpg)
+*Output of the live pipeline (GlxZ8 `1-3점` tab, reviewer names blurred)*
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `Master.js` | Daily automation — filters, deduplicates, and distributes reviews into destination spreadsheets |
-| `Apify.js` | Apify run lifecycle — start scraper runs, poll status, write raw results into dated source sheets |
-| `Sheet_Automation.js` | `dedupeSheetByReviewId_()` — shared dedup helper |
-| `trigger.js` | Trigger management + daily Google Chat status report (holiday-aware countdown bar) |
+| `Master.js` | `dailyJob()` — filters, dedupes and distributes reviews into destination spreadsheets |
+| `Apify.js` | `runAllScrapers()` + 1-min `pollApifyRuns()` → dated `<Prefix>_yymmdd` source tabs |
+| `Sheet_Automation.js` | `dedupeSheetByReviewId_()` + legacy standalone `tem` updater |
+| `trigger.js` | `masterDailyJob()`, `createTriggers()`, holiday-aware trigger-countdown Chat card |
 
----
-
-## Master.js
-
-### Trigger
-
-Time-based trigger — runs `dailyJob()` once per day (KST). Per-product manual entry points also exist (`dailyJob_Glx26()`, `dailyJob_iPh17e()`, `dailyJob_Pixel10a()`, `dailyJob_SDA()`, `dailyJob_AutoAcc()`, `dailyJob_PowerAcc()`, `dailyJob_Jeonryagpon()`, `dailyJob_유지훈P()`) for re-running a single product via `_runSingle(filterSheet)`.
-
-### Flow
+## Flow (as in this snapshot)
 
 ```
+masterDailyJob()            skip weekends/KR holidays → runAllScrapers() → sendAllTriggerStatus()
+pollApifyRuns()             SUCCEEDED → createResultSheet_() ; all done → dailyJob()
 dailyJob()
-  │
-  ├─ step1_deleteNumberedSheets()      Delete conflict/dated sheets not matching today
-  ├─ step2_dedupDatedSheets()          Deduplicate today's dated sheets by Review ID
-  ├─ step2b_updateTemSheet()           Refresh `tem` sheet with all active Review IDs
-  └─ Per-config loop (SHEET_CONFIGS)
-        ├─ has15=true  → _processFilterSheet_()
-        └─ has15=false → _processTo13_()
+  ├─ step1_deleteNumberedSheets / step2_dedupDatedSheets / step2b_updateTemSheet
+  └─ SHEET_CONFIGS loop: has15 → _processFilterSheet_()  |  !has15 → _processTo13_()
 ```
 
-### SHEET_CONFIGS field reference
+## How this snapshot differs from MasterTrigger (current)
 
-| Field | Description |
-|-------|-------------|
-| `filterSheet` | Tab name in source spreadsheet holding raw scraped reviews. Must have a named filter view `"finalize"`. |
-| `destId` | Google Spreadsheet ID of the destination workbook |
-| `countries` | Set of country codes to include (`"US"`, `"UK"`, `"DE"`, `"FR"`, `"ES"`, `"IT"`, `"JP"`, `"IN"`) |
-| `has15` | `true` = dest has `1-5점` + `1-3점`; `false` = dest has `1-3점` only |
-| `seriesFilter` | Extra column filter e.g. `{ colLetter: "Q", contains: "S26" }`. `null` = skip |
-| `temCol` | Column name in `tem` sheet for this product's Review IDs |
-| `insertAtTop` | (`has15=false`) `true` = insert at row 2; `false` = append at bottom |
-| `ratingFilter` | (`has15=false`) Allowed rating values e.g. `[1,2,3]`. `null` = all |
+| | APIFY_Axesso (here) | MasterTrigger |
+|---|---|---|
+| `APIFY_TASKS` | SDA, PowerAcc, AutoAcc, 전략폰, 유지훈P, **Pixel10a, Glx26, iPh17e** | SDA, PowerAcc, AutoAcc, 전략폰, 유지훈P, **GlxZ8, Pixel11** |
+| `SHEET_CONFIGS` | Glx26, iPh17e, Pixel10a, SDA, Auto_Acc, Power_Acc, 전략폰, 유지훈P | GlxZ8, Pixel11, SDA, Auto_Acc, Power_Acc, 전략폰, 유지훈P |
+| AI columns | `=dr()` formula in 1-3점 `인입사유(AI)`, formula in 1-5점 `키워드 (AI 요약)` | Static values from direct Gemini calls |
+| `createTriggers()` time | 09:00 KST | 04:00 KST |
+| `MASTER_END_DATE` | `2026-05-08` (expired) | `2026-08-16` |
+| Failed-write retry (`APIFY_PENDING_MATERIALIZE`), penalty-row filter, chunked writes, repair helpers | — | yes |
 
-### Key column names
+`SHEET_CONFIGS` fields (`filterSheet`, `destId`, `countries`, `numCols`, `has15`, `seriesFilter`, `temCol`, `insertAtTop`, `ratingFilter`, `drFormula`, `pasteReviewId`) are documented in the comment block at the top of `Master.js` and are the same as MasterTrigger's.
 
-| Column | Purpose |
-|--------|---------|
-| `Review ID` | Dedup key |
-| `Country` | Country filter |
-| `Content` | Source body text |
-| `본문` | Dest body column (for `=dr()` formula) |
-| `대분류` | Dest category column (for `=dr()` formula) |
-| `인입사유(AI)` | AI classification formula target in `1-3점` |
-| `키워드 (AI 요약)` | AI summary formula column in `1-5점` |
-| `Update 날짜` | Date written on copy (KST) |
-| `Rating` | Used by `ratingFilter` |
+## Script Properties
 
----
-
-## Apify.js
-
-Runs the Apify scrapers themselves and pulls raw results into dated source sheets — upstream of `Master.js`'s distribution step.
-
-| Function | Description |
-|----------|-------------|
-| `runAllScrapers()` | Starts an Apify run for every configured source, tracked via Script Properties |
-| `pollApifyRuns()` | Recurring trigger — checks run status, materializes finished datasets into a new dated sheet (`getUniqueSheetName_`), avoids double-processing via `isRunAlreadyMaterialized_` |
-| `ensurePollingTrigger_()` / `removePollingTrigger_()` | Manage the recurring poll trigger |
-| `getApifyToken_()` | Reads `APIFY_TOKEN` from Script Properties |
-
----
-
-## Sheet_Automation.js
-
-`dedupeSheetByReviewId_(sheet)` — shared row-dedup helper used by the dated-sheet cleanup steps in `Master.js`.
-
----
-
-## trigger.js
-
-| Function | Description |
-|----------|-------------|
-| `masterDailyJob()` | Entry point wired to the daily time trigger — calls `Master.js`'s `dailyJob()` |
-| `createTriggers()` | Installs the daily time-based trigger |
-| `sendAllTriggerStatus(webhookOverride)` | Posts a Google Chat card summarizing trigger health, with a Korean-holiday-aware countdown bar (`_isKoreanHoliday_`, `_countRemainingWeekdays_`) |
-
----
-
-## Script Properties required
-
-| Property | Value |
-|----------|-------|
-| `APIFY_TOKEN` | Your Apify API token |
-| `CHAT_WEBHOOK_URL` | Google Chat incoming webhook URL |
-
-**Source spreadsheet:** `SRC_ID = 1tMbA_msRfCRY0KK40GnyZ_h1uNCldlnk9Cg-_MTcbsw`
+`APIFY_TOKEN`. Chat webhooks are constants in `trigger.js` (`STATUS_WEBHOOK`, `GCX_WEBHOOK`), not Script Properties.

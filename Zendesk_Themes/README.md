@@ -5,15 +5,43 @@ Spigen GCX claim-form flow. Each theme is edited live via the Zendesk "Customize
 design" (theming) editor in the browser — files here are a full local mirror for
 version control, not a build artifact that gets deployed back automatically.
 
+## Screenshots
+
+![sq2gcx (Amazon) Help Center home](sq2gcx_AmazonHelpcenter/docs/home.jpg)
+*sq2gcx (Amazon) Help Center home*
+
+![Piece It Together puzzle on the home page](spigen-eu_ShopifyHelpcenter/docs/puzzle.jpg)
+*Piece It Together puzzle on the home page*
+
 ## Sites
 
 | Folder | Zendesk brand | Theme ID | Purpose |
 |--------|---------------|----------|---------|
-| `sq2gcx_AmazonHelpcenter/` | `sq2gcx.zendesk.com` | `01983e92-f744-4e6e-9b9e-16eac05b500f` | Help Center shown after a customer submits the **Amazon EU claim form**. Redirects shoppers to Amazon Store pages (DE/UK/FR/IT/ES/IN/JP). |
-| `spigen-eu_ShopifyHelpcenter/` | `spigen-eu.zendesk.com` | `c773e8a3-5558-4dc3-8620-c1802e889f3c` | Help Center shown after a customer submits the **Spigen EU (Shopify-run) claim form**. Redirects shoppers to Spigen's own Shopify storefronts (spigen.de/co.uk/fr/it/es). Community feature is not enabled on this brand, so the `community_*` templates are intentionally empty. |
+| [`sq2gcx_AmazonHelpcenter/`](sq2gcx_AmazonHelpcenter/) | `sq2gcx.zendesk.com` (public: <https://sq2gcx.zendesk.com/hc/en-us>) | `01983e92-f744-4e6e-9b9e-16eac05b500f` | Help Center shown after a customer submits the **Amazon EU claim form**. Redirects shoppers to Amazon Store pages (DE/UK/FR/IT/ES/IN/JP). |
+| [`spigen-eu_ShopifyHelpcenter/`](spigen-eu_ShopifyHelpcenter/) | `spigen-eu.zendesk.com` (public: <https://spigen-eu.zendesk.com/hc/en-gb>) | `c773e8a3-5558-4dc3-8620-c1802e889f3c` | Help Center shown after a customer submits the **Spigen EU (Shopify-run) claim form**. Redirects shoppers to Spigen's own Shopify storefronts (spigen.de/co.uk/fr/it/es). Community feature is not enabled on this brand, so the `community_*` templates are intentionally empty. |
 
 Both themes share the same 20-template Zendesk Guide structure (`templates/*.hbs`)
-plus theme-level `script.js` and `style.css`.
+plus theme-level `script.js` and `style.css`. `script.js` and `style.css` are
+identical in the two themes (stock Copenhagen-style navigation and accessibility
+JS). The differences are all in the templates: `home_page.hbs` (store links),
+`header.hbs` / `footer.hbs` (community links and brand name), `new_request_page.hbs`
+(only sq2gcx shows the red "US Support Link" banner sending Amazon US / non-EU
+customers to `support.spigen.com`), and the `community_*` templates (empty on
+spigen-eu). Per-theme details are in each folder's README.
+
+## Home page layout (both themes)
+
+From top to bottom, `home_page.hbs` contains:
+
+1. **Shop Now flags.** sq2gcx: Amazon logo plus DE/UK/FR/IT/ES/IN/JP Amazon
+   Store pages. spigen-eu: DE/UK/FR/IT/ES Spigen Shopify stores.
+2. **YouTube player.** Muted autoplay that loops two video IDs in sequence,
+   followed by a "Discover Our Latest Video Content" card.
+3. **Official Spigen Store promo card.** Its links are rewritten client-side from
+   `navigator.language`: sq2gcx picks the matching `amazon.<tld>` store page
+   (default `co.uk`), spigen-eu picks `spigen.<tld>` (default `spigen.co.uk`).
+4. **"Piece It Together" puzzle** (below).
+5. **Instagram embed** of `@spigenuk`.
 
 ## `home_page.hbs` puzzle (sq2gcx + spigen-eu)
 
@@ -42,12 +70,27 @@ The Google Sheet / Script / Web App deployment it used still exist in Drive
 but are now orphaned — not referenced by any live code — and can be deleted
 manually if desired.
 
-## Editing
+## Editing and publishing
 
 Edits are made directly in the live theming editor via Playwright (CDP-attached to
 the logged-in Chrome session for `kjw@spigen.com`), then mirrored back to this repo
 and committed/pushed — see the `zendesk_theme_editing_workflow` memory for the
 editor URL pattern and CodeMirror extraction details.
 
+Editor URL pattern: `https://{subdomain}.zendesk.com/theming/editor/{themeId}/templates/{file}.hbs`
+(`script.js` and `style.css` sit at the theme root, without `templates/`). The
+editor is CodeMirror. After saving, check that the change is actually live on
+the public Help Center (above) and isn't only saved as a draft.
+
+To rebuild a theme from this repo instead (for example after a bad edit), zip a
+folder's `templates/`, `script.js`, and `style.css` together with a
+`manifest.json`, then upload it under **Guide admin → Customize design → Add
+theme → Import**. `manifest.json` and `settings/`/`assets/` are **not** exported
+here, so take them from a fresh "Export" of the live theme first. Publish only
+after previewing.
+
 `home_page.hbs` is the page a customer lands on immediately after claim-form
 submission; it's the most frequently touched file in each theme.
+
+Last code change: 2026-07-29 (puzzle rounds, retry, and game-over). Nothing in
+either theme has changed since.

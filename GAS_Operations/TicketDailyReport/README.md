@@ -1,9 +1,14 @@
 # TicketDailyReport
 
-Google Apps Script project that generates the Spigen GCX daily Zendesk ticket report — fetches open ticket views from the Zendesk API, updates graph sheets, and posts chart images to Google Chat.
+Google Apps Script project that generates the Spigen GCX daily Zendesk ticket report (weekdays 9AM KST) — fetches ticket views from the Zendesk API, updates the `All_Graph` / `K_시트` sheets, posts the `All_Graph` chart image and the `K_시트` pending-ticket table card to the Ticket T2 Google Chat room, and serves a `/report` Chat app for browsing past days.
 
 **Script ID:** `1GNowLPF82wfWIrHc1Q9xIDr_L0Kz5iv_YxuNRb7Pzioe9OpsS_O_J5L6`  
 **Linked spreadsheet:** `10VYnysCGztKWMXfvXIWBVcE2_zENnRxvXUr9nicHkpo`
+
+## Screenshots
+
+![`All_Graph` tab: daily New / Open / Pending chart used in the report card](docs/all_graph.jpg)
+*`All_Graph` tab: daily New / Open / Pending chart used in the report card*
 
 ---
 
@@ -14,13 +19,13 @@ Google Apps Script project that generates the Spigen GCX daily Zendesk ticket re
 | `main.js` | `runZendeskDailyJob()` — declares the ordered step list, runs it via `runResumableJob_()` |
 | `retryRunner.js` | Resilient runner: per-step retry, resume-from-crash, auto catch-up scheduling |
 | `ZendeskAPI.js` | Zendesk API helpers — `zendeskApiGet_()` (retrying GET), tickets-by-view, tagger option→name map, `fetchZendeskViewToKsheet()` |
-| `All_GraphGen.js` | Appends daily counts to `All_Graph` sheet and renders charts |
-| `K_시트Gen.js` | `kSheetToChat()` — builds the `K_시트` snapshot card for Google Chat |
+| `All_GraphGen.js` | `appendZendeskDailyStatus()` (one `All_Graph` row/day), `collapseOldRowsIfNeeded()`, `getKoreanFormattedDate()` |
+| `K_시트Gen.js` | `kSheetToChat()` — builds + posts the `K_시트` monospace-table cardsV2 card; shared row-cleanup / table helpers |
 | `KSheetHistory.js` | `archiveKSheetHistory()` — appends today's `K_시트` rows to the `K_시트_history` sheet (source for the `/report` date picker) |
 | `chatApp.js` | Google Chat app — `/report` slash command → `onMessage` shows an "Update 날짜" date-picker card; `loadDayReport` handles the button |
-| `sendChat.js` | Sends chart images to Google Chat via `hcti.io` image API + webhook |
-| `testingFunc.js` | Manual test helpers |
-| `trigger.js` | Sets up time-based triggers |
+| `sendChat.js` | `all_GraphChartToGoogleChat()` — exports the first `All_Graph` chart as PNG, uploads it to freeimage.host (`uploadToFreeImageHost`), posts a `[오전 보고]` image card |
+| `testingFunc.js` | Old manual test helpers (all commented out) |
+| `trigger.js` | `setupAutoExtendZendeskTrigger()` / `autoExtendZendeskTriggers()` / legacy `createTriggers()` |
 | `appsscript.json` | GAS manifest — **must contain `"chat": {}`** (see the `/report` section) |
 
 ---
@@ -68,7 +73,13 @@ consent — run it once after granting any new scope.
 | 4 | `all_GraphChartToGoogleChat` | posts the `All_Graph` chart image to Google Chat | yes |
 | 5 | `collapseOldRowsIfNeeded`    | collapses rows past 4 weeks | **no** (logged & skipped on failure) |
 | 6 | `fetchZendeskViewToKsheet_B` | rebuilds `K_시트` for `P_시트` | yes |
-| 7 | `kSheetToChat`               | posts the `K_시트` snapshot image to Google Chat | yes |
+| 7 | `archiveKSheetHistory`       | appends today's `K_시트` rows to `K_시트_history` (idempotent per date) | **no** |
+| 8 | `kSheetToChat`               | posts the `K_시트` pending-ticket table card to Google Chat | yes |
+
+Step 1 reads views `360102672972`, `360121546552`, `360121545992`, `360108214671`,
+`28990066416793`, `360096790151`, `19940259463705`, `360103290632`, `37502606662809`.
+The `K_시트` card shows at most 25 rows (note line if truncated), header title from `K_시트!B3`,
+`All: <G3 or sum> | KJW: <n>` totals and a `Start Zendesk` button (filter `360103290632`).
 
 ### `K_시트` table columns (view `49523632520985`, `pending` tickets only)
 
@@ -111,15 +122,22 @@ Transient failures — most often `Exception: Address unavailable: https://spige
 
 ## Configuration
 
-Zendesk credentials are hardcoded in `ZendeskAPI.js` (top of file):
+Zendesk credentials and the spreadsheet ID are constants at the top of `ZendeskAPI.js`:
 
 | Constant | Value |
 |----------|-------|
 | `ZENDESK_SUBDOMAIN` | `spigenhelp` |
 | `ZENDESK_EMAIL` | `kjw@spigen.com` |
-| `ZENDESK_TOKEN` | API token (set in file) |
+| `ZENDESK_TOKEN` | `<ZENDESK_API_TOKEN>` (set in file) |
+| `SPREADSHEET_ID` | `10VYnysCGztKWMXfvXIWBVcE2_zENnRxvXUr9nicHkpo` |
 
-Google Chat webhook is set at the top of `main.js`.
+- `webhookUrl` (top of `main.js`) — Ticket T2 room (`spaces/AAQAdqYt1ro`); a commented-out line
+  points at the private test room `spaces/AAQAc9NQmJQ`. Swap the comment to test.
+- freeimage.host upload key — inline in `uploadToFreeImageHost()` (`sendChat.js`).
+- Script Properties (written by the code, nothing to set by hand): `dailyJobProgress:<yyyy-MM-dd>`,
+  `dailyJobCatchupTriggerIds`, `ZENDESK_TRIGGER_SCHEDULE_END`.
+
+Sheets touched (all in `SPREADSHEET_ID`): `Zendesk_Daily`, `All_Graph`, `K_시트`, `K_시트_history`.
 
 ---
 

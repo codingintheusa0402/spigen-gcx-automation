@@ -6,6 +6,11 @@ Monday.com **Pixel 11 Case+CP** 보드(`18425190666`)를 매일 오후 5시(KST)
 [GlxZ8_MondayToSheet](../GlxZ8_MondayToSheet/)(Galaxy Z8)와 **같은 코드 구조·같은 시트 레이아웃**이며, 보드만 다릅니다.
 두 시트의 헤더가 동일하므로 Z8용 Looker Studio 대시보드를 그대로 복제해 데이터 소스만 바꾸면 됩니다.
 
+## Screenshots
+
+![`해외&국내 리뷰+클레임 데이터` tab pulled from the monday board (order IDs blurred)](docs/board_export.jpg)
+*`해외&국내 리뷰+클레임 데이터` tab pulled from the monday board (order IDs blurred)*
+
 | 항목 | 값 |
 |---|---|
 | Apps Script | `12VOkxNXwDDZIxu7xrMese-XHoUUPUYs5CXSwmTh9gYHQcvxpDNZcJqzJ` (시트 바운드) |
@@ -66,8 +71,10 @@ Z8 formula와 동일한 치환(`yes→Y`, `no→N`, 그 외 그대로)을 적용
 
 ## 설정 / 배포
 
-- 코드 배포: 이 폴더에서 `clasp push --force` (`.clasp.json`에 스크립트 ID 포함)
+- 코드 배포: 이 폴더에서 `clasp push --force` (로컬 `.clasp.json`에 스크립트 ID 포함 — `.gitignore` 대상이라 git에는 없음)
 - **스크립트 속성** `MONDAY_API_KEY` 필요 (프로젝트 설정 → 스크립트 속성; 코드에 직접 넣지 않음)
 - 최초 1회 `setupDailyTrigger` 실행 → 매일 17:00(KST) `syncMondayToSheet` 트리거 등록
 - 즉시 실행: 시트 메뉴 **Monday.com → 지금 동기화 (전체 새로고침)**
-- 진단: **Monday.com → 보드 컬럼 ID 목록 보기** (`_diag_columns` 탭), **항목 1개 전체 컬럼 덤프**
+- 진단: **Monday.com → 보드 컬럼 ID 목록 보기** (`_diag_columns` 탭), **항목 1개 전체 컬럼 덤프** (`_diag_item_<id>` 탭)
+- `syncMondayToSheet()`는 스크립트 락(`LockService`)으로 중복 실행을 막고, 대상 탭이 없으면 활성 시트에 씀 — 탭 이름 변경 시 `SHEET_NAME`도 수정
+- 2026-09-11 신규 (커밋 `3f524d4`), 이후 코드 변경 없음

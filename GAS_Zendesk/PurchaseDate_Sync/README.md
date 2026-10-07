@@ -8,6 +8,14 @@ from the Zendesk custom ticket field **Purchase Date** (field id `360019586172`)
 Boards are listed in `MONDAY_BOARD_IDS` in `Code.js` — they share the same
 column ids, so adding a new series board is a one-line change.
 
+**Script ID:** `1f5Ky77H9LT0-9R6ZIuCsoWuZwXqJHGcQbs_RvV4kRbVBKYnMghLnilL1` (standalone; not bound to any sheet)
+**Triggers page:** <https://script.google.com/home/projects/1f5Ky77H9LT0-9R6ZIuCsoWuZwXqJHGcQbs_RvV4kRbVBKYnMghLnilL1/triggers>
+
+## Screenshots
+
+![Twice-daily `scheduledPurchaseDateSync` executions](docs/executions.jpg)
+*Twice-daily `scheduledPurchaseDateSync` executions*
+
 ## Why
 
 The native monday↔Zendesk integration cannot map Zendesk **custom** fields to
@@ -53,6 +61,22 @@ loop/bug fails loudly instead of repeating the 2026-09 runaway.
 | Zendesk trigger | "monday Purchase Date Sync" → **deactivate** |
 | monday boards | `18421346787` (Z8), `18425190666` (Pixel 11, added 2026-09-11), `18430082360` (iPhone 18 Series, added 2026-09-15) — columns `date_mm59ejfp` (Purchase Date), `integration_mm0fzmv0` (Zendesk Ticket) on all |
 
+## Configuration (constants in `Code.js`)
+
+There are no Script Properties. Everything is a constant at the top of `Code.js`:
+
+| Constant | Value / meaning |
+|---|---|
+| `MONDAY_BOARD_IDS` | Boards to walk. **Add every new series Case+CP board here.** Pixel 11 and iPhone 18 were both missed at first. |
+| `MONDAY_DATE_COL` / `MONDAY_TICKET_COL` | `date_mm59ejfp` / `integration_mm0fzmv0` (must be the same on every board) |
+| `ZD_PURCHASE_DATE_FIELD` | `360019586172` |
+| `SYNC_HOURS_KST` | `[9, 21]`. Re-run `setupPurchaseDateTriggers` after changing it. |
+| `MONDAY_CALLS_MAX_PER_RUN` | `200` |
+| `BOARD_PAGE_LIMIT` / `ZD_SHOW_MANY_CHUNK` / `WRITE_SLEEP_MS` | `500` / `100` / `120` ms |
+| `ZENDESK_EMAIL`, `ZENDESK_TOKEN`, `MONDAY_TOKEN`, `WEBHOOK_SECRET` | Credentials. See [Secrets](#secrets). |
+
+Each run logs one summary line (`updated / unchanged / ticket has no purchase date / failed`, plus the monday call count). To check what happened, look at the Executions page.
+
 ## Functions (GAS editor → Run)
 
 - `setupPurchaseDateTriggers` — **run once** to install the twice-daily
@@ -63,7 +87,23 @@ loop/bug fails loudly instead of repeating the 2026-09 runaway.
   older docs). Now also refreshes items whose date changed, not just empty ones.
 - `testSyncOneTicket` — report what the batch would do for one hardcoded ticket.
 
-## Cutover steps
+## Deploy
+
+```bash
+cd ~/Desktop/GCX/GAS_Zendesk/PurchaseDate_Sync
+clasp push --force
+```
+
+`clasp push` is enough here. The live path is the time trigger, which always runs `@HEAD`, so **no `clasp deploy` is needed**. The old web-app deployment is pinned but only serves the no-op `doPost`. `clasp run` fails (no linked standard GCP project), so run functions from the script.google.com editor.
+
+## History
+
+- **2026-09-15:** iPhone 18 Series board added. Schedule moved from every 15 min to twice daily at 9:00/21:00 KST. Per-run cap raised 50 → 200.
+- **2026-09-11:** Pixel 11 board added; `MONDAY_BOARD_ID` became the `MONDAY_BOARD_IDS` list.
+- **2026-09-08:** the per-ticket webhook was replaced with a single-walk batch. Added the per-run monday call cap and the script lock.
+- **2026-08-20:** a leftover every-minute `backfillPurchaseDates` trigger was found and removed (`setupPurchaseDateTriggers` now clears it).
+
+## Cutover steps (one-time, from the 2026-09-08 rewrite)
 
 1. `clasp push` (or paste `Code.js` into the editor).
 2. Run `setupPurchaseDateTriggers` once from the editor; approve OAuth.

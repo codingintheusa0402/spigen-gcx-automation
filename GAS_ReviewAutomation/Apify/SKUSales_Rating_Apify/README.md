@@ -8,6 +8,11 @@ Container-bound Google Apps Script for the "해외사업부문 개발 발의 품
 **Target sheet:** `SKU세일즈/리뷰` — ASIN in col **G**, rating written to col **I** starting at row **7**
 **Apify task:** `QWtvKi7oXZ6YYR92G` (`product-details-scraper-ljh`)
 
+## Screenshots
+
+![`SKU세일즈/리뷰` tab: rating column I refreshed per ASIN (sales columns cropped)](docs/rating_sheet.jpg)
+*`SKU세일즈/리뷰` tab: rating column I refreshed per ASIN (sales columns cropped)*
+
 ---
 
 ## Files
@@ -36,6 +41,9 @@ Container-bound Google Apps Script for the "해외사업부문 개발 발의 품
 | Key | Description |
 |-----|-------------|
 | `APIFY_TOKEN` | Apify API token (Project Settings → Script Properties in the Apps Script editor) |
+| `RATING_LAST_RUN_ID`, `RATING_LAST_DATASET_ID`, `RATING_LAST_POLL_STARTED_AT_MS` | Run state written/cleared by the code (a pending run ID makes "Run Now" just re-arm the poller instead of starting a second run) |
+
+No Google Chat notification — completion is a sheet toast + execution log only. Polling gives up after `CONFIG.pollMaxMinutes` (180).
 
 ---
 

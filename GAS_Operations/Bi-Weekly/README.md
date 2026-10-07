@@ -1,15 +1,103 @@
-# Bi-Weekly Slide Updater
+# Bi-Weekly Report (GCX Bi-weekly Report deck GAS)
 
-Google Apps Script project that auto-populates a bi-weekly CX report Google Slides deck
-with live data from the `26년 전체문의` sheet.
+Container-bound Google Apps Script for the **GCX Bi-weekly Report** Google Slides deck. It
+generates the claim / bad-review card slides from the 고객사진 모음 source decks, redraws the
+Overview TOP3 gauge grids (모델별 / 인입사유별) from the Zendesk `26년 전체문의` sheet and the
+per-series Amazon `1-3점` sheets, adds `SIREN 등록됨` badges, and still supports the original
+`{{placeholder}}` text/arc-chart updater. The companion Python tooling in `tools/` builds the
+"클레임 + 배드리뷰 / 판매량 TOP 7" tables (Caspi sales) and the apple.com-style copy of the deck,
+which since 2026-10-01 is the version that gets sent.
 
-**Scope**: all replacements and chart insertions run on the **currently active slide only**.
-Switch to the target slide before running.
+The end-to-end runbook is the `bi-weekly-builder` skill (`~/.claude/skills/bi-weekly-builder/SKILL.md`,
+snapshot of v2.1 in `tools/apple_theme/SKILL_snapshot_261002.md`).
 
-## What it does
+## Screenshots
 
-Each run replaces `{{placeholder}}` text boxes and inserts arc chart images directly
-in the slide deck — no manual copy-paste needed.
+![261002 Apple-style deck: cover, Overview, TOP3 gauges](docs/deck_overview.jpg)
+*261002 Apple-style deck: cover, Overview, TOP3 gauges*
+
+![Overview slide](docs/overview_slide.jpg)
+*Overview slide*
+
+## How a period is built
+
+Each period's deck is a **copy of the previous period's deck**, so the bound script is copied too
+(new script ID every period — ask for the current deck / Apps Script URL before working on it).
+
+1. **Edit `BW_RUN`** at the top of `Code.js` (the skill rewrites it): card window `start`/`end`,
+   `sources` (series keys), `appleDeck` (ID of the `-apple` copy) and the `overview` job list
+   (one entry per Overview TOP3 slide: slide objectId + `dataSource` `zendesk` | `badReview:<key>`,
+   `category`, `devices`, `startDate`, `excludeReasons`). Series slides are cumulative; the
+   "2026년 전제품" slide uses `startDate: 2026-01-01`; bad reviews always exclude `긍정 리뷰`.
+2. **Runners** (the editor's Run dropdown defaults to the first function in the file, so the needed
+   runner is moved to the top before `clasp push`):
+
+   | Runner | What it does |
+   |---|---|
+   | `bwRunCards()` | Claim/review cards for `BW_RUN.start..end` into the bound deck (`_generateClaimSlides`); re-runs only add missing cards |
+   | `bwRunOverview()` | Redraws every `BW_RUN.overview` slide in the bound deck, classic navy theme |
+   | `bwRunOverviewApple()` | Same grids on `BW_RUN.appleDeck`, apple theme (white tiles on `#F5F5F7`) |
+
+   Overview runs are resumable across the 6-min cap: finished slide IDs are kept in Script
+   Property `bw_overview_done_<end>` / `bw_overview_apple_done_<end>`.
+3. **TOP-7 tables** — `tools/rate_pipeline.py` (below).
+4. **Apple copy** — `tools/apple_theme/` scripts (see its README), then send the Apple deck as
+   `<yymmdd> GCX Bi-weekly Report`. Optional: share it through the tracked link of
+   `../BiWeeklyViewLog`.
+
+Each period's deck should contain only that period's cards — delete copied previous-period cards
+after generating. A series with no card in the deck yet is skipped by the maker (seed it by
+duplicating another family's card and retitling it).
+
+## Deck menu (`onOpen` → **Slide Updater**)
+
+| Menu item | Function | Notes |
+|---|---|---|
+| Update Slide Text | `updateSlideTextBoxes()` | Legacy placeholder updater, active slide only (see below) |
+| Custom Chart Maker... | `showChartMakerSidebar()` | Sidebar from `ChartMaker.html` → `generateCustomCharts(opts)`; filters by data source (Zendesk / bad-review series), category, device, product, date range, excluded tags; fills suffixed `{{Defect_Model_Chart_<suffix>N}}` placeholders. ⚠️ `ChartMaker.html` exists locally but is not tracked in git |
+| Claim / Review Slide Maker... | `showSlideMakerSidebar()` | Sidebar `SlideMaker.html` → `previewClaimSlides(opts)` / `generateClaimSlides(opts)` |
+| Apply SIREN badges to existing cards | `applySirenBadges()` | Badges the archive of already-generated cards |
+| Create 260618 Report / Get YoY Stats (260618) | `createReport260618()`, `getYoYStats()` | One-off for the 2026-06-18 period; kept for reference |
+
+## Claim / Review Slide Maker
+
+- Sources (`CLAIM_SLIDE_SOURCES`): 클레임 및 배드리뷰 고객사진 모음 decks for `glxZ8` (Galaxy Z8),
+  `pixel11` (Pixel 11) and `iphone18` (iPhone 18, added 2026-10-01). Rows are picked by 작성 날짜;
+  slides containing `템플릿 예시` / `기입 순서` are skipped.
+- For each row, the family's last card is duplicated and filled **by position**
+  (`CLAIM_CARD_FIELDS`; photo slot area `CLAIM_PHOTO_AREA`), then placed after the family's last card.
+  Duplicates are detected by review link / row key, so re-runs are idempotent. Runs stop at a
+  300 s budget to stay under the 6-min cap — just run again.
+- ASIN from the series `1-3점` sheet (DE tab fallback); 아마존 리뷰 평점 / 갯수 from the series
+  sheet's `DE` tab (blank if no score).
+- Photos are re-cropped via the Slides advanced service (`replaceImage` CENTER_CROP) after
+  `saveAndClose()` (`_CROP_QUEUE` / `_flushCropQueue`); Drive videos get a Drive thumbnail linked to
+  the video.
+- **SIREN badge**: if SKU + 인입사유 fuzzy-match a `SIREN 등록 = O` row of `SIREN_SHEET`
+  (`26년 SIREN`, header row 18), a red `SIREN 등록됨` chip linked to the SIREN deck (found in Drive by
+  the sheet's title column) is added.
+
+## Overview TOP3 gauge grids
+
+`rebuildChartGridOnSlide(slide, opts)` redraws a TOP3 grid **in place**: it deletes every
+non-group element at L≥110 / T≥45 (title, sidebar and logo sit outside) and draws 2 rows × 3
+half-donut cards (모델별 TOP3 → top reasons, 인입사유별 TOP3 → top products) via
+`buildTopProductsDataV2` / `buildTopReasonsDataV2` and `_drawChartGrid`. Card text is uniform
+(`CHART_CARD_GEOM`: count 13.5pt, title 8.5pt, legend/value 7.5pt @115%; long labels trimmed).
+Visual theme comes from `CHART_THEMES.classic` (navy, Arial) or `CHART_THEMES.apple`
+(white 12pt-radius tiles from `_insertRoundedTile`, Noto Sans KR, blue palette).
+
+Data sources: Zendesk `26년 전체문의` (Category `4. Product Issue`, Device substring per series) or
+`BAD_REVIEW_SOURCES` (`glxZ8`, `pixel11`, `iphone18` → each book's `1-3점` tab, columns
+`모델명` / `인입사유(tag)` / `기종명`).
+
+## Placeholder updater (`updateSlideTextBoxes`, legacy)
+
+The original mode: replaces `{{placeholder}}` text boxes and inserts arc chart images on the
+**currently active slide only** — switch to the target slide before running. The Glx26 families
+below still point at the Galaxy S26 data (Glx26 Amazon book `1fpv9TEDPGR8D6QRRc0ll-WzF7sOkfxe9UNBCmdBSE9g`).
+Run: select the slide → **Slide Updater → Update Slide Text**; the deck is saved and closed on completion.
+
 
 ### Placeholders replaced
 
@@ -137,43 +225,47 @@ two text boxes stay in sync.
 
 ## Source data
 
-| Field | Value |
-|---|---|
-| Spreadsheet ID | `1sjcCj_P4DRD8rywkmYJhbsrzwFfgiJQuF9nIKwCiKlc` |
-| Sheet name | `26년 전체문의` |
-| Key columns | `Category`, `인입사유`, `Product Name`, `Device` |
-| Defect filter | `Category == "4. Product Issue"` |
-| Glx26 filter | `Device` contains `"Galaxy S26"` (applied on top of defect filter) |
+Legacy updater: `26년 전체문의`, key columns `Category`, `인입사유`, `Product Name`, `Device`;
+defect filter `Category == "4. Product Issue"`; Glx26 filter `Device` contains `"Galaxy S26"`.
+All sources used by the current code:
 
-## How to run
+| Spreadsheet | ID | Tab |
+|---|---|---|
+| Zendesk claims (`CHART_MAKER_SHEET_ID`) | `1sjcCj_P4DRD8rywkmYJhbsrzwFfgiJQuF9nIKwCiKlc` | `26년 전체문의` |
+| Galaxy Z8 book | `19OhswglYMx_dxSFFDtWI1WYPWq2jONJn6RK84KITwy4` | `1-3점`, `DE`, `신제품 라인업` |
+| Pixel 11 book | `12I6z_FFmDIMHa0rLanltKKFp7kI_yREQj3adkMamPgI` | `1-3점`, `DE`, `신제품 라인업` |
+| iPhone 18 book | `1aYxZRm7pf5Egx6fIoAGpGg8CWzHaZ_zsBRKsvh9U1iU` | `1-3점`, `DE`, `신제품 라인업` |
+| SIREN registry (`SIREN_SHEET`) | `15Jh6ZFDBIbpv4OANVtD3g4wFBJxoof9SHWDUEU3GiXI` | `26년 SIREN` (gid 1840076165, header row 18) |
+| Source deck — Galaxy Z8 | `1VC5WAoiufinAPz9bPn1OrBnAef9JkDZEZxlAGF6DDho` | |
+| Source deck — Pixel 11 | `1JJKzzBnm9no89mocr6Xqzwqgz8YWoiU5S44Em7gJYSc` | |
+| Source deck — iPhone 18 | `1uuHcoTZxxLYlxdaHb0KFUBbI2hEPMvkOV0cL8ELU9dU` | |
 
-1. Open the linked Google Slides deck.
-2. **Navigate to the slide you want to update.**
-3. **Extensions → Apps Script** (or run from the GAS editor).
-4. Run `updateSlideTextBoxes()`.
-5. The slide deck is saved and closed automatically on completion.
-
-All replacements, chart insertions, and linked-chart refreshes apply **only to the active
-slide**. Run once per slide if you have multiple slides to update.
-
-Alternatively add a time-based trigger on `updateSlideTextBoxes` for fully automatic weekly
-updates (note: trigger runs may not have a user-selected slide context — test behavior first).
-
-## GAS Project
+## GAS project / deploy
 
 | Field | Value |
 |---|---|
-| Script ID | `1AXqBJHr-DITneMUV6BJcF6Zus5KtRudhQWRXh2e-Ei0nXhipqxJf4jVn` |
-| Linked Slides | `14bH-E4YIhvHu13FiizHiDAl-nA4D52XpJU962raJA0E` |
-| clasp push | `cd Bi-Weekly && clasp push --force` |
-| clasp pull | `cd Bi-Weekly && clasp pull` |
+| Type | Container-bound to the period's classic deck; advanced service **Slides v1** enabled, V8, `Asia/Seoul` |
+| Current script (261002) | `15U2Db0iWmLAA7Z8l2FVZ5rHe8617jrufJ5Hdc9r4oHneWC_Bpl4hF7Hs` (`.clasp.json`, git-ignored) |
+| Current decks (261002) | classic `12NxCxbW3z0fH1KKEVzX_uqBGH_APlkZpBWdPgET_aCk`, Apple (sent) `1quCr9Xj-pSsVXKrYuaEOq0LPILZMN2LPUwBkY1f_GFI` |
+| Push | `cd Bi-Weekly && clasp push --force` (point `.clasp.json` at the new period's script first) |
+
+No time-based triggers; everything runs from the menu or the editor. A fresh script copy needs
+the user to click *Review permissions* once.
 
 ## Functions
 
 | Function | Purpose |
 |---|---|
-| `onOpen()` | Adds **Slide Updater → Update Slide Text** menu to the Slides UI |
-| `updateSlideTextBoxes()` | Main entry point — gets active slide, orchestrates all replacements and chart insertions on that slide only |
+| `bwRunCards()` / `bwRunOverview()` / `bwRunOverviewApple()` | Per-period runners driven by `BW_RUN` (see above) |
+| `previewClaimSlides(opts)` / `generateClaimSlides(opts)` | Slide Maker sidebar calls: list rows per source (new vs already in deck) / create the cards. `opts = {sources, startDate, endDate, maxCount?}` |
+| `applySirenBadges()` | Add `SIREN 등록됨` chips to existing cards |
+| `rebuildChartGridOnSlide(slide, opts)` | In-place Overview TOP3 grid redraw |
+| `insertGeneratedChartGrid(...)` / `insertGeneratedChartCard(...)` | Lower-level grid/card drawing used by the chart maker |
+| `generateCustomCharts(opts)` / `getSidebarFilterOptions(dataSource)` | Custom Chart Maker sidebar backend |
+| `buildTopProductsDataV2` / `buildTopReasonsDataV2` | Filtered top-N aggregations (category, devices, product substrings, date range, excluded reasons) |
+| `debug*` functions | Read-only structure dumps / trial helpers used while building the Slide Maker |
+| `onOpen()` | Adds the **Slide Updater** menu (see Deck menu) |
+| `updateSlideTextBoxes()` | Legacy entry point — gets active slide, orchestrates all replacements and chart insertions on that slide only |
 | `replaceTextOnSlide(slide, replacements)` | Iterates shapes on a single slide and applies all `{{key}} → value` substitutions in-place |
 | `buildTopProductsData(sheet, rowCount, deviceFilter?)` | Computes top-3 defect products with per-reason counts; optional `deviceFilter` string restricts to rows whose `Device` col contains that text |
 | `buildTopReasonsData(sheet, rowCount, deviceFilter?)` | Computes top-3 defect reasons with per-product counts; same optional `deviceFilter` |
@@ -198,23 +290,14 @@ updates (note: trigger runs may not have a user-selected slide context — test 
 | `getColumnIndexByHeader(sheet, headerName)` | Looks up a column index by header name (1-based) |
 | `removeOldAutoCharts(presentation)` | Utility — removes all `AUTO_Defect_Model_Chart_*` images across all slides (not called automatically; use manually to wipe all charts at once) |
 
----
+## Python tooling (`tools/`)
 
-## Claim / Review Slide Maker + Bi-Weekly builder (2026-09)
+Auth for all scripts: `~/.config/gws_shim/token.json` (Sheets / Slides / Drive). `tools/state/`
+holds intermediate JSON and is git-ignored.
 
-Skill: `~/.claude/skills/bi-weekly-builder/SKILL.md` ("run bi-weekly builder"). It asks for the
-date range, the monitored series, and this period's deck / Apps Script URL, then:
-
-1. **Card slides** — deck menu *Claim / Review Slide Maker…* (`SlideMaker.html` + the
-   `_generateClaimSlides` module in `Code.js`). Reads the 고객사진 모음 source decks
-   (`CLAIM_SLIDE_SOURCES`), duplicates each family's last card and fills it by position
-   (`CLAIM_CARD_FIELDS`, `CLAIM_PHOTO_AREA`). ASIN from the 1-3점 sheet (DE tab fallback),
-   평점/갯수 from the series sheet's `DE` tab, photos re-cropped via the Slides API after
-   `saveAndClose()`, Drive-video thumbnails, `SIREN 등록됨` chip from the `26년 SIREN` sheet
-   (menu *Apply SIREN badges to existing cards* for the archive). Idempotent re-runs.
-2. **TOP-7 slides** — `tools/rate_pipeline.py prep → (Caspi MCP query) → aggregate → slides`.
-   Series config in `tools/series.json`. Sales = Caspi LM `S3.AMAZON_SELLER.VAT_TRANSACTION_DATA`
-   (Amazon EU+UK); claims = Zendesk `4. Product Issue` (EU); bad reviews = 1-3점 (DE/FR/IT/ES/UK).
-
-`tools/repair_cards.py`, `fill_ratings.py`, `siren_badges.py` are one-off Slides-API repair
-twins of logic that now lives in `Code.js`; keep for emergencies.
+| Script | Purpose |
+|---|---|
+| `rate_pipeline.py` | TOP-7 slides. `prep --series … --start … --end …` (claims from `26년 전체문의` `4. Product Issue` EU + 1-3점 DE/FR/IT/ES/UK, top-2 인입사유 per SKU, prints the Caspi SQL) → run the SQL via the Caspi MCP and save `state/caspi_sales.json` → `aggregate --caspi …` → `slides --deck <id>` (one "Overview (<series>) 클레임 + 배드리뷰 / 판매량 TOP N" slide per series, idempotent). Optional `sheet`. Sales = Caspi `S3.AMAZON_SELLER.VAT_TRANSACTION_DATA` (Amazon EU+UK), grouped by SKU; refuses truncated query results |
+| `series.json` | Monitored series config (keys must match `CLAIM_SLIDE_SOURCES` / `BAD_REVIEW_SOURCES`) + Zendesk / SIREN sheet refs |
+| `repair_cards.py`, `fill_ratings.py`, `siren_badges.py` | One-off Slides-API twins of logic now in `Code.js`; keep for emergencies |
+| `apple_theme/` | apple.com-style restyle of the `-apple` deck copy — see `tools/apple_theme/README.md` |

@@ -1,111 +1,136 @@
 # BadReview → Google Chat app-card report
 
-`badreview_chat_report.py` builds and sends a Google Chat **cardsV2** app card for the
-daily bad-review (★1~3) scrape of **Pixel 11 Series** and **Galaxy Z8 Series**, and can
-fan it out to the GCX cross-team Chat rooms.
+Daily bad-review (★1~3) report for the review-monitoring sheets (**iPhone 18 Series**,
+**Galaxy Z8 Series**, **Pixel 11 Series**), sent to the GCX cross-team Google Chat rooms
+as Google Chat **cardsV2** app cards. Since 2026-09-21 the default format is **one
+swipeable carousel message per room** (iPhone 18 → Z8 → Pixel 11), sent automatically
+every weekday at 10:30 KST by `auto_broadcast.py`.
 
-This is the standalone, version-controlled twin of the Claude Code skills
-`pixel11-badreview-chat-report`, `glxz8-badreview-chat-report` and
-`badreview-chat-broadcast` (`~/.claude/skills/…`). Behaviour and card layout are
-identical; keep the two in sync when either changes.
+This folder is the version-controlled twin of the Claude Code skills
+`pixel11-badreview-chat-report`, `glxz8-badreview-chat-report`,
+`iphone18-badreview-chat-report` and `badreview-chat-broadcast` (`~/.claude/skills/…`).
 
-## What the card shows
+## Screenshots
+
+![Daily 배드리뷰 carousel card (iPhone 18 → Galaxy Z8 → Pixel 11), shown in the private test room](docs/carousel.jpg)
+*Daily 배드리뷰 carousel card (iPhone 18 → Galaxy Z8 → Pixel 11), shown in the private test room*
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `auto_broadcast.py` | **Production path.** Unattended weekday broadcast of the 3-product carousel to all 13 rooms (no test-send). Imports card/room/carousel code from the skills — see [`AUTO_BROADCAST.md`](AUTO_BROADCAST.md). |
+| `badreview_chat_report.py` | Standalone manual sender for the older **2-product, separate-card** format (Pixel 11 + Z8 only, 12 rooms). Self-contained (own card builder + room list). Kept as a fallback; iPhone 18 / carousel / significance highlighting are **not** in it. |
+| `chat_app/` | Interactive Google Chat app (Kevin identity → Pixel 11) with date-range + 국가/기종 filters. See `chat_app/SETUP.md`. |
+| `chat_app_jane/` | Same app, second identity (Jane → Galaxy Z8). See `chat_app_jane/README.md`. |
+| `logs/`, `state/` | runtime log + `held_/ran_<date>.flag` markers (not committed). |
+
+## Where it runs (2026-10-07)
+
+The scheduled jobs moved to the 24/7 **GCX server** (`gcx-server`, WSL2) crontab —
+`ServerBootstrap/crontab.txt`:
+
+```
+30 10 * * 1-5  python3 auto_broadcast.py                 # main run
+0  11 * * 1-5  python3 auto_broadcast.py --retry-if-held # Z8 KR-gate hard deadline
+*/5 * * * *    python3 auto_broadcast.py --catchup        # missed-trigger catch-up
+```
+
+The Mac launchd copies (`com.spigen.gcx.badreview-broadcast{,-retry,-catchup}.plist`)
+are parked in `~/Library/LaunchAgents/disabled-moved-to-server/`. **Never enable both
+sides** — the rooms would get double broadcasts.
+
+## What a card shows
 
 | Part | Content |
 |------|---------|
-| `header.title` | `✔️ M/D(요일) <product> 배드리뷰 (1~3점) (총 N건)` |
-| `header.subtitle` | `고객 리뷰 ★1~3점 · <date range>` + a product thumbnail (`imageType: SQUARE`) |
-| **Top 5 인입사유(누적)** | a 2-column widget: left = Top 5 `인입사유(tag)` where `대분류` = `휴대폰보호필름`, right = `휴대폰케이스`. Each column is headed `<b><font color>대분류</font></b> · {tot}건` (red `#EA4335` for 휴대폰보호필름, blue `#4285F4` for 휴대폰케이스, to set it apart from the rows below) then **5 `decoratedText` rows** — `topLabel` = `n위`, `text` = `<b>이유</b>`, `bottomLabel` = `c건 · p%` — so rank / 인입사유 / 건수·% each sit at a fixed left edge and the two columns line up (`p` = share of that 대분류). Counted over the whole `1-3점` sheet. |
-| **오늘 M/D(요일) 최다 인입사유** | biggest `인입사유(tag)` among rows whose `Update 날짜` is today, then a **fixed 5-line** breakdown (`n. 이유 c건`; 6th+ tags collapse into `…외 N건`). |
-| button | **배드리뷰** → the product's `1-3점` sheet |
+| title | `✔️ M/D(요일) <product> 배드리뷰 (1~3점) (총 N건)` (carousel: outer header `✔️ M/D(요일) 배드리뷰 (1~3점)`, page title `<product> 배드리뷰 (총 N건)`) |
+| subtitle / image | `고객 리뷰 ★1~3점 · <date range>` + product thumbnail (carousel pages: `image` widget, squared through `wsrv.nl`) |
+| **Top 5 인입사유(누적)** | per `대분류` (`휴대폰보호필름` red `#EA4335`, `휴대폰케이스` blue `#4285F4`): `{tot}건` then 5 rows `n위 · 이유 · c건 · p%`. Counted over the whole `1-3점` tab. |
+| **오늘 M/D(요일) 최다 인입사유** | top `인입사유(tag)` among today's rows + fixed 5-line breakdown (6th+ → `…외 N건`). The skill builders also highlight a significant day vs. the trailing-7-day average (`recentAvg`). |
+| button | **배드리뷰** → that product's `1-3점` sheet |
 
-`N` (총 N건) = number of `1-3점` rows whose `Update 날짜` resolves to today (KST).
-
-Rows whose `인입사유(tag)` is **`긍정 리뷰`** are dropped before any counting — excluded
-from 총 N건, the day breakdown, and the cumulative Top 5, and never shown on the card
-(`EXCLUDED_TAGS`; user rule 2026-09-08, permanent unless revoked).
-Every list is padded to a fixed line count so the Pixel 11 and Z8 cards render the
-same height.
+`N` = rows whose `Update 날짜` (fallback `Exported Date`) is today (KST).
+Rows tagged **`긍정 리뷰`** are dropped before any counting (`EXCLUDED_TAGS`; permanent
+user rule 2026-09-08). Inside a carousel, `decoratedText` and `columns` don't render, so
+`carousel.py` flattens them into `textParagraph` lines.
 
 ## Data source
 
-Reads the `1-3점` tab (`A:S`) of each spreadsheet via the **Sheets API v4**, authorised
-with the local gws_shim OAuth token at `~/.config/gws_shim/token.json` (`drive` scope;
-the script refreshes the token and writes it back).
-
-> 2026-09-08: the old gws_shim GCP project was deleted (Sheets 403 `CONSUMER_INVALID`).
-> 2026-09-09: rebuilt on GCP project `gcxbot` (#64325928759), token now authorised as
-> `kjw@spigen.com`. Verified working 2026-09-10. If it 403s again, the fallback is the
-> Claude Code skill path (`pixel11/glxz8-badreview-chat-report` + `badreview-chat-broadcast`),
-> which reads the sheet through the browser `gviz` endpoint, then `report.py --data ... --webhook ...`.
+`1-3점` tab of each spreadsheet, read via **Sheets API v4** with the gws_shim OAuth token
+`~/.config/gws_shim/token.json` (GCP project `gcxbot`, `kjw@spigen.com`; refreshed and
+written back on every run). Columns: `Update 날짜`, `인입사유(tag)`, `대분류`, `국가(tag)`.
 
 | Product | Spreadsheet ID |
 |---------|----------------|
-| Pixel 11 Series | `12I6z_FFmDIMHa0rLanltKKFp7kI_yREQj3adkMamPgI` |
+| iPhone 18 Series | `1aYxZRm7pf5Egx6fIoAGpGg8CWzHaZ_zsBRKsvh9U1iU` |
 | Galaxy Z8 Series | `19OhswglYMx_dxSFFDtWI1WYPWq2jONJn6RK84KITwy4` |
+| Pixel 11 Series | `12I6z_FFmDIMHa0rLanltKKFp7kI_yREQj3adkMamPgI` |
 
-Columns used: `인입사유(tag)`, `Update 날짜` (falls back to `Exported Date`), `대분류`
-(values `휴대폰보호필름` / `휴대폰케이스`). `Update 날짜` looks like `2026. 9. 2`.
+`1-3점` tab gid = `970309432` on Pixel 11 / Z8.
 
-## Rooms
+## auto_broadcast.py — behaviour summary
 
-- **TEST room** — always the first target. `--test` sends here and nowhere else.
-- **Broadcast rooms** (`ROOMS` in the script): GCX전략 x SDA / ADS1 / ADS2 / ADS3 /
-  ADS5 (CP) / JP Sales / IN Sales / 모바일제품개발팀, 실장님 & GCX,
-  GCX x 클리어프로텍션 개발팀, [CQ] SPIGEN 국내&해외 CS, 리더들방. The internal GCX team
-  room is deliberately excluded. (리더들방 uses one webhook for every card.)
+Full detail in [`AUTO_BROADCAST.md`](AUTO_BROADCAST.md).
 
-**Per-product webhook routing.** Each room has a default `token` (the Pixel 11 card
-always uses it). The 11 GCX rooms each also carry a `glxz8` override token — a
-*separate* incoming webhook in the *same* room — used **only for the Galaxy Z8 card**
-(complete as of 2026-09-07). 리더들방 has no override — every card goes through its
-single `token`. `room_url(room, product_key)` picks it.
-
-Webhook URLs (space id + token) are inlined in the script. They are Google Chat
-incoming-webhook tokens, not account credentials.
-
-## Usage
+- Skips weekends and Korean public holidays (Nager.Date API, hardcoded 2026 fallback).
+- Waits for the AI tagger: if any of today's rows has a blank `인입사유(tag)`, re-checks
+  every 10 min, up to 3 times, then sends anyway (2026-09-18).
+- **Z8 KR gate** (2026-09-18): 0 `국가(tag)=KR` rows in today's Z8 data → the whole
+  carousel is held, an alert + preview goes to the private test room only, and
+  `state/held_<date>.flag` is written. The **11:00 `--retry-if-held`** run then sends
+  unconditionally (2026-10-01).
+- **`--catchup`** (2026-10-02): every 5 min, weekdays 10:30–18:00, runs the normal flow
+  if `state/ran_<date>.flag` is missing (machine was asleep at 10:30).
+- Room list (13 rooms, incl. `GCX전략 Spigen x TCK` added 2026-09-29) and the test room
+  come from `~/.claude/skills/badreview-chat-broadcast/broadcast.py`.
 
 ```bash
-# 1. always test first — posts BOTH cards to the TEST room only
-python3 badreview_chat_report.py --test
-
-# 2. eyeball the test messages, get a human "yes", THEN broadcast
-python3 badreview_chat_report.py --broadcast --yes
-
-# subset of rooms / one product / a past date
-python3 badreview_chat_report.py --broadcast --yes --only "ADS1,JP Sales"
-python3 badreview_chat_report.py --test --product glxz8
-python3 badreview_chat_report.py --test --date 2026-09-02
-
-# build only, send nothing
-python3 badreview_chat_report.py --dry-run --print-data
+python3 auto_broadcast.py --test-only --dry-run   # build only, lists target = test room
+python3 auto_broadcast.py --test-only             # send carousel to the private test room ONLY
+python3 auto_broadcast.py --force --ignore-kr-gate  # LIVE manual resend after a KR-gate hold
 ```
 
-`--broadcast` refuses to run without `--yes`. Each room receives **2 messages**
-(Z8 then Pixel 11), one second apart — 12 rooms = 24 messages. Webhook messages
-cannot be edited or deleted afterwards.
+**Testing rule (permanent, 2026-09-21): always `--test-only`.** Never a bare run or
+`--force` with a fake `--date` — that leaked a wrongly-dated card to all live rooms on
+2026-09-18.
 
-## Requirements
+## badreview_chat_report.py — manual 2-product sender
 
-- Python 3.9+
-- `google-auth`, `google-auth-oauthlib`, `google-api-python-client`
-- A valid `~/.config/gws_shim/token.json`
+```bash
+python3 badreview_chat_report.py --dry-run --print-data   # build + print cardsV2 JSON, send nothing
+python3 badreview_chat_report.py --test                    # both cards → TEST room only
+python3 badreview_chat_report.py --broadcast --yes [--only "ADS1,JP Sales"]
+python3 badreview_chat_report.py --test --product glxz8 --date 2026-09-02
+```
 
-## `chat_app/` — interactive Google Chat app (proof of concept)
+`--broadcast` refuses to run without `--yes`. Per-product webhook routing: each room has a
+default webhook and (except 리더들방) a separate `glxz8` webhook used only for the Z8 card
+(`room_url()`). Webhook messages cannot be edited or deleted once sent.
 
-`chat_app/` holds a separate Apps Script **Google Chat app** that adds an in-card
-**date picker + product dropdown**: pick a date and it re-renders the report for the
-rows whose `Update 날짜` matches that day. It runs *alongside* the webhook broadcast,
-not instead of it (a webhook is send-only and can't receive the picker event). Not
-deployed yet — see `chat_app/SETUP.md` for the Cloud Console steps. Card design is
-duplicated from `badreview_chat_report.py`; keep them in sync.
+Requirements: Python 3.9+, `google-auth`, `google-auth-oauthlib`,
+`google-api-python-client`, a valid gws_shim token.
 
-## Safety flow (matches the skill)
+## chat_app/ + chat_app_jane/ — interactive Chat app
+
+Apps Script **Google Chat app (Workspace add-on mode)**, live since 2026-09-11, running
+*alongside* the webhook broadcast (webhooks can't receive picker events). One product per
+identity (`Config.gs` → `APP_PRODUCT`): Kevin = `pixel11`, Jane = `glxz8`. Control card
+has 시작일/종료일 pickers, 국가(`국가(tag)`) and 기종(`기종명`) dropdowns and **[조회]**;
+the report card is scoped to the chosen range + filters (unlike the cumulative Top 5 of
+the webhook card). Text `9/1~9/11` or `9/11` in a message also works.
+
+Entry points: `onMessage`, `onAddToSpace`, `onRemoveFromSpace`, button handler
+`refreshReport` (`onCardClick` = legacy shim). Card builders: `buildCards_(q)` →
+`controlCard_` / `reportCard_`. Scope: `spreadsheets` only.
+
+Deploy: edit `chat_app/Code.gs`, copy it to `chat_app_jane/`, then in each folder
+`clasp push --force && clasp deploy -i <deploymentId>` (IDs in `chat_app/SETUP.md`).
+
+## Safety flow (manual runs)
 
 1. Re-read the sheets every run (never reuse stale numbers).
-2. `--test` → TEST room only.
-3. Show the result + the room list, get an explicit human confirmation.
-4. `--broadcast --yes` → all rooms.
-5. If a product's `todayCount` is 0 the card still sends ("업로드된 배드리뷰 없음"); the
-   script prints a warning first.
+2. Test → private test room (`AAQAc9NQmJQ`) only.
+3. Show the result + room list, get an explicit human "yes".
+4. Broadcast.
+5. A product with 0 rows today still sends ("오늘 업로드된 배드리뷰 없음").

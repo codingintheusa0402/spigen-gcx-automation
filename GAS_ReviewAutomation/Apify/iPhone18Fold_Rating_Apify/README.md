@@ -8,13 +8,18 @@ Container-bound Google Apps Script for the "주요 디바이스별 아마존 세
 **Target sheets:** `iPhone 18`, `iPhone Fold`, `Apple ETC(26)`, `Pixel 11` — all four share the same layout: ASIN in col **B**, rating written to col **E** ("Rating") starting at row **6**
 **Apify task:** `CLQ3G6Sokyr7AJtQi` (`product-details-scraper-iphone18-fold`) — one task, pre-loaded with amazon.de URLs for every ASIN across all four sheets (266 URLs as of 2026-09-29, after Apple ETC(26)'s ASINs were filled in; kept in sync by `syncNewAsinsToApifyTask()`)
 
+## Screenshots
+
+![`iPhone 18` tab: Rating column E refreshed per ASIN (sales columns cropped)](docs/rating_sheet.jpg)
+*`iPhone 18` tab: Rating column E refreshed per ASIN (sales columns cropped)*
+
 ---
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `Code.js` | Apify run lifecycle (start task → poll → write ratings to both sheets), daily weekday trigger setup |
+| `Code.js` | Apify run lifecycle (start task → poll → write ratings to all four sheets), daily weekday trigger setup |
 | `config.js` | `SHEETS` array (per-sheet ASIN/rating column config), task ID, `_getToken()` |
 | `appsscript.json` | GAS manifest |
 
@@ -36,6 +41,9 @@ Container-bound Google Apps Script for the "주요 디바이스별 아마존 세
 | Key | Description |
 |-----|-------------|
 | `APIFY_TOKEN` | Apify API token (Project Settings → Script Properties in the Apps Script editor) |
+| `RATING_LAST_RUN_ID`, `RATING_LAST_DATASET_ID`, `RATING_LAST_POLL_STARTED_AT_MS` | Run state written/cleared by the code |
+
+No Google Chat notification — completion is a sheet toast + execution log only. Polling gives up after `CONFIG.pollMaxMinutes` (180). A missing tab in `SHEETS` makes the write step throw (`Sheet "<name>" not found`), while the ASIN sync just skips it.
 
 ---
 

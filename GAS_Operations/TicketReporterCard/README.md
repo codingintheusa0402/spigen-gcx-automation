@@ -9,6 +9,11 @@ note, with a per-sender confirmer code appended automatically.
 **GCP project:** `gcx-zendesk-decision-maker`
 **Deployment ID:** `AKfycbwVTKgXn9WBU4vk-MLuj1wPzv9y_Ru0E_1VSyMwvb4T0PGSiKixJZfOaPM18r73WLVQ` (pinned in Chat API → Connection settings → Apps Script)
 
+## Screenshots
+
+![Card from `buildCard_()` with sample data (fake ticket #1000000), posted only to the private test room](docs/card.jpg)
+*Card from `buildCard_()` with sample data (fake ticket #1000000), posted only to the private test room*
+
 ---
 
 ## Files
@@ -16,17 +21,35 @@ note, with a per-sender confirmer code appended automatically.
 | File | Purpose |
 |------|---------|
 | `Code.gs` | Event handlers (`onMessage`, `onCardClick`), card building, Zendesk API calls, Sheet-based thread↔ticket mapping |
-| `Config.gs` | Zendesk subdomain, Script Property keys, `CONFIRMERS` dropdown list, `CONFIRMER_BY_EMAIL` map, the 43-item `REFERENCE_PHRASES` list |
-| `appsscript.json` | GAS manifest (Chat app config) |
+| `Config.gs` | Zendesk subdomain, Script Property keys, `TicketQueue` tab names, TCT log sheet ID/columns, `CONFIRMERS` dropdown list, `CONFIRMER_BY_EMAIL` map, the 43-item `REFERENCE_PHRASES` list |
+| `appsscript.json` | GAS manifest — add-on style Chat app (`addOns.chat`), scopes `spreadsheets` + `script.external_request` |
+
+### Config / Script Properties
+
+| Script Property | Purpose |
+|-----------------|---------|
+| `ZENDESK_EMAIL` | Zendesk API user |
+| `ZENDESK_API_TOKEN` | Zendesk API token (never in code) |
+| `QUEUE_SHEET_ID` | file ID of the `TicketQueue` spreadsheet — `setupOnce()` creates it and stores the ID if unset |
+
+Tabs in the queue spreadsheet: `TicketQueue` (ticketId ↔ threadId + submission log),
+`Feedback` (`/revision`), `UnmappedThreads`, `Manual` (`/manual`, gid `2076587794`), `BtwQueue` (`/btw`).
+
+Event handlers: `onMessage`, `onCardClick` (dispatches `onRefChange` / `submitNote`),
+`onAddedToSpace`, `onRemovedFromSpace`. Replies are returned as add-on envelopes via
+`chatCreate_` / `chatUpdate_`.
 
 ---
 
-## Five ways to trigger it
+## Ways to trigger it
 
 ### 1. `"티켓 <번호>"` or a pasted report → interactive card
 `onMessage` renders a card: the report text, a single reference dropdown (43 canned phrases
 that each append a line into one freeform note box), a confirmer dropdown, and a submit
 button. `submitNote` posts the note as a Zendesk internal note — **never public**, hard rule.
+The body is composed by `composeNote_` as `처리 요청 사항` / blank / note text / blank /
+`[GCX <confirmer> 컨펌]`; status is left unchanged on this path. If the queue has a row for
+the ticket, the card shows `#<id> — <subject>` from it.
 
 ### 2. Thread-reply direct-post
 `send.py` (in the sibling `ticket-reporter` skill) writes `{ticketId, threadId}` into the
@@ -48,6 +71,23 @@ The confirmer code is resolved from the sender's email via `CONFIRMER_BY_EMAIL` 
 
 Unmapped senders fall back to `CONFIRMERS[0]` (`KJW`). The confirmation card title is plain
 `내부 노트 전송 완료` — no ticket number, emoji, or "스레드 답장" suffix.
+
+The thread-mapping check runs **before** the ticket-number regex: a reply in a mapped thread
+that cites another ticket (e.g. "#1000164335 건과 동일 이슈") must still post to the thread's
+own ticket (misrouting bug fixed 2026-10-06). If a thread has no mapping and the text has no
+6+ digit number, the thread is logged to `UnmappedThreads` so its mapping can be backfilled.
+
+#### 2b. TCT log hand-off (Lazada/Shopee `Esc T2` rows)
+Tickets queued from the Lazada/Shopee TCT log sheet (`1HZ14uqTVeP7bGYZDu9v9Ve2C1xNY_m6dcSv-KMCoAKc`,
+tabs `Lazada log` / `Shopee log`, see `../TCTChatLog_GCX`) have non-numeric IDs such as
+`260915BQH9J0`. A thread reply for one of these never calls Zendesk — `updateTctLogRow_`
+writes back into that row instead:
+
+- `/voucher <100|50|10>[%] <memo>` → col T Voucher = `Provide <N>% voucher`; without the token Voucher is untouched
+- col U memo = the reply text verbatim (minus the `/voucher` token, no `처리 요청 사항` wrapper)
+- col V GCX STATUS = `Advice given`, col A Status = `Esc T1  ` (two trailing spaces — must match the dropdown exactly; never "fix" it)
+
+Replies with a `TCT 로그 기록 완료` card linking to the row.
 
 ### 3. `/revision <feedback>` → feedback channel
 A pure feedback channel that never touches Zendesk. `onMessage` checks this prefix **before**
@@ -121,3 +161,7 @@ deployment — the `clasp deploy -i` step is required for changes to reach the i
 app.
 
 Live rooms: real chatroom `spaces/AAQAdqYt1ro`; test room `Private` (`spaces/AAQAc9NQmJQ`).
+
+One-time setup: set `ZENDESK_EMAIL` / `ZENDESK_API_TOKEN` in Script Properties and run
+`setupOnce()` (creates the `TicketQueue` spreadsheet, stores `QUEUE_SHEET_ID`). The sender side
+(`send.py`, `check_feedback.py`, `check_btw_queue.py`) lives in the `ticket-reporter` skill.

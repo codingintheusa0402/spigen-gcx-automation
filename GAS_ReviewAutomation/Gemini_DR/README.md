@@ -1,119 +1,82 @@
 # Gemini_DR — Google Apps Script (Glx26 bound)
 
-Google Apps Script project bound to the **Galaxy S26 review spreadsheet** (`1fpv9TEDPGR8D6QRRc0ll-WzF7sOkfxe9UNBCmdBSE9g`).
+Container-bound Apps Script project on the **Galaxy S26 review spreadsheet** (`1fpv9TEDPGR8D6QRRc0ll-WzF7sOkfxe9UNBCmdBSE9g`). Its main job is the **`=DR()` custom function**, which uses Gemini to classify review text (본문) into one defect label (인입사유) from the sheet's `Defect` tab. The same project also hosts a monday.com upload sidebar for the `1-3점` tab, an Apify Product scraper, and a one-off 국내 배드리뷰 copy helper.
 
-clasp script ID: `1sPKcHgYy8kEqrp6Ra_FSw3vpnIVlJgB5dNeFLVTzZrZoptmEeA8lnrMm`
+clasp script ID: `1sPKcHgYy8kEqrp6Ra_FSw3vpnIVlJgB5dNeFLVTzZrZoptmEeA8lnrMm` (`.clasp.json` is local only — not tracked in git).
+
+## Screenshots
+
+![`=dr(G2,S2)` in the 인입사유(AI) column next to the human 인입사유 label](docs/dr_formula.jpg)
+*`=dr(G2,S2)` in the 인입사유(AI) column next to the human 인입사유 label*
 
 ---
 
 ## Features
 
-### 1. `=DR()` — Gemini-powered defect classifier (`Gemini.js`)
-
-Custom Sheets formula that classifies customer review text into a predefined defect/issue label.
+### 1. `=DR()` — Gemini 인입사유 classifier (`Gemini.js`)
 
 ```
-=DR(본문셀)
-=DR(본문셀, 대분류)
+=DR(본문셀)            // classify against every Defect row
+=DR(본문셀, 대분류)     // only Defect rows whose col A == 대분류
 ```
 
 **Flow:**
-1. Keyword fast path (heavy/bulky → 두꺼움, yellow → 황변, etc.)
-2. Gemini API call — tries `gemini-3.5-flash`, falls back to `gemini-2.5-flash-lite`
-3. Strict normalize match → loose contains match against the `Defect` sheet
-4. Results cached 6 hours via `CacheService` (key prefix: `DR_CACHE_VERSION`)
+1. Cache lookup — `CacheService` script cache, 6 h TTL, key = `DR_CACHE_VERSION` (`DR_v22_`) + base64(text|category). Bump the version string to invalidate everything.
+2. Load the `Defect` sheet (A `대분류`, B `label`, C `description`); prompt lists `label: description`.
+3. Keyword fast path (`keywordFallback_`): heavy/bulky → 두꺼움, yellow → 황변, button → 버튼불량, attach/difficult → 부착어려움, scratch → 스크래치 (only if that label exists in the filtered list). Note: these fast-path hits are **not** cached.
+4. Gemini call (`temperature 0`, `maxOutputTokens 20`, thinking off), trying models in order: `gemini-3.1-flash-lite` → `gemini-2.5-flash-lite` → `gemini-3.5-flash`.
+5. Strict normalized match → loose contains match against the label list; result cached. No match → `''`. Exceptions → `ERROR: …`.
 
-**Required:** `GEMINI_API_KEY` in Script Properties.
+Utilities: `clearDRCache()` (note: `removeAll([])` is effectively a no-op — bump `DR_CACHE_VERSION` instead), `testDRBatch()` (classifies rows 2–21 of `1-3점`, writes into the `인입사유(AI)` column and logs token usage), `DEBUG_DR(text, category)` (returns JSON trace).
 
-**Defect data source:** `Defect` sheet in the spreadsheet — columns: `대분류` (col A), `label` (col B), `description` (col C).
+### 2. Monday.com upload sidebar (`main.js`, `UI.js`, `uploader_sidebar.html`)
 
-Utility functions: `clearDRCache()`, `testDRBatch()`, `DEBUG_DR()`.
+**CX Upload → Open Uploader** opens a sidebar that uploads one day's rows from `1-3점` to the **📌Galaxy S26 Case+CP** board (`BOARD_ID 18399593191`).
 
----
+- Filters by `Update 날짜` (col 15) = the date picked in the sidebar; scans in pages of 250 rows.
+- Skips rows without `Review Title` / `Review Link`; dedupes against existing board items by `Review Link` (`link_mm0fkspz`).
+- Group routing by `기종명/모델명/Model` → `Galaxy S26` / `Galaxy S26 Plus` / `Galaxy S26 Ultra` (fallback: first group).
+- Default `클레임/리뷰` status = `리뷰`; `본문` also written to the `자동번역` column (target `ko`).
+- `syncSheetToMonday()` / `syncSheetToMonday_core()` = non-sidebar version (no date filter).
 
-### 2. Apify Amazon Review Scraper (`Code.js`)
+### 3. Apify Product scraper (`Products.js`)
 
-Starts an Apify actor task run asynchronously, polls until completion, writes results to a dated sheet, and notifies Google Chat.
+**CX Upload → Apify Product → Run Product Now** starts Apify task `hhYN1b5uTF8x8yk4Q`, creates a 1-min recurring trigger for `pollProductRunAndWrite()`, and overwrites the `Product` sheet on success. **Cancel Product Polling** deletes the trigger.
 
-**Entry points (run from GAS editor):**
-| Function | Purpose |
-|---|---|
-| `startApifyRunAndSchedulePoll()` | Start the Apify task run + save run ID |
-| `pollApifyRunAndWrite()` | Poller — invoked by recurring time trigger every 1 min |
-| `purgeOneOffDelayedPollers_()` | Remove stale one-off triggers |
-| `logProjectTriggers_()` | Debug: list all project triggers |
+### 4. Apify review scraper (`Code.js`) — legacy, currently broken
 
-**Flow:**
-1. `startApifyRunAndSchedulePoll()` → POSTs to Apify task API, saves `APIFY_LAST_RUN_ID` in Script Properties
-2. `_ensureRecurringPoller_()` creates a 1-minute time trigger for `pollApifyRunAndWrite()`
-3. On `SUCCEEDED`: fetches all dataset items (paginated, 50k/page), writes to a new dated sheet (`Apify_YYMMDD`), deduplicates by `username+reviewTitle+reviewDescription`, posts completion to Google Chat
-4. On `FAILED`/`ABORTED`/timeout (180 min): cleans up state + deletes the trigger
+`startApifyRunAndSchedulePoll()` / `pollApifyRunAndWrite()` (1-min poller, 180-min timeout) would write a dated `Apify_YYMMDD` sheet, dedupe, and post to Chat. Daily review scraping for Glx26 actually runs from **MasterTrigger** (`masterDailyJob`), not here.
 
-**Required Script Properties:** `APIFY_TOKEN`, `CHAT_WEBHOOK_URL` (optional).
+### 5. 국내 배드리뷰 copy (`국내.js`)
+
+`updateScoreSheet()` (manual) copies `국내 고객배드리뷰` from spreadsheet `1UVXNdfYlGxCCkhwhcmRZsxsHvctiAi6DX3LmuMk-DjU` into the `1-3점` tab of spreadsheet `1qs03gqcnDo9t94BrqPCcN0nYjCAE43sL7BmS8bB7kOQ`, remapping columns, country `KOREA`/`KR`, today's KST date. It **clears the whole target tab first** (header included — output has no header row).
 
 ---
 
-### 3. Monday.com Upload Sidebar (`main.js`, `UI.js`, `uploader_sidebar.html`)
+## Menus (`onOpen`)
 
-Sidebar UI accessible via **CX Upload → Open Uploader**. Uploads rows from the `1-3점` sheet of the Glx26 spreadsheet to the **Galaxy S26 Case+CP** Monday.com board (`BOARD_ID: 18399593191`).
-
-**Features:**
-- Filters by `Update 날짜` (date col 15) to select only today's rows
-- Deduplicates against existing Monday items by `Review Link`
-- Routes items to the correct board group by model name (S26 / S26 Plus / S26 Ultra)
-- Auto-translates `본문` column into Korean via the `자동번역` board column
-- Default status label: `리뷰` on the `클레임/리뷰` column
-- Paged upload (250 rows/page) with progress shown in sidebar
-
-**Required Script Properties:** `MONDAY_API_KEY`.
-
-**UI menus added on open:**
-- `CX Upload` → Open Uploader / Apify Product (Run / Cancel)
+- `CX Upload` → Open Uploader · Apify Product ▸ Run Product Now / Cancel Product Polling
 - `AI Tools` → Summarize selected cells / Run Defect GPT (selected cells)
 
----
-
-### 4. Apify Product Scraper (`Products.js`)
-
-Separate Apify task (`hhYN1b5uTF8x8yk4Q`) for scraping product data. Writes results to a `Product` sheet (overwrites on each run).
-
-**Entry points:**
-| Function | Purpose |
-|---|---|
-| `uiRunProductNow()` | Start product run (called from CX Upload menu) |
-| `pollProductRunAndWrite()` | Recurring poller (1-min trigger) |
-| `cancelProductPolling()` | Delete product poll trigger |
-
----
-
-### 5. Korea Domestic Review Sync (`국내.js`)
-
-`updateScoreSheet()` — copies rows from the **국내 고객배드리뷰** sheet into a separate score spreadsheet's `1-3점` tab, remapping columns and filling today's date in KST.
-
-Run manually from the GAS editor.
-
----
-
-## Script Properties Required
+## Script Properties
 
 | Key | Used by |
 |---|---|
-| `GEMINI_API_KEY` | `DR()` formula |
-| `APIFY_TOKEN` | Apify review + product scrapers |
-| `MONDAY_API_KEY` | Monday.com uploader |
-| `CHAT_WEBHOOK_URL` | Google Chat completion notifications (optional) |
+| `GEMINI_API_KEY` | `DR()` |
+| `APIFY_TOKEN` | Product / review scrapers |
+| `MONDAY_API_KEY` | monday uploader |
 
----
+Runtime state (auto-managed): `PRODUCT_LAST_RUN_ID`, `PRODUCT_LAST_DATASET_ID`, `PRODUCT_LAST_POLL_STARTED_AT_MS`, `APIFY_LAST_*`.
 
 ## Config (`config.js`)
 
-Key constants:
-- `UPLOAD_SHEET_ID` / `UPLOAD_SHEET_NAME` — source sheet for Monday upload (`1-3점`)
-- `BOARD_ID`, `LINK_COLUMN_ID`, `CLAIM_REVIEW_COLUMN_ID`, etc. — Monday board column IDs
-- `PREFERRED_HEADERS` — column order for Apify output sheets
-- `CONFIG.pollIntervalMinutes` (1), `CONFIG.pollMaxMinutes` (180), `CONFIG.timezone` (`Asia/Seoul`)
+`UPLOAD_SHEET_ID` / `UPLOAD_SHEET_NAME` (`1-3점`), `DATE_COL_INDEX_1BASED` (15), `BOARD_ID`, monday column IDs (`LINK_/CLAIM_REVIEW_/COUNTRY_/PHOTO_/CHANNEL_COLUMN_ID`), `DRY_RUN` (false), `GROUP_TITLES`, `PREFERRED_HEADERS`, `CONFIG` (`pollIntervalMinutes 1`, `pollMaxMinutes 180`, `timezone Asia/Seoul`).
 
----
+## Known issues (as of current code)
+
+- `Code.js` review scraper: `CONFIG.actorTaskIdOrSlug` is not defined in `config.js`, so `startApifyRunAndSchedulePoll()` throws immediately; `_postToGoogleChat` references a global `CHAT_WEBHOOK_URL` constant that is not defined anywhere (would be a ReferenceError, caught and logged).
+- `AI Tools` menu items point at `uiRunSummarize` / `uiRunDefectGPT`, which do not exist in this project — clicking them errors.
+- `=DR()` results are cached for 6 h, so edits to the `Defect` sheet don't show up until the cache expires or `DR_CACHE_VERSION` is bumped.
 
 ## Deploy
 
@@ -122,4 +85,4 @@ cd Gemini_DR
 clasp push --force
 ```
 
-> Always push from `Gemini_DR/` — never from `Apify/APIFY_Axesso/` which has a different script ID.
+> Always push from `Gemini_DR/` — never from `Apify/APIFY_Axesso/` or `MasterTrigger/`, which are different script projects.

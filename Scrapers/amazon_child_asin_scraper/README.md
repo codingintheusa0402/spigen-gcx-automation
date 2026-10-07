@@ -14,8 +14,10 @@ Amazon product pages use a "parent ASIN" as a grouping mechanism. The parent pag
 ## Output
 
 ```
-asin_reviews_YYYYMMDD_HHMMSS.csv
+<out dir>/asin_reviews_YYYYMMDD_HHMMSS.csv
 ```
+
+Out dir = `$CHILD_ASIN_OUT_DIR` if set, else `~/Desktop` (the env var was added 2026-09-11 so the script can run on the 24/7 server, which has no Desktop). The CSV is written incrementally after each parent/domain family, so an interrupted run (Ctrl+C) keeps everything scraped so far.
 
 | Column | Description |
 |--------|-------------|
@@ -32,17 +34,22 @@ asin_reviews_YYYYMMDD_HHMMSS.csv
 
 ## Usage
 
-Edit `PARENT_ASINS` in the script, then:
+There are no CLI flags. Edit `PARENT_ASINS` (and, to limit marketplaces, the `DOMAINS` dict) in the script, then:
 
 ```bash
 python3 amazon_child_asin_scraper.py
+
+# write the CSV somewhere other than ~/Desktop
+CHILD_ASIN_OUT_DIR=/tmp/child_asin python3 amazon_child_asin_scraper.py
 ```
+
+Every parent ASIN is processed on every domain in `DOMAINS` (US, DE, FR, IT, ES, UK, JP, IN by default), in that order. If Chrome crashes the driver is restarted and the page retried once.
 
 A Chrome window opens. If not already logged into Amazon, the script waits up to 60 seconds for manual login, then saves the session to `~/.amazon_cookies.json` for reuse.
 
 ## Session persistence
 
-Cookies are saved to `~/.amazon_cookies.json`. On subsequent runs the session is restored automatically — manual login is only required when the saved session expires.
+Cookies are saved to `~/.amazon_cookies.json`, keyed per domain. Each run starts Chrome on a throwaway temp profile (`chrome_amz_*`) and re-injects those cookies, so the session is restored automatically — manual login is only required when the saved session expires.
 
 ## Configuration
 
@@ -52,6 +59,9 @@ Cookies are saved to `~/.amazon_cookies.json`. On subsequent runs the session is
 | `CHILD_PAGE_WAIT` | `2 s` | Wait after loading each child page |
 | `LOGIN_WAIT` | `60 s` | Max seconds to wait for manual login |
 | `COOKIES_FILE` | `~/.amazon_cookies.json` | Session cookie storage |
+| `DOMAINS` | 8 marketplaces | Domains each parent is checked on |
+| `PARENT_ASINS` | 6 Spigen parents | Input list |
+| env `CHILD_ASIN_OUT_DIR` | `~/Desktop` | CSV output directory |
 
 ## Dependencies
 
