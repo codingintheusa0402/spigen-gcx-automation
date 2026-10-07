@@ -166,16 +166,21 @@ Object.assign(Mesh.prototype, {
   },
 
   // ---------------- drag & drop ----------------
-  dragStart(e, sid) { this.drag = { sid, x0: e.clientX, y0: e.clientY, moved: false }; },
+  dragStart(e, sid) {
+    this.drag = { sid, x0: e.clientX, y0: e.clientY, moved: false, held: false };
+    clearTimeout(this.holdTimer);                                  // press-and-hold (no movement) → details dropdown
+    this.holdTimer = setTimeout(() => { const d = this.drag; if (d && !d.moved && this.onHold) { d.held = true; this.onHold(d.sid, d.x0, d.y0); } }, 520);
+  },
   dragMove(e) {
     const d = this.drag; if (!d) return false;
-    if (!d.moved && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > 4) d.moved = true;
+    if (!d.moved && !d.held && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > 4) { d.moved = true; clearTimeout(this.holdTimer); }
     const n = this.nodes.get(d.sid);
     if (d.moved && n) { const p = this.toWorld(e); n.x = p.x; n.y = p.y; n.dragging = true; this.c.style.cursor = 'grabbing'; }
     return true;
   },
   dragEnd() {
-    const d = this.drag; if (!d) return; this.drag = null; this.c.style.cursor = '';
+    const d = this.drag; if (!d) return; this.drag = null; this.c.style.cursor = ''; clearTimeout(this.holdTimer);
+    if (d.held) return;                                            // the hold already opened the details
     const n = this.nodes.get(d.sid);
     if (!d.moved) return this.onSelect(d.sid);
     if (n) { n.dragging = false; this.dropOrbit(n); }

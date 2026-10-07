@@ -286,3 +286,23 @@ body.pixel .logo { image-rendering: pixelated; border-radius: 0; filter: none; }
 .ph-qr { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; }
 .ph-qr img { width: 180px; height: 180px; border-radius: 12px; background: #fff; padding: 6px; }
 .ph-qr code { color: var(--dim); font-size: 11px; }
+
+/* press-and-hold session details */
+#holdCard { position: fixed; z-index: 60; width: 440px; max-height: 72vh; overflow-y: auto; padding: 14px 16px; border-radius: 16px;
+  background: rgba(18,16,58,.97); border: 1px solid var(--line2); box-shadow: 0 0 40px rgba(90,110,255,.25), 0 24px 60px rgba(0,0,0,.6); font-size: 12.5px; user-select: text; -webkit-user-select: text; }
+#holdCard .hd-h { display: flex; align-items: center; gap: 8px; font-size: 14px; } #holdCard .hd-h b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#holdCard .hd-x { background: none; border: 0; color: var(--dim); font-size: 18px; padding: 0 4px; }
+#holdCard .hd-meta { color: var(--dim); font-size: 11.5px; margin: 3px 0 8px; }
+#holdCard details { border-top: 1px solid var(--line); padding: 7px 0; } #holdCard summary { cursor: pointer; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; font-size: 10.5px; }
+#holdCard .hd-md { line-height: 1.55; margin-top: 6px; color: var(--text); } #holdCard .hd-md p { margin: 4px 0; } #holdCard .hd-md ul { margin: 2px 0; padding-left: 18px; }
+#holdCard .hd-md h3, #holdCard .hd-md h4, #holdCard .hd-md h5 { margin: 8px 0 3px; font-size: 12.5px; } #holdCard .hd-md code { background: rgba(255,255,255,.08); padding: 0 4px; border-radius: 4px; }
+#holdCard .hd-md pre { background: rgba(0,0,0,.3); padding: 8px; border-radius: 8px; overflow-x: auto; font-size: 11px; }
+#holdCard .hd-note, #holdCard .hd-none { color: var(--dim); font-size: 11px; margin-top: 6px; }
+#holdCard .hd-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+#holdCard .hd-chip { padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line2); background: rgba(60,56,150,.3); font-size: 11.5px; }
+#holdCard .hd-chip.skill { border-color: rgba(125,255,196,.4); color: #c8ffe6; } #holdCard .hd-chip i { font-style: normal; color: var(--dim); margin-left: 5px; }
+body.pixel #holdCard { border-radius: 0; background: #10153a; border: 3px solid #fff1e8; box-shadow: 6px 6px 0 #05061a; }
+#holdCard .hd-what .hd-md { max-height: 260px; overflow-y: auto; padding-right: 6px; }
+#holdCard ::-webkit-scrollbar, #holdCard::-webkit-scrollbar { width: 6px; height: 6px; background: transparent; }
+#holdCard ::-webkit-scrollbar-thumb, #holdCard::-webkit-scrollbar-thumb { background: rgba(160,175,255,.25); border-radius: 3px; }
+#holdCard ::-webkit-scrollbar-corner, #holdCard::-webkit-scrollbar-corner { background: transparent; }

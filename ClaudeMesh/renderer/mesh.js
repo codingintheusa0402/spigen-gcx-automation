@@ -52,7 +52,7 @@ function glowSprite(color) {
 class Mesh {
   constructor(canvas, { onSelect, onHub }) {
     this.c = canvas; this.ctx = canvas.getContext('2d');
-    this.onSelect = onSelect; this.onHub = onHub;
+    this.onSelect = onSelect; this.onHub = onHub; this.onHold = null;   // onHold(sid, clientX, clientY): press-and-hold
     this.nodes = new Map(); this.matter = []; this.fx = [];
     this.selected = null; this.hover = null;
     this.hub = { x: 0, y: 0, tps: 0, usd: 0, count: 0, mass: 0 };

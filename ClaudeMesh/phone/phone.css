@@ -66,3 +66,4 @@ h3 { font-size: 11px; letter-spacing: .25em; text-transform: uppercase; color: v
 .keys { scrollbar-width: none; }
 #xt .xterm { width: max-content; }
 #sheetBody { scrollbar-width: none; }
+.md { font-size: 14px; line-height: 1.55; } .md p { margin: 5px 0; } .md ul { margin: 3px 0; padding-left: 20px; } .md code { background: rgba(255,255,255,.08); padding: 0 4px; border-radius: 4px; } .md pre { background: rgba(0,0,0,.3); padding: 8px; border-radius: 8px; overflow-x: auto; font-size: 12px; } .md h3, .md h4, .md h5 { font-size: 14px; margin: 10px 0 4px; letter-spacing: 0; text-transform: none; color: var(--text); }

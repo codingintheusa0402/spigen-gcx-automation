@@ -28,7 +28,7 @@ setTimeout(() => { $('#hint').style.opacity = 0; }, 6000);
 
 // touch: one finger pans (or drags a session to a new orbit), two fingers pinch-zoom, a tap selects
 const cv = $('#mesh');
-let T = null;
+let T = null, holdT = null;
 const pt = t => ({ clientX: t.clientX, clientY: t.clientY });
 cv.addEventListener('touchstart', e => {
   e.preventDefault(); viz.lastInput = performance.now();
@@ -36,6 +36,8 @@ cv.addEventListener('touchstart', e => {
   if (e.touches.length === 1) {
     const p = pt(e.touches[0]), h = viz.hit(p);
     T = { mode: 'one', x0: p.clientX, y0: p.clientY, tx: c.ttx, ty: c.tty, hit: h, moved: false };
+    clearTimeout(holdT);
+    if (h && h !== 'hub') holdT = setTimeout(() => { if (T && !T.moved && T.hit === h) { T.held = true; navigator.vibrate && navigator.vibrate(10); openDetails(h); } }, 520);
   } else if (e.touches.length === 2) {
     if (T && T.mode === 'drag') viz.dragEnd();
     const [a, b] = [pt(e.touches[0]), pt(e.touches[1])], r = cv.getBoundingClientRect();
@@ -52,7 +54,8 @@ cv.addEventListener('touchmove', e => {
     viz.clampCam(); c.s = c.ts; c.tx = c.ttx; c.ty = c.tty; return;
   }
   const p = pt(e.touches[0]);
-  if (!T.moved && Math.hypot(p.clientX - T.x0, p.clientY - T.y0) > 8) {
+  if (T.held) return;
+  if (!T.moved && Math.hypot(p.clientX - T.x0, p.clientY - T.y0) > 8) { clearTimeout(holdT);
     T.moved = true;
     if (T.hit && T.hit !== 'hub') { T.mode = 'drag'; viz.dragStart({ clientX: T.x0, clientY: T.y0 }, T.hit); }
   }
@@ -61,7 +64,8 @@ cv.addEventListener('touchmove', e => {
   else { c.ttx = T.tx + p.clientX - T.x0; c.tty = T.ty + p.clientY - T.y0; viz.clampCam(); c.tx = c.ttx; c.ty = c.tty; }
 }, { passive: false });
 cv.addEventListener('touchend', e => {
-  e.preventDefault(); if (!T) return;
+  e.preventDefault(); clearTimeout(holdT); if (!T) return;
+  if (T.held) { if (e.touches.length === 0) T = null; return; }
   if (T.mode === 'drag') { viz.dragEnd(); toast('Orbit saved on this phone'); }
   else if (!T.moved && e.touches.length === 0) {
     if (T.hit === 'hub') openBroadcast(); else if (T.hit) openSession(T.hit);
@@ -242,4 +246,25 @@ function openTerminal(id) {
   document.querySelectorAll('.keys button').forEach(b => b.onclick = () => write(decodeURIComponent(b.dataset.k)));
   const go = () => { const v = $('#tIn').value; write(v); setTimeout(() => write('\r'), 60); $('#tIn').value = ''; };
   $('#tGo').onclick = go; $('#tIn').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); go(); } };
+}
+
+// ---------- press-and-hold a session: what it does, skills, commands, tools, CLAUDE.md ----------
+async function openDetails(sid) {
+  const s = snap.sessions.find(x => x.sid === sid);
+  sheet('details', `<div class="sh-h"><h2>${esc(s ? s.name : 'Session')}</h2><button class="x">×</button></div><div class="meta">Reading the session…</div>`, true);
+  const d = await api('/api/details?sid=' + encodeURIComponent(sid));
+  if (sheetKind !== 'details') return;
+  if (!d || !d.ok) { $('#sheetBody .meta').textContent = (d && d.err) || 'No details'; return; }
+  const chips = list => list.length ? `<div class="chips">${list.map(([k, n]) => `<span class="tag" style="font-size:12.5px;padding:4px 9px">${esc(k)} <span style="opacity:.6">${n}</span></span>`).join('')}</div>` : '<div class="meta">none</div>';
+  const what = d.summary ? mdToHtml(d.summary) + '<div class="meta">From the latest /compact summary</div>'
+    : `${d.first ? `<p><b>Started with:</b> ${esc(d.first)}</p>` : ''}${d.last && d.last !== d.first ? `<p><b>Latest ask:</b> ${esc(d.last)}</p>` : ''}${d.lastText ? '<p><b>Latest reply:</b></p>' + mdToHtml(d.lastText) : ''}`;
+  $('#sheetBody').innerHTML = `<div class="sh-h"><h2>${esc(s ? s.name : d.title || 'Session')}</h2><button class="x">×</button></div>
+    <div class="meta">${esc((d.cwd || '').replace(/^\/Users\/[^/]+/, '~'))}</div>
+    <h3>Skills used · ${d.skills.length}</h3>${chips(d.skills)}
+    <h3>Slash commands · ${d.cmds.length}</h3>${chips(d.cmds)}
+    <h3>What this session does</h3><div class="md" style="max-height:40vh;overflow-y:auto">${what}</div>
+    <h3>Tools · ${d.tools.length}</h3>${chips(d.tools)}
+    ${d.instructions.map(f => `<details><summary style="color:var(--dim);font-size:12px;margin:12px 0 4px">Instructions · ${esc(f.path)}</summary><div class="md">${mdToHtml(f.text)}</div></details>`).join('')}
+    <div class="row" style="margin-top:14px"><button class="primary" id="dOpen">Open session</button></div>`;
+  $('#sheetBody .x').onclick = closeSheet; $('#dOpen').onclick = () => openSession(sid);
 }

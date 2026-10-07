@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('api', {
   listCommands: cwd => ipcRenderer.invoke('cmds:list', cwd),
   pathForFile: f => webUtils.getPathForFile(f),
   history: () => ipcRenderer.invoke('hist:list'),
+  details: sid => ipcRenderer.invoke('sess:details', sid),
   rename: (sid, name) => ipcRenderer.invoke('hist:rename', sid, name),
   agents: {
     list: () => ipcRenderer.invoke('agents:list'),

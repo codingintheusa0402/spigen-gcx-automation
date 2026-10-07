@@ -29,7 +29,7 @@ function createPhoneServer(ctx) {
   const STATIC = {
     '/': 'phone/index.html', '/phone.js': 'phone/phone.js', '/phone.css': 'phone/phone.css', '/icon.png': 'renderer/icon.png',
     '/apple-touch-icon.png': 'build/icon.png',
-    '/mesh.js': 'renderer/mesh.js', '/mother.js': 'renderer/mother.js', '/bubbles.js': 'renderer/bubbles.js', '/organism.js': 'renderer/organism.js', '/pixel.js': 'renderer/pixel.js',
+    '/mesh.js': 'renderer/mesh.js', '/mother.js': 'renderer/mother.js', '/bubbles.js': 'renderer/bubbles.js', '/organism.js': 'renderer/organism.js', '/pixel.js': 'renderer/pixel.js', '/md.js': 'renderer/md.js',
     '/xterm.js': 'node_modules/@xterm/xterm/lib/xterm.js', '/xterm.css': 'node_modules/@xterm/xterm/css/xterm.css', '/addon-fit.js': 'node_modules/@xterm/addon-fit/lib/addon-fit.js',
   };
 
@@ -65,6 +65,7 @@ function createPhoneServer(ctx) {
       req.on('close', () => clients.delete(c)); return;
     }
     if (p === '/api/history') return json(res, 200, await ctx.getHistory());
+    if (p === '/api/details') return json(res, 200, await ctx.details(u.searchParams.get('sid') || ''));
     if (p === '/api/commands') return json(res, 200, await ctx.commandsFor(u.searchParams.get('cwd') || ''));
     if (p.startsWith('/api/term/') && req.method === 'GET') {           // live terminal of an in-app session
       const id = p.slice(10), pt = ctx.ptys.get(id); if (!pt) return json(res, 404, { error: 'no such terminal' });

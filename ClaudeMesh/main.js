@@ -249,6 +249,57 @@ function renameTranscript(sid, name) {
   return { ok: true };
 }
 
+// ---------------- session details (press-and-hold on a session bubble) ----------------
+// Skills / slash commands / tools a session used, its latest compaction summary (its "context md"),
+// first & last prompt, and the CLAUDE.md instructions it runs under. Parsed incrementally per file.
+const detailCache = new Map();          // file -> { size, skills, cmds, tools, summary, lastText }
+function findTranscript(sid) {
+  const c = [...histCache.values()].find(c => c.meta && c.meta.sid === sid);
+  if (c) return c.meta.file;
+  try { for (const d of fs.readdirSync(PROJ_DIR)) { const f = path.join(PROJ_DIR, d, sid + '.jsonl'); if (fs.existsSync(f)) return f; } } catch { }
+  return null;
+}
+const bump = (o, k) => { if (k) o[k] = (o[k] || 0) + 1; };
+async function sessionDetails(sid) {
+  const file = findTranscript(sid); if (!file) return { ok: false, err: 'transcript not found' };
+  const st = fs.statSync(file);
+  let d = detailCache.get(file);
+  if (!d || st.size < d.size) d = { size: 0, skills: {}, cmds: {}, tools: {}, summary: '', summaryAt: '', lastText: '', rest: '' };
+  if (st.size > d.size) {                                   // read only the new bytes
+    const fh = await fs.promises.open(file, 'r');
+    try {
+      const CH = 8 << 20;
+      for (let pos = d.size; pos < st.size; pos += CH) {
+        const len = Math.min(CH, st.size - pos), b = Buffer.alloc(len); await fh.read(b, 0, len, pos);
+        const lines = (d.rest + b.toString('utf8')).split('\n'); d.rest = lines.pop();
+        for (const line of lines) {
+          if (line.includes('"name":"Skill"')) for (const m of line.matchAll(/"name":"Skill","input":\{"skill":"([^"]+)"/g)) bump(d.skills, m[1]);
+          if (line.includes('<command-name>')) for (const m of line.matchAll(/<command-name>\/?([^<]+)<\/command-name>/g)) bump(d.cmds, '/' + m[1].trim());
+          if (line.includes('"type":"tool_use"')) for (const m of line.matchAll(/"type":"tool_use","id":"[^"]*","name":"([^"]+)"/g)) if (m[1] !== 'Skill') bump(d.tools, m[1]);
+          if (line.includes('"isCompactSummary":true')) {
+            try { const j = JSON.parse(line), c = j.message && j.message.content; const t = typeof c === 'string' ? c : Array.isArray(c) ? c.map(x => x.text || '').join('\n') : '';
+              d.summary = t.replace(/^This session is being continued[^\n]*\n+/, '').replace(/^The summary below covers[^\n]*\n+/, '').trim(); d.summaryAt = j.timestamp || ''; } catch { }
+          }
+          if (line.includes('"type":"assistant"') && line.includes('"type":"text"')) {
+            try { const j = JSON.parse(line), t = (j.message.content || []).filter(x => x.type === 'text').map(x => x.text).join('\n').trim(); if (t.length > 40) d.lastText = t; } catch { }
+          }
+        }
+      }
+    } finally { await fh.close(); }
+    d.size = st.size; detailCache.set(file, d);
+  }
+  const meta = ([...histCache.values()].find(c => c.meta && c.meta.sid === sid) || {}).meta || histMeta(file, st) || {};
+  const cwd = meta.cwd || '';
+  const readMd = f => { try { const t = fs.readFileSync(f, 'utf8'); return { path: f.replace(HOME, '~'), text: t.length > 6000 ? t.slice(0, 6000) + '\n…' : t }; } catch { return null; } };
+  const instructions = [cwd && cwd !== HOME && readMd(path.join(cwd, 'CLAUDE.md')), cwd && readMd(path.join(cwd, '.claude', 'CLAUDE.md')), readMd(path.join(HOME, 'CLAUDE.md')), readMd(path.join(HOME, '.claude', 'CLAUDE.md'))]
+    .filter(Boolean).filter((v, i, a) => a.findIndex(x => x.path === v.path) === i);
+  const top = (o, n) => Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, n);
+  return { ok: true, sid, cwd, title: meta.title || meta.aiTitle || '', first: meta.first || '', last: meta.last || '',
+    skills: top(d.skills, 30), cmds: top(d.cmds, 20), tools: top(d.tools, 12),
+    summary: d.summary.slice(0, 12000), summaryAt: d.summaryAt, lastText: d.lastText.slice(0, 1500), instructions };
+}
+ipcMain.handle('sess:details', (_e, sid) => sessionDetails(sid));
+
 // ---------------- background agents (`claude agents`, `claude --bg`) ----------------
 let claudeBin = null;            // resolved once through a login shell (PATH from the user's profile)
 function resolveClaude() {
@@ -379,6 +430,7 @@ function initPhone() {
     root: __dirname, userData: app.getPath('userData'), ptys, ptyBus,
     getSnap: () => lastSnap,
     getHistory: () => scanHistory(),
+    details: sid => sessionDetails(sid),
     commandsFor,
     sendToSession, interruptSession,
     resumeOnMac: sid => { if (!win) return { ok: false }; win.webContents.send('phone:resume', sid); return { ok: true }; },
