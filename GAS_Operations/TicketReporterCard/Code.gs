@@ -683,7 +683,7 @@ function askClaude_(question) {
     contentType: 'application/json',
     headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
     payload: JSON.stringify({
-      model: 'claude-sonnet-5',
+      model: 'claude-sonnet-5-5',
       max_tokens: 1024,
       messages: [{ role: 'user', content: question }]
     }),
