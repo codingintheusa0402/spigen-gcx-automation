@@ -131,6 +131,10 @@ both sides at once** — that caused a real duplicate send to all 13 live rooms 
     00:09 AM through past 10:30 AM — no `RUN` log line existed for that day at all
     until a manual run.
 
+### Run lock (2026-10-07)
+
+**Run lock** (2026-10-07): every real run holds `state/running_<date>.lock` while it works (stale after 90 min). Any other real run that starts meanwhile — `--catchup`, `--retry-if-held` or a manual one — logs `SKIP … another run is in progress` and exits. Added after the 10:30 run (15 min waiting on tags) and the 10:33 catch-up both sent the carousel to all 13 rooms on 2026-10-07.
+
 ## Testing — NEVER a bare live run
 
 **Rule (2026-09-21, permanent): when testing anything in this script, always pass

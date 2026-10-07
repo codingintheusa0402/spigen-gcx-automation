@@ -32,7 +32,7 @@ The scheduled jobs moved to the 24/7 **GCX server** (`gcx-server`, WSL2) crontab
 
 ```
 30 10 * * 1-5  python3 auto_broadcast.py                 # main run
-0  11 * * 1-5  python3 auto_broadcast.py --retry-if-held # Z8 KR-gate hard deadline
+30 11 * * 1-5  python3 auto_broadcast.py --retry-if-held # Z8 KR-gate deadline (main + 1 h)
 */5 * * * *    python3 auto_broadcast.py --catchup        # missed-trigger catch-up
 ```
 
@@ -78,10 +78,11 @@ Full detail in [`AUTO_BROADCAST.md`](AUTO_BROADCAST.md).
   every 10 min, up to 3 times, then sends anyway (2026-09-18).
 - **Z8 KR gate** (2026-09-18): 0 `국가(tag)=KR` rows in today's Z8 data → the whole
   carousel is held, an alert + preview goes to the private test room only, and
-  `state/held_<date>.flag` is written. The **11:00 `--retry-if-held`** run then sends
+  `state/held_<date>.flag` is written. The **11:30 (main + 1 h) `--retry-if-held`** run then sends
   unconditionally (2026-10-01).
 - **`--catchup`** (2026-10-02): every 5 min, weekdays 10:30–18:00, runs the normal flow
   if `state/ran_<date>.flag` is missing (machine was asleep at 10:30).
+- **Run lock** (2026-10-07): every real run holds `state/running_<date>.lock` while it works (stale after 90 min). Any other real run that starts meanwhile — `--catchup`, `--retry-if-held` or a manual one — logs `SKIP … another run is in progress` and exits. Added after the 10:30 run (15 min waiting on tags) and the 10:33 catch-up both sent the carousel to all 13 rooms on 2026-10-07.
 - Room list (13 rooms, incl. `GCX전략 Spigen x TCK` added 2026-09-29) and the test room
   come from `~/.claude/skills/badreview-chat-broadcast/broadcast.py`.
 

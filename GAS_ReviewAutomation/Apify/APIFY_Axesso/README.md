@@ -2,7 +2,7 @@
 
 Older copy of the Google Apps Script project that scrapes Amazon reviews via Apify/Axesso tasks and distributes them into the Spigen product monitoring spreadsheets. **It is superseded by [MasterTrigger](../../MasterTrigger/)** and kept only for reference/history — the code here was last changed on 2026-07-27 and has drifted from what is deployed.
 
-> ⚠️ **Do not `clasp push` from this folder.** Its `.clasp.json` has the **same scriptId as MasterTrigger** (`1AWrX0Xl8feD-AzYRbGVBb9kLRQra2ppE547i_Ghys4lLU9l28pkMUf9O`), so a push here would overwrite the live `masterDailyJob` project with this stale code (re-enabling retired products, removing the pending-write retry, and reverting the AI columns to `=dr()` formulas).
+> ⚠️ **Do not `clasp push` from this folder.** Its clasp config (renamed to `.clasp.json.disabled` on 2026-10-07 so `clasp push` now fails here) has the **same scriptId as MasterTrigger** (`1AWrX0Xl8feD-AzYRbGVBb9kLRQra2ppE547i_Ghys4lLU9l28pkMUf9O`), so a push here would overwrite the live `masterDailyJob` project with this stale code (re-enabling retired products, removing the pending-write retry, and reverting the AI columns to `=dr()` formulas).
 
 **Source spreadsheet:** `SRC_ID = 1tMbA_msRfCRY0KK40GnyZ_h1uNCldlnk9Cg-_MTcbsw`
 

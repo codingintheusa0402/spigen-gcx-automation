@@ -2,7 +2,7 @@
  * PRODUCT CONFIG (NO CONFIG REFERENCES HERE)
  **********************************************************/
 const PRODUCT = {
-  taskIdOrSlug: 'w3jI45UjmyFLwVHek',
+  taskIdOrSlug: 'ykXQsQhtYUOgTYv3G',   // product-details-scraper-iphone18 (was the Z8 task w3jI45UjmyFLwVHek until 2026-10-07)
   sheetBaseName: 'Product'
 };
 

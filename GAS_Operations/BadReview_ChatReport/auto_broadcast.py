@@ -55,6 +55,29 @@ def ran_marker_path(today):
     10:30 run (or an earlier catchup attempt) has already happened today."""
     return os.path.join(STATE_DIR, f"ran_{today.isoformat()}.flag")
 
+
+RUN_LOCK_STALE_S = 90 * 60  # a real run takes ≤ ~45 min (3 × 10-min tag retries + fetch)
+
+
+def take_run_lock(today):
+    """2026-10-07: the 10:30 run spent 15 min waiting for tags, the ran_ marker is only
+    written at the end, so the 10:33 --catchup saw "no run today" and sent a second
+    carousel to all 13 rooms. Every real run now holds state/running_<date>.lock for
+    its whole lifetime; any other real run (catchup, retry, a manual one) skips while
+    it's fresh. Returns False if another run holds it."""
+    import atexit
+    os.makedirs(STATE_DIR, exist_ok=True)
+    lock = os.path.join(STATE_DIR, f"running_{today.isoformat()}.lock")
+    try:
+        os.close(os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+    except FileExistsError:
+        age = time.time() - os.path.getmtime(lock)
+        if age < RUN_LOCK_STALE_S:
+            return False
+        os.utime(lock)  # left behind by a killed run — take it over
+    atexit.register(lambda: os.path.exists(lock) and os.remove(lock))
+    return True
+
 SHEETS = {
     "pixel11":  "12I6z_FFmDIMHa0rLanltKKFp7kI_yREQj3adkMamPgI",
     "glxz8":    "19OhswglYMx_dxSFFDtWI1WYPWq2jONJn6RK84KITwy4",
@@ -266,6 +289,13 @@ def main():
             return
         log(f"RETRY {today.isoformat()}: 10:30 run held the carousel — retrying now, "
             f"will send unconditionally regardless of today's KR count")
+
+    if not (a.dry_run or a.test_only):
+        if not take_run_lock(today):
+            log(f"SKIP {today.isoformat()}: another run is in progress (state/running_{today.isoformat()}.lock)")
+            return
+        if a.catchup and os.path.exists(ran_marker_path(today)):
+            return  # re-checked under the lock: a run finished while this one was starting
 
     log(f"RUN {today.isoformat()}: fetching sheets")
     token = refresh_gws_token()

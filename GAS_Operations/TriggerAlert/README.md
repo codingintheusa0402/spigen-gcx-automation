@@ -1,6 +1,6 @@
 # TriggerAlert
 
-⚠️ **Legacy / do-not-push folder.** Despite the name, this project contains no trigger-alerting logic — `Code.js` is an **older copy of the Monday.com → Sheet sync** template (board `7606389164`), and its `.clasp.json` points at the **same script ID as [ASIN_Master_MondaySync](../ASIN_Master_MondaySync/)** (`1WwwnwKuPbpdTGG6Uozx1Mr0AZU9mD_hc3UzHq82e_t-GjRe2eQ_4K-Fp`). Running `clasp push` here would overwrite the live ASIN_Master project and remove its ABM_Relay_Log cleanup and its stale run-lock fix. Make changes in `ASIN_Master_MondaySync/` (or `Monday_CX_Board/`) instead.
+⚠️ **Legacy / do-not-push folder.** Despite the name, this project contains no trigger-alerting logic — `Code.js` is an **older copy of the Monday.com → Sheet sync** template (board `7606389164`), and its clasp config (renamed locally to `.clasp.json.disabled` on 2026-10-07 so `clasp push` now fails here; `.clasp.json` is gitignored) points at the **same script ID as [ASIN_Master_MondaySync](../ASIN_Master_MondaySync/)** (`1WwwnwKuPbpdTGG6Uozx1Mr0AZU9mD_hc3UzHq82e_t-GjRe2eQ_4K-Fp`). Running `clasp push` here would overwrite the live ASIN_Master project and remove its ABM_Relay_Log cleanup and its stale run-lock fix. Make changes in `ASIN_Master_MondaySync/` (or `Monday_CX_Board/`) instead.
 
 ---
 

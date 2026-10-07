@@ -1,19 +1,22 @@
+@reboot sleep 30 && bash ~/tmux_start.sh
+# SKU/ASIN filler stays on the Mac (needs the Seller Central inventory login in its Chrome profile)
 # GCX server jobs — converted 1:1 from the Mac launchd agents (TZ = Asia/Seoul)
 SHELL=/bin/bash
 PATH=/home/kevinkim/.local/bin:/usr/local/bin:/usr/bin:/bin
 G=/home/kevinkim/Desktop/GCX
 
-# BadReview broadcast: weekdays 10:30, retry 11:00, catch-up every 5 min
+# BadReview broadcast: weekdays 10:30 main, 11:30 retry (always 1h after main, 2026-10-07
+# permanent rule), catch-up every 5 min. 2026-10-07 double send to all 13 rooms: the 10:30 run
+# was still waiting on tags when the 10:33 --catchup started a second run (no ran_ marker yet);
+# fixed in auto_broadcast.py with state/running_<date>.lock. A stray 11:00 "mesh:badreview-
+# broadcast" entry (same slot as the old 11:00 retry) was also removed that day.
 30 10 * * 1-5  cd $G/GAS_Operations/BadReview_ChatReport && python3 auto_broadcast.py >> logs/launchd.out.log 2>> logs/launchd.err.log
-0  11 * * 1-5  cd $G/GAS_Operations/BadReview_ChatReport && python3 auto_broadcast.py --retry-if-held >> logs/launchd.out.log 2>> logs/launchd.err.log
+30 11 * * 1-5  cd $G/GAS_Operations/BadReview_ChatReport && python3 auto_broadcast.py --retry-if-held >> logs/launchd.out.log 2>> logs/launchd.err.log
 */5 * * * *    cd $G/GAS_Operations/BadReview_ChatReport && python3 auto_broadcast.py --catchup >> logs/launchd.out.log 2>> logs/launchd.err.log
 
 # Caspi 판매량 backfill + discoloration report: every 30 min (scripts gate themselves)
 */30 * * * *   cd $G/GAS_Operations/CaspiSalesBackfill && python3 backfill.py >> logs/launchd.out.log 2>> logs/launchd.err.log
-*/30 * * * *   cd $G/GAS_Operations/DiscolorationReport && python3 report.py >> logs/launchd.out.log 2>> logs/launchd.err.log
 
-# SKU/ASIN filler stays on the MAC for now (needs the Seller Central inventory login + OTP in its Chrome profile).
-# Uncomment once ~/.chrome-sc-inventory-profile on the server is signed in, and boot out com.spigen.gcx.sku-asin-filler on the Mac.
-# */5 * * * *    cd $G/Scrapers/SKU_ASIN_Filler && python3 scheduler_gate.py >> launchd.out.log 2>> launchd.err.log
 
 # Pull skill/memory updates pushed from the Mac every 5 min is done by the Mac (push), nothing here.
+*/30 * * * *  cd $G/GAS_Operations/DiscolorationReport && python3 report.py >> $G/GAS_Operations/DiscolorationReport/logs/launchd.out.log 2>> $G/GAS_Operations/DiscolorationReport/logs/launchd.err.log  # mesh:discoloration-report

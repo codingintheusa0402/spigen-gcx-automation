@@ -55,7 +55,7 @@ Only the Product poller: every-1-minute trigger on `pollProductRunAndWrite`, sel
 
 ## Known issues
 
-- **`Products.js` still uses GlxZ8's product-details task** (`PRODUCT.taskIdOrSlug = 'w3jI45UjmyFLwVHek'`) — the same copy-paste leftover fixed for Pixel11 on 2026-08-10. "Run Product Now" will overwrite this book's `Product` tab with **Galaxy Z8** ASIN ratings/review counts until it is pointed at an iPhone 18 task.
+- **`Products.js` product task** — until 2026-10-07 it pointed at GlxZ8's product-details task (`w3jI45UjmyFLwVHek`, a copy-paste leftover), so "Run Product Now" would have filled this book's `Product` tab with Galaxy Z8 data. It now uses its own task **`ykXQsQhtYUOgTYv3G`** (`product-details-scraper-iphone18`: the 253 ASINs of the `신제품 라인업` tab × the 8 marketplaces, same layout as the Z8 task). Re-sync the task's `urls` input when the line-up changes.
 - Inherited from the template: `CHAT_WEBHOOK_URL` undefined (Product Chat post fails silently), dead `startApifyRunAndSchedulePoll()`, undefined `uiRunSummarize` / `uiRunDefectGPT` / `translateTextAuto`.
 
 ---

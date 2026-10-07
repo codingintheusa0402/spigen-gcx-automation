@@ -24,7 +24,7 @@ Google Apps Script (and Apify Actor) projects that scrape Amazon reviews/ratings
 | [Glx26_Apify](Apify/Glx26_Apify/) | Galaxy S26 sheet: Product task poller, `=DR()`, Sheet → monday uploader (board 18399593191). |
 | [GlxZ8_Apify](Apify/GlxZ8_Apify/) | Galaxy Z8 sheet: same template + `DefectDefsPatch.js` for the shared 인입사유 definitions (board 18421346787). |
 | [Pixel11_Apify](Apify/Pixel11_Apify/) | Pixel 11 port of the GlxZ8 template (board 18425190666); never runtime-verified. |
-| [iPhone18_Apify](Apify/iPhone18_Apify/) | iPhone 18 port of the GlxZ8 template (board 18430082360); Product task still points at the Z8 task. |
+| [iPhone18_Apify](Apify/iPhone18_Apify/) | iPhone 18 port of the GlxZ8 template (board 18430082360); own Product task `ykXQsQhtYUOgTYv3G` since 2026-10-07. |
 | [iPh17e_Apify](Apify/iPh17e_Apify/) | iPhone 17e per-product Apify review/product trigger. |
 | [iPh17e_Monday](Apify/iPh17e_Monday/) | iPhone 17e Sheet → monday uploader (board 18419272697) + `=DR()`. |
 | [Pixel10a_Apify](Apify/Pixel10a_Apify/) | Pixel 10a Product task + `=DR()`. |
