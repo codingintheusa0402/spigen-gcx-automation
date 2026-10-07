@@ -15,18 +15,27 @@ Pixel 11 — via each room's default `token` webhook, built by `carousel.py` in
 (below) holds back the **entire carousel**, not just Z8, when it trips — there's no
 way to omit a single page from an already-sent message.
 
+**Scheduling moved to the 24/7 server (2026-10-07):** this now runs via `crontab`
+on `gcx-server` (WSL2), not Mac `launchd` — the Mac LaunchAgents below are disabled
+(`~/Library/LaunchAgents/disabled-moved-to-server/`). See [[gcx_windows_server]] /
+[[server_vs_mac_allocation]] in memory. The server's crontab (`crontab -l`) is the
+live source of truth for the actual schedule; the plist files below describe the
+same logic for reference / in case it ever moves back to the Mac. **Never enable
+both sides at once** — that caused a real duplicate send to all 13 live rooms on
+2026-10-07 (see the 4c-adjacent note below).
+
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `auto_broadcast.py` | the unattended script `launchd` runs |
-| `~/Library/LaunchAgents/com.spigen.gcx.badreview-broadcast.plist` | the 10:30 AM schedule (Mon–Fri, KST) |
-| `~/Library/LaunchAgents/com.spigen.gcx.badreview-broadcast-retry.plist` | the 11:00 AM `--retry-if-held` follow-up (Mon–Fri, KST) — added 2026-10-01 |
-| `~/Library/LaunchAgents/com.spigen.gcx.badreview-broadcast-catchup.plist` | `--catchup` poller, every 5 min (`StartInterval`, no weekday restriction — the script itself no-ops) — added 2026-10-02 |
-| `state/held_<date>.flag` | written by a 10:30 KR-gate hold, consumed (deleted) by the 11:00 retry |
+| `auto_broadcast.py` | the unattended script `crontab` (server) / `launchd` (Mac, disabled) runs |
+| `~/Library/LaunchAgents/com.spigen.gcx.badreview-broadcast.plist` | Mac-side 10:30 AM schedule (Mon–Fri, KST) — disabled, server crontab is authoritative |
+| `~/Library/LaunchAgents/com.spigen.gcx.badreview-broadcast-retry.plist` | Mac-side 11:30 AM `--retry-if-held` follow-up — disabled, see server crontab |
+| `~/Library/LaunchAgents/com.spigen.gcx.badreview-broadcast-catchup.plist` | Mac-side `--catchup` poller — disabled, see server crontab |
+| `state/held_<date>.flag` | written by a 10:30 KR-gate hold, consumed (deleted) by the 11:30 retry |
 | `state/ran_<date>.flag` | written once today's real decision (send or hold) has happened; tells `--catchup` there's nothing to do |
 | `logs/auto_broadcast.log` | one line per run: skipped (weekend/holiday) or per-room OK/ERR |
-| `logs/launchd.out.log` / `launchd.err.log` | raw stdout/stderr from launchd itself (shared by all three LaunchAgents) |
+| `logs/launchd.out.log` / `launchd.err.log` | raw stdout/stderr from the scheduler (launchd or cron, whichever is active) |
 
 ## How it works
 
@@ -74,21 +83,29 @@ way to omit a single page from an already-sent message.
    carousel to the 13 rooms at all (Pixel 11 and iPhone 18 no longer send separately
    either, since it's one message now) — it posts an alert plus a full carousel
    preview to the **private test room only**, and writes a marker file
-   (`state/held_<date>.flag`) so the 11:00 retry (below) knows there's something to
+   (`state/held_<date>.flag`) so the 11:30 retry (below) knows there's something to
    pick up. You can also resend manually before then:
    ```bash
    python3 auto_broadcast.py --force --ignore-kr-gate
    ```
 
-4b. **11:00 AM automatic retry** (added 2026-10-01, PERMANENT): a second LaunchAgent,
-    `com.spigen.gcx.badreview-broadcast-retry.plist`, fires `auto_broadcast.py
-    --retry-if-held` every weekday at 11:00 AM. It only acts if today's
-    `state/held_<date>.flag` marker exists (i.e. the 10:30 run held the carousel) —
+4b. **11:30 AM automatic retry** (added 2026-10-01, retimed to 11:30 on 2026-10-07 —
+    PERMANENT RULE: the retry always runs exactly 1 hour after the main job, not a
+    fixed 11:00): a second schedule entry fires `auto_broadcast.py --retry-if-held`
+    every weekday, 1 hour after the main 10:30 run. It only acts if today's
+    `state/held_<date>.flag` marker exists (i.e. the main run held the carousel) —
     otherwise it logs `RETRY <date>: nothing held, skipping` and exits immediately,
     no sheets fetch, no send. If the marker IS present, it re-fetches fresh data and
     broadcasts to all 13 rooms **unconditionally** — even if Z8's KR count is still
-    0 at 11:00 — then deletes the marker. This is a hard deadline: by explicit user
-    rule, incomplete Z8 data is never allowed to hold the broadcast past 11:00.
+    0 — then deletes the marker. This is a hard deadline: by explicit user rule,
+    incomplete Z8 data is never allowed to hold the broadcast past main+1h.
+    ⚠️ **2026-10-07 incident**: a stray duplicate entry (tagged `mesh:badreview-
+    broadcast`, apparently added via the GCX Mesh app) put the plain `auto_broadcast.py`
+    at 11:00 too — the exact same slot as the retry job at the time — and BOTH fired,
+    double-sending the carousel to all 13 live rooms that morning. Fixed by
+    consolidating back to one crontab line per job (10:30 main / 11:30 retry / 5-min
+    catchup). If you reschedule any of these three jobs via GCX Mesh or by hand again,
+    check `crontab -l` on `gcx-server` afterward for exactly one line per job.
    ⚠️ `--force` only bypasses the weekday/holiday skip — it does **not** hold back
    Pixel 11, and does **not** need `--ignore-kr-gate` to still send PX. (Learned the
    hard way 2026-09-18: testing the KR-gate alert with `--force --date 2026-09-21`

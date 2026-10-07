@@ -32,7 +32,7 @@ Usage:
   auto_broadcast.py --dry-run       # crunch + build cards, print results, send nothing
   auto_broadcast.py --force         # send even if today is a weekend/holiday (manual testing)
   auto_broadcast.py --date 2026-09-16   # override "today" (KST) for testing
-  auto_broadcast.py --retry-if-held     # 11:00 one-shot: force-send if the 10:30 run held
+  auto_broadcast.py --retry-if-held     # main+1h one-shot (11:30): force-send if the 10:30 run held
   auto_broadcast.py --catchup           # 5-min poller: catch up a missed 10:30 trigger (e.g. asleep)
 """
 import argparse, datetime, importlib.util, json, os, sys, time, urllib.error, urllib.parse, urllib.request
@@ -45,7 +45,7 @@ STATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
 
 def held_marker_path(today):
     """Written by the 10:30 run when the Z8 KR-gate holds the carousel back; checked
-    by the 11:00 --retry-if-held run to know whether there's anything to retry."""
+    by the 11:30 (main+1h) --retry-if-held run to know whether there's anything to retry."""
     return os.path.join(STATE_DIR, f"held_{today.isoformat()}.flag")
 
 
@@ -216,13 +216,16 @@ def main():
                      help="send the Z8 card to all rooms even if 0 KR reviews today "
                           "(after you've manually confirmed that's correct)")
     ap.add_argument("--retry-if-held", action="store_true",
-                     help="11:00 AM follow-up run (separate launchd job, added "
-                          "2026-10-01 per user rule): only acts if the 10:30 run held "
-                          "the carousel back (today's KR-gate marker file present). If "
+                     help="main+1h follow-up run (11:30, separate scheduler entry, "
+                          "added 2026-10-01 per user rule, retimed 2026-10-07 to "
+                          "always be exactly 1h after the main job rather than a "
+                          "fixed 11:00): only acts if the 10:30 run held the "
+                          "carousel back (today's KR-gate marker file present). If "
                           "so, re-fetches fresh data and sends to all rooms "
                           "UNCONDITIONALLY — ignores the KR-gate even if still 0 KR "
-                          "reviews, a hard 11:00 deadline. If nothing was held today "
-                          "(already sent normally, or today was skipped), does nothing.")
+                          "reviews, a hard main+1h deadline. If nothing was held "
+                          "today (already sent normally, or today was skipped), "
+                          "does nothing.")
     ap.add_argument("--catchup", action="store_true",
                      help="5-minute poller (separate launchd job, added 2026-10-02 "
                           "per user rule: 'if asleep at 10:30AM, should retry 5min "
@@ -297,14 +300,14 @@ def main():
     z8_kr_count = today_kr_count(z8_header, z8_body, today)
     # --test-only never touches the 12 live rooms, so there's nothing to hold back —
     # both cards go to the private room together, same as a normal test-send would.
-    # --retry-if-held is the 11:00 deadline run: always send this time, even if still
-    # 0 KR reviews (2026-10-01 user rule) — it only got here because a marker proved
-    # the 10:30 run held today, so don't hold a second time.
+    # --retry-if-held is the main+1h (11:30) deadline run: always send this time, even
+    # if still 0 KR reviews (2026-10-01 user rule) — it only got here because a marker
+    # proved the 10:30 run held today, so don't hold a second time.
     hold_z8 = (z8_kr_count == 0 and not a.ignore_kr_gate and not a.test_only
                and not a.retry_if_held)
     if z8_kr_count == 0:
         why = ("--test-only, sending anyway" if a.test_only else
-               "--retry-if-held 11:00 deadline, sending anyway" if a.retry_if_held else
+               "--retry-if-held main+1h deadline, sending anyway" if a.retry_if_held else
                "--ignore-kr-gate set, sending anyway" if a.ignore_kr_gate else
                "holding Z8 broadcast")
         log(f"NOTE: 0 KR reviews in today's Z8 data — {why}")
@@ -331,9 +334,9 @@ def main():
                                                     card_id="badreview-carousel-held")
         alert = {
             "text": (f"⚠️ 배드리뷰 캐러셀 자동발송 전체 보류 — 오늘({today.isoformat()}) Z8 KR 리뷰 0건.\n"
-                     f"11:00에 자동 재시도 예정 (그때도 0건이면 그대로 강제 발송됩니다).\n"
+                     f"11:30에 자동 재시도 예정 (그때도 0건이면 그대로 강제 발송됩니다).\n"
                      f"(카드 3개 전부 아래 미리보기로 확인 가능)\n"
-                     f"11:00 전에 직접 보내려면: python3 auto_broadcast.py --force --ignore-kr-gate"),
+                     f"11:30 전에 직접 보내려면: python3 auto_broadcast.py --force --ignore-kr-gate"),
         }
         log("ALERT (0 KR reviews, entire carousel held): " + broadcast._post(test_url, alert))
         log("ALERT preview: " + broadcast._post(test_url, preview))
@@ -342,7 +345,7 @@ def main():
         if not a.test_only:
             open(ran_marker_path(today), "w").close()
         log(f"DONE {today.isoformat()}: carousel HELD ENTIRELY (0 KR reviews for Z8) — "
-            f"alert + preview posted to private room; marker written for 11:00 retry")
+            f"alert + preview posted to private room; marker written for main+1h retry")
         return
 
     message = carousel.build_carousel_message(cards, header_imgs, today)
