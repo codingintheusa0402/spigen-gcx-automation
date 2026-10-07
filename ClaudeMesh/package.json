@@ -52,6 +52,8 @@
       "collector.js",
       "phone-server.js",
       "schedules.js",
+      "gasConstants.js",
+      "gas.js",
       "renderer/**",
       "phone/**",
       "build/icon.png",

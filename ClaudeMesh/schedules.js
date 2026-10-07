@@ -202,4 +202,36 @@ async function runNow(id) {
     run('/bin/bash', ['-lc', `cd '${path.join(REPO, job.dir)}' && ${job.cmd.replace(/^python3/, '/opt/homebrew/bin/python3')} >> '${path.join(REPO, job.log)}.out.log' 2>> '${path.join(REPO, job.log)}.err.log' &`]));
   return ssh(`cd ${SRV_REPO}/${job.dir} && export PATH=${SRV_HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin && nohup ${job.cmd} >> ${SRV_REPO}/${job.log}.out.log 2>> ${SRV_REPO}/${job.log}.err.log & echo started`);
 }
-module.exports = { list, setSchedule, setEnabled, move, runNow };
+// ---------------- silent background infrastructure (runs with no Claude window open) ----------------
+// Windows Task Scheduler on the server laptop (claude-server) and the WSL @reboot cron line.
+const WIN = ['user@claude-server', '-i', path.join(HOME, '.ssh', 'id_ed25519_gcx_server')];
+const WIN_TASKS = {
+  'GCX-Live': 'At Windows logon: starts WSL Ubuntu and attaches the shared tmux session `gcx` on the laptop screen (ticket monitor, logs).',
+  'WSL-KeepAlive': 'At logon: keeps WSL Ubuntu (gcx-server) running so cron jobs and Claude sessions never stop.',
+  'GCX-SetupLog': 'At logon: shows the setup/admin log window (C:\\GCX-Setup\\setup.log) on the laptop screen.',
+  'ClaudeServer-Elevate': 'On demand: helper used by remote admin scripts to run elevated commands.',
+};
+const ps = cmd => { const enc = Buffer.from(cmd, 'utf16le').toString('base64');
+  return run('/usr/bin/ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', '-i', WIN[2], WIN[0], `powershell -NoProfile -NonInteractive -EncodedCommand ${enc}`], null, 30000); };
+async function infra() {
+  const names = Object.keys(WIN_TASKS);
+  const r = await ps(`$ProgressPreference='SilentlyContinue'; foreach ($n in @(${names.map(n => `'${n}'`).join(',')})) { $t = Get-ScheduledTask -TaskName $n -ErrorAction SilentlyContinue; if ($t) { $i = Get-ScheduledTaskInfo -TaskName $n; $tr = ($t.Triggers | % { $_.CimClass.CimClassName -replace 'MSFT_Task','' -replace 'Trigger','' }) -join ','; Write-Output ("@@" + $n + "|" + $t.State + "|" + $tr + "|" + $i.LastRunTime.ToString('o') + "|" + $i.NextRunTime) } }`);
+  const items = [];
+  for (const line of (r.out || '').split(/\r?\n/)) {
+    const m = /^@@([^|]+)\|([^|]*)\|([^|]*)\|([^|]*)\|(.*)$/.exec(line.trim()); if (!m) continue;
+    items.push({ id: 'win:' + m[1], kind: 'windows-task', where: 'server-windows', name: m[1], what: WIN_TASKS[m[1]] || '', enabled: m[2] !== 'Disabled', state: m[2],
+      when: m[3] === 'Logon' ? 'At Windows logon' : m[3] === 'Boot' ? 'At boot' : m[3] || 'On demand', last: Date.parse(m[4]) || null });
+  }
+  const c = await ssh('crontab -l 2>/dev/null | grep -E "@reboot" ', null, 15000);
+  for (const l of (c.out || '').split('\n').filter(Boolean)) items.push({ id: 'cron:reboot', kind: 'cron-reboot', where: 'server', name: 'tmux gcx at boot (WSL)', what: 'At WSL start: runs ~/tmux_start.sh, which creates the shared tmux session gcx with the ticket-monitor Claude session and log windows.', enabled: !l.startsWith('#off'), when: 'At boot', line: l.replace(/^#off\s+/, '') });
+  return { reachable: r.ok || !!items.length, items, err: r.ok ? null : r.err };
+}
+async function setInfraEnabled(id, on) {
+  if (id.startsWith('win:')) { const n = id.slice(4).replace(/'/g, ''); return ps(`${on ? 'Enable' : 'Disable'}-ScheduledTask -TaskName '${n}' | Out-Null; 'ok'`); }
+  if (id === 'cron:reboot') {
+    const r = await ssh('crontab -l 2>/dev/null'); const lines = (r.out || '').split('\n').map(l => /@reboot/.test(l) ? (on ? l.replace(/^#off\s+/, '') : (l.startsWith('#off') ? l : '#off ' + l)) : l);
+    return ssh('crontab -', lines.join('\n').replace(/\n*$/, '\n'));
+  }
+  return { ok: false, err: 'unknown item' };
+}
+module.exports = { list, setSchedule, setEnabled, move, runNow, infra, setInfraEnabled };

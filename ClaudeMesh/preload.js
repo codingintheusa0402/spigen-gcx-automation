@@ -29,7 +29,16 @@ contextBridge.exposeInMainWorld('api', {
     enable: (id, on) => ipcRenderer.invoke('sched:enable', id, on),
     move: (id, to) => ipcRenderer.invoke('sched:move', id, to),
     run: id => ipcRenderer.invoke('sched:run', id),
+    infra: () => ipcRenderer.invoke('sched:infra'),
+    infraEnable: (id, on) => ipcRenderer.invoke('sched:infraEnable', id, on),
   },
+  gas: {
+    cached: () => ipcRenderer.invoke('gas:cached'),
+    refresh: () => ipcRenderer.invoke('gas:refresh'),
+    edit: id => ipcRenderer.invoke('gas:edit', id),
+    open: url => ipcRenderer.invoke('gas:open', url),
+  },
+  gasDue: { list: () => ipcRenderer.invoke('gasDue:list'), set: (id, i, iso) => ipcRenderer.invoke('gasDue:set', id, i, iso) },
   details: sid => ipcRenderer.invoke('sess:details', sid),
   rename: (sid, name) => ipcRenderer.invoke('hist:rename', sid, name),
   agents: {

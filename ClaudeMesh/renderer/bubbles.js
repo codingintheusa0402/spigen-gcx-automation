@@ -4,7 +4,16 @@
 //    Double-click a session bubble to send it back to its automatic slot.
 //  • Each session is tied to the mother by glowing strands: more strands, and an older star
 //    colour, the harder it works (drawLinks).
-const ORBIT_LAP = 900;                    // seconds per lap for an automatic slot (≈ 15 min)
+const ORBIT_LAP = 900;
+// load colour 0…1: light blue → yellow → orange → red
+const LOAD_RAMP = [[0, [150, 210, 255]], [.4, [255, 236, 110]], [.7, [255, 152, 44]], [1, [236, 52, 40]]];
+function loadColor(x) {
+  for (let i = 1; i < LOAD_RAMP.length; i++) if (x <= LOAD_RAMP[i][0]) {
+    const [a, ca] = LOAD_RAMP[i - 1], [b, cb] = LOAD_RAMP[i], k = (x - a) / (b - a);
+    return ca.map((v, j) => Math.round(v + (cb[j] - v) * k));
+  }
+  return LOAD_RAMP[LOAD_RAMP.length - 1][1];
+}                    // seconds per lap for an automatic slot (≈ 15 min)
 const PIN_KEY = 'mesh.orbits';
 
 function bubbleSprite(color) {
@@ -104,16 +113,16 @@ Object.assign(Mesh.prototype, {
     const dx = hub.x - n.x, dy = hub.y - n.y, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
     const side = n.seed > .5 ? 1 : -1, u = j === 0 ? 0 : ((j * .6180339887 + n.seed) % 1) * 2 - 1;   // −1…1, 0 = centre line
     const rot = (x, y, a) => [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)];
-    const [sx, sy] = rot(ux, uy, u * .42), [ex, ey] = rot(-ux, -uy, -u * .22);       // a narrow bundle around the centre line
+    const [sx, sy] = rot(ux, uy, u * .26), [ex, ey] = rot(-ux, -uy, -u * .13);       // a narrow bundle around the centre line
     const x0 = n.x + sx * R, y0 = n.y + sy * R, x1 = hub.x + ex * MR * 1.03, y1 = hub.y + ey * MR * 1.03;
-    const bend = (side * .2 + u * .07 + .015 * Math.sin(t * (.9 + (j % 7) * .23) + n.seed * 9 + j)) * L;
+    const bend = (side * .2 + u * .04 + .01 * Math.sin(t * (.9 + (j % 7) * .23) + n.seed * 9 + j)) * L;
     // most strands follow a smooth path to the star, each with its own slight random bow (a gentle
     // outward sag that grows with distance from the centre line); only ~1 in 8 squiggles
     const far = Math.abs(u), h = ((j * 7919 + Math.round(n.seed * 1e4)) % 97) / 97, squig = j > 0 && h < .125;
-    const amp = squig ? L * (.012 + .028 * Math.pow(far, 1.4)) : 0;
-    const sag = j === 0 ? 0 : (Math.sign(u || 1) * .045 * far * far + (h - .5) * .03) * L;
+    const amp = squig ? L * (.005 + .012 * Math.pow(far, 1.4)) : 0;
+    const sag = j === 0 ? 0 : (Math.sign(u || 1) * .022 * far * far + (h - .5) * .016) * L;
     return { x0, y0, x1, y1, mx: (x0 + x1) / 2 - uy * bend, my: (y0 + y1) / 2 + ux * bend, nx: -uy, ny: ux,
-      amp, sag, squig, freq: 2.2 + h * 16, ph: h * 6.283 + (n.wig || 0) * (1 + h * 3) * (h > .06 ? 1 : -1), wobbly: j > 0 };
+      amp, sag, squig, freq: 1.4 + h * 8, ph: h * 6.283 + (n.wig || 0) * (1 + h * 3) * (h > .06 ? 1 : -1), wobbly: j > 0 };
   },
   // point at s∈[0,1] along a strand: the quadratic curve plus its dangle/wiggle (zero at both ends)
   strandPoint(g, s) {
@@ -126,41 +135,33 @@ Object.assign(Mesh.prototype, {
   // Load lines: 1 strand when idle, up to 50 under heavy load, ageing young → old star colour.
   // Strand 0 is the bright main link; the rest are batched into one path per session (one stroke).
   drawLinks(ctx) {
-    const t = this.time, cap = this.pixel ? 24 : 50;
-    ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
+    const t = this.time, cap = 20;
+    ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     for (const n of this.nodes.values()) {
       if (n.dying) continue;
       const h = this.heaviness(n), N = Math.max(1, Math.round(1 + h * (cap - 1))), work = n.s.health === 'working' ? 1 : 0;
-      const star = starColor('outer', .08 + h * .92, 1.7).map(Math.round), starRGB = `${star}`;
-      const starHex = '#' + star.map(v => v.toString(16).padStart(2, '0')).join('');
-      const rim = (ORB_PAL[n.s.serverUses ? "server" : n.s.family] || ORB_PAL.other).rim;
-      const g0 = this.strandGeom(n, 0, t), grad = ctx.createLinearGradient(g0.x0, g0.y0, g0.x1, g0.y1);
-      grad.addColorStop(0, hexA(rim, .85)); grad.addColorStop(.35, `rgba(${starRGB},.9)`); grad.addColorStop(1, `rgba(${starRGB},.95)`);
-      ctx.strokeStyle = grad;
-      for (const [w, a] of [[7, .07 + .06 * work], [3, .16 + .12 * work], [1.2, .55 + .3 * work]]) {      // main link
-        ctx.globalAlpha = a; ctx.lineWidth = w;
-        ctx.beginPath(); ctx.moveTo(g0.x0, g0.y0); ctx.quadraticCurveTo(g0.mx, g0.my, g0.x1, g0.y1); ctx.stroke();
-      }
-      if (N > 1) {                                                     // the bundle: one path, two passes (glow + core)
-        const bundle = new Path2D(), G = [];
-        for (let j = 1; j < N; j++) {
-          const g = this.strandGeom(n, j, t), steps = g.squig ? Math.ceil(g.freq * 10) : 12; G.push(g);   // smooth: ~10 points per wave
-          bundle.moveTo(g.x0, g.y0);
-          for (let i = 1; i <= steps; i++) { const [x, y] = this.strandPoint(g, i / steps); bundle.lineTo(x, y); }
-        }
-        const k = 1 / Math.sqrt(Math.max(1, N / 8));                   // thinner/fainter per strand as the bundle thickens
-        ctx.globalAlpha = (.06 + .06 * h) * k; ctx.lineWidth = 3.5; ctx.stroke(bundle);       // additive glow
-        ctx.globalCompositeOperation = 'source-over';                  // cores keep their true star colour (no white-out)
-        ctx.strokeStyle = `rgba(${starRGB},1)`; ctx.globalAlpha = Math.min(.85, (.5 + .3 * h) * Math.sqrt(k)); ctx.lineWidth = .8; ctx.stroke(bundle);
+      const rim = (ORB_PAL[n.s.serverUses ? 'server' : n.s.family] || ORB_PAL.other).rim;
+      const G = [];
+      for (let j = 0; j < N; j++) {
+        const g = this.strandGeom(n, j, t), jit = ((j * 9301 + Math.round(n.seed * 1e4)) % 233) / 233 - .5;   // per-strand variety
+        const c = loadColor(Math.min(1, Math.max(0, h + jit * .28))), w = (j === 0 ? 1.6 : 1) * (.7 + h * 2.6) * (1 + jit * .5);
+        const vis = Math.min(1, N - j);                                // the newest strand fades in
+        const steps = g.squig ? Math.ceil(g.freq * 12) : 16, path = new Path2D(); path.moveTo(g.x0, g.y0);
+        for (let i = 1; i <= steps; i++) { const [x, y] = this.strandPoint(g, i / steps); path.lineTo(x, y); }
+        if (j === 0) {                                                 // main link: from the orb's rim colour into the load colour
+          const grad = ctx.createLinearGradient(g.x0, g.y0, g.x1, g.y1); grad.addColorStop(0, hexA(rim, .9)); grad.addColorStop(.3, `rgba(${c},.95)`); grad.addColorStop(1, `rgba(${c},1)`);
+          ctx.strokeStyle = grad;
+        } else ctx.strokeStyle = `rgb(${c})`;
+        ctx.globalAlpha = (.08 + .07 * work) * vis; ctx.lineWidth = w * 3.2; ctx.stroke(path);        // soft glow
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = (j === 0 ? .9 : .6 + .25 * h) * vis; ctx.lineWidth = w; ctx.stroke(path);    // true-colour core
         ctx.globalCompositeOperation = 'lighter';
-        n._bundle = G;
-      } else n._bundle = [];
-      if (work) {                                                      // light pulses run down the main link and ~1 in 6 strands
-        const gs = glowSprite(starHex), list = [g0, ...n._bundle.filter((_, i) => i % 6 === 0)].slice(0, 18);
-        list.forEach((g, i) => {
-          const kk = (t * (.3 + h * .9) + i * .37 + n.seed) % 1, sz = 5 + 4 * h;
-          const [px, py] = this.strandPoint(g, kk);
-          ctx.globalAlpha = .55 + .4 * h; ctx.drawImage(gs, px - sz, py - sz, sz * 2, sz * 2);
+        G.push({ g, c });
+      }
+      if (work) {                                                      // light pulses run down every 3rd strand
+        G.filter((_, i) => i % 3 === 0).slice(0, 8).forEach(({ g, c }, i) => {
+          const kk = (t * (.3 + h * .9) + i * .37 + n.seed) % 1, sz = 5 + 4 * h, [px, py] = this.strandPoint(g, kk);
+          ctx.globalAlpha = .55 + .4 * h; ctx.drawImage(glowSprite('#' + c.map(v => v.toString(16).padStart(2, '0')).join('')), px - sz, py - sz, sz * 2, sz * 2);
         });
       }
     }

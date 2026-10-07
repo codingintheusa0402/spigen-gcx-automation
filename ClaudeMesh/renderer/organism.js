@@ -161,12 +161,7 @@ Object.assign(Mesh.prototype, {
     ctx.beginPath(); ctx.arc(n.x, n.y, R + 14, 0, 6.29); ctx.stroke();
     ctx.strokeStyle = ctxPct > .85 ? '#ff6b7d' : ctxPct > .6 ? '#ffcf6b' : hexA(mix(P.rim, .3), .8);
     ctx.beginPath(); ctx.arc(n.x, n.y, R + 14, -Math.PI / 2, -Math.PI / 2 + ctxPct * 6.283); ctx.stroke();
-    // sub-agents = tiny orbs in orbit
-    const subs = Math.min(8, s.subagents || 0);
-    for (let i = 0; i < subs; i++) {
-      const a = t * 1.3 + i / subs * 6.283 + n.seed * 5, rr = R + 24, r = 5;
-      ctx.drawImage(bubbleSprite(P.rim), n.x + Math.cos(a) * rr - r * BUBBLE_SPRITE_K, n.y + Math.sin(a) * rr - r * BUBBLE_SPRITE_K, r * 2 * BUBBLE_SPRITE_K, r * 2 * BUBBLE_SPRITE_K);
-    }
+    // (sub-agent satellite orbs removed at the user's request — the count stays in the session panel)
     if (this.selected === n.sid) {
       ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 1; ctx.setLineDash([2, 5]);
       ctx.beginPath(); ctx.arc(n.x, n.y, R + 17, t * .6, t * .6 + 6.283); ctx.stroke(); ctx.setLineDash([]);

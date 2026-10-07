@@ -30,7 +30,8 @@ async function openSchedules() {
 }
 async function loadSchedules() {
   const b = $('#scBody'); if (!b) return;
-  schedData = await window.api.sched.list();
+  const [jobs, infra, gasC] = await Promise.all([window.api.sched.list(), window.api.sched.infra(), window.api.gas.cached()]);
+  schedData = jobs; if (schedData && !schedData.error) { schedData.infra = infra; schedData.gas = gasC; schedData.gasDue = await window.api.gasDue?.list?.().catch(() => null); }
   if (schedData.error) { b.innerHTML = `<div class="sc-dim">Couldn't read schedules: ${esc(schedData.error)}</div>`; return; }
   const srv = $('#scSrv'); srv.textContent = schedData.server.reachable ? '● server online' : '● server unreachable — showing Mac only'; srv.className = 'sc-srv ' + (schedData.server.reachable ? 'ok' : 'bad');
   renderSchedules();
@@ -55,7 +56,10 @@ function renderSchedules() {
       <div class="sc-col"><span class="sc-where ${s.where === 'server' ? 'w-srv' : 'w-mac'}">${s.where === 'server' ? 'Server' : 'Mac'}</span></div>
       <div class="sc-col sc-when"><b>${esc(s.schedule)}</b><span>${s.running == null ? '' : s.running ? '● running' : '○ not running'}</span><span class="sc-dim">Change the interval inside that Claude session</span></div><div class="sc-col"></div></div>`).join('');
   const cloud = (schedData.cloud || []).map(c => `<div class="sc-cloud"><b>${esc(c.name)}</b> — ${esc(c.what)}</div>`).join('');
-  b.innerHTML = `<h3 class="sc-sec">Scheduled jobs</h3>${rows}<h3 class="sc-sec">Claude session loops</h3>${sess}<h3 class="sc-sec">In the cloud (needs neither machine)</h3>${cloud}`;
+  b.innerHTML = `<h3 class="sc-sec">Scheduled jobs · Mac & server</h3>${rows}<h3 class="sc-sec">Claude session loops</h3>${sess}
+    <h3 class="sc-sec">Silent background · runs with no Claude window open</h3>${infraHtml()}
+    <h3 class="sc-sec">Apps Script triggers · Google cloud</h3>${gasHtml()}`;
+  wireInfraGas(b);
   b.querySelectorAll('.sc-row[data-id]').forEach(row => {
     const id = row.dataset.id, j = schedData.jobs.find(x => x.id === id);
     row.querySelector('[data-edit]').onclick = () => { schedEdit = schedEdit && schedEdit.id === id ? null : { id, s: JSON.parse(JSON.stringify(j.schedule)) }; renderSchedules(); };
@@ -101,5 +105,62 @@ function wireEditor(row, j) {
   row.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { keep(); if (schedEdit.s.at) { schedEdit.s.at.splice(+b.dataset.rm, 1); if (!schedEdit.s.at.length) schedEdit.s.at = ['09:00']; } renderSchedules(); });
   q('#scCancel').onclick = () => { schedEdit = null; renderSchedules(); };
   q('#scSave').onclick = async () => { const v = read(); q('#scSave').disabled = true; q('#scSave').textContent = 'Saving…'; await act(window.api.sched.set(j.id, v), `${j.name}: ${whenText(v)}`); };
+}
+
+// ---- silent background infrastructure (server Windows tasks, WSL boot) ----
+function infraHtml() {
+  const I = schedData.infra; if (!I) return '<div class="sc-dim">—</div>';
+  if (!I.items.length) return `<div class="sc-dim">Server not reachable${I.err ? ' — ' + esc(I.err) : ''}</div>`;
+  return I.items.map(i => `<div class="sc-row ${i.enabled ? '' : 'off'}"><div class="sc-main"><div class="sc-name">${esc(i.name)}</div><div class="sc-what">${esc(i.what)}</div>
+      <div class="sc-skills"><code>${i.kind === 'windows-task' ? 'Windows Task Scheduler · claude-server' : esc(i.line || '')}</code></div></div>
+    <div class="sc-col"><span class="sc-where ${i.where === 'server-windows' ? 'w-srv' : 'w-srv'}">${i.where === 'server-windows' ? 'Server · Windows' : 'Server · WSL'}</span></div>
+    <div class="sc-col sc-when"><b>${esc(i.when)}</b><span>${i.last ? 'last run ' + rel(i.last) : ''}</span><span>${esc(i.state || '')}</span></div>
+    <div class="sc-col"><label class="sc-sw"><input type="checkbox" data-infra="${esc(i.id)}" ${i.enabled ? 'checked' : ''}><i></i></label></div></div>`).join('');
+}
+
+// ---- Apps Script triggers (live from Google's My Triggers page) ----
+const errPct = e => { const m = /([\d.]+)\s*%/.exec(e || ''); return m ? +m[1] : 0; };
+function gasHtml() {
+  const G = schedData.gas, due = schedData.gasDue;
+  const head = `<div class="sc-gas-h"><span class="sc-dim">${G && G.at ? `Read ${rel(G.at)} from script.google.com · ${G.triggers.length} triggers` : 'Not loaded yet — GCX Mesh reads Google\'s “My Triggers” page with its own Google sign-in (kjw@spigen.com).'}${G && G.err ? ' · ⚠ ' + esc(G.err) : ''}</span>
+    <button class="sc-mini" id="gasRefresh">${G && G.at ? '↻ Re-read from Google' : '🔑 Sign in & read triggers'}</button></div>`;
+  if (!G || !G.triggers) return head;
+  const by = new Map();
+  for (const t of G.triggers) { if (!by.has(t.scriptId)) by.set(t.scriptId, { project: t.project, list: [] }); by.get(t.scriptId).list.push(t); }
+  const proj = [...by.entries()].sort((a, b) => a[1].project.localeCompare(b[1].project));
+  return head + proj.map(([id, p]) => {
+    const active = p.list.filter(t => !/Disabled/i.test(t.last)), off = p.list.length - active.length;
+    const fnCount = {}; active.forEach(t => fnCount[t.fn + '|' + t.event] = (fnCount[t.fn + '|' + t.event] || 0) + 1);
+    const dupes = Object.entries(fnCount).filter(([, n]) => n > 1);
+    const meta = due && due.projects && due.projects.find(x => x.scriptId === id);
+    const lastRun = active.map(t => Date.parse(t.last)).filter(Boolean).sort((a, b) => b - a)[0];
+    return `<div class="sc-row ${active.length ? '' : 'off'}"><div class="sc-main"><div class="sc-name">${esc(p.project)}</div>
+        ${meta && meta.what ? `<div class="sc-what">${esc(meta.what)}</div>` : ''}
+        <div class="sc-trig">${Object.entries(p.list.reduce((m, t) => { const k = t.fn + ' · ' + t.event; (m[k] = m[k] || { n: 0, off: 0, err: t.errorRate }); m[k].n++; if (/Disabled/i.test(t.last)) m[k].off++; return m; }, {}))
+          .map(([k, v]) => `<span class="${v.off === v.n ? 'dis' : ''}">${esc(k)}${v.n > 1 ? ` ×${v.n}` : ''}${v.off ? ` <i>(${v.off} disabled)</i>` : ''}${errPct(v.err) > 0 ? ` <b>${errPct(v.err)}% errors</b>` : ''}</span>`).join('')}</div>
+        ${meta && meta.schedule ? `<div class="sc-dim">${esc(meta.schedule)}</div>` : ''}
+        ${dupes.length ? `<div class="sc-warn">⚠ ${dupes.map(([k, n]) => `${esc(k.split('|')[0])} has ${n} active triggers`).join(' · ')} — possible duplicate runs</div>` : ''}
+        ${meta && meta.dueDates && meta.dueDates.length ? meta.dueDates.map((d, i) => `<div class="sc-due"><span>📅 ${esc(d.label)}</span><input type="date" data-due="${esc(id)}" data-i="${i}" value="${esc(d.value)}"><button class="sc-mini" data-due-save="${esc(id)}" data-i="${i}">Save → Apps Script</button><code>${esc(d.file)}</code></div>`).join('') : ''}
+      </div>
+      <div class="sc-col"><span class="sc-where w-cloud">Google</span></div>
+      <div class="sc-col sc-when"><b>${active.length} active${off ? ` · ${off} off` : ''}</b><span>${lastRun ? 'last run ' + rel(lastRun) : 'no recent run'}</span></div>
+      <div class="sc-col"><button class="sc-mini" data-gas-edit="${esc(id)}">✎ Edit triggers</button></div></div>`;
+  }).join('');
+}
+function wireInfraGas(b) {
+  b.querySelectorAll('[data-infra]').forEach(cb => cb.onchange = async () => {
+    const on = cb.checked, id = cb.dataset.infra;
+    if (!on && !confirm(`Turn off "${id.replace(/^(win|cron):/, '')}" on the server?\n\nThis can stop the 24/7 jobs/sessions from coming back after a reboot.`)) { cb.checked = true; return; }
+    await act(window.api.sched.infraEnable(id, on), `${id.replace(/^(win|cron):/, '')} ${on ? 'on' : 'off'}`);
+  });
+  const gr = b.querySelector('#gasRefresh'); if (gr) gr.onclick = async () => { gr.disabled = true; gr.textContent = 'Reading… (a Google window opens if you need to sign in)'; const r = await window.api.gas.refresh(); if (r && r.ok === false) toast(r.err); await loadSchedules(); };
+  b.querySelectorAll('[data-gas-edit]').forEach(btn => btn.onclick = async () => { toast('Opening the project’s triggers in Apps Script — re-reading when you close it'); await window.api.gas.edit(btn.dataset.gasEdit); await window.api.gas.refresh(); await loadSchedules(); });
+  b.querySelectorAll('[data-due-save]').forEach(btn => btn.onclick = async () => {
+    const id = btn.dataset.dueSave, i = +btn.dataset.i, inp = b.querySelector(`[data-due="${id}"][data-i="${i}"]`);
+    const meta = schedData.gasDue.projects.find(x => x.scriptId === id), d = meta.dueDates[i];
+    if (!confirm(`Change "${d.label}" in ${meta.name}\n${d.value} → ${inp.value}\n\nThis edits ${d.file}, pushes it to Apps Script (clasp push) and commits it to GitHub.`)) return;
+    btn.disabled = true; btn.textContent = 'Pushing…';
+    await act(window.api.gasDue.set(id, i, inp.value), `${meta.name}: ${d.label} → ${inp.value}`);
+  });
 }
 $('#schedBtn').onclick = openSchedules;

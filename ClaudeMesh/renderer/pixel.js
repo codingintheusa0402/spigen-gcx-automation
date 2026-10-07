@@ -79,7 +79,7 @@ Object.assign(Mesh.prototype, {
     this.stepSessions(dt, realDt, cspd);
     const live = [...this.nodes.values()].filter(n => !n.dying);
     for (const n of live) {                         // load strands as dotted pixel arcs, ageing with load
-      const h = this.heaviness(n), N = Math.max(1, Math.round(1 + h * 23)), st = starColor('outer', .08 + h * .92, 1.7).map(Math.round);
+      const h = this.heaviness(n), N = Math.max(1, Math.round(1 + h * 19)), st = loadColor(h);
       const col = '#' + st.map(v => v.toString(16).padStart(2, '0')).join(''), off = (t * (n.s.health === 'working' ? 4 + 8 * h : 1)) % 1;
       for (let j = 0; j < N; j++) {
         const g = this.strandGeom(n, j, t), L = Math.hypot(g.x1 - g.x0, g.y1 - g.y0), steps = Math.max(8, L * k / 3 | 0);

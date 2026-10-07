@@ -311,6 +311,18 @@ ipcMain.handle('sched:set', (_e, id, s) => schedules.setSchedule(id, s));
 ipcMain.handle('sched:enable', (_e, id, on) => schedules.setEnabled(id, on));
 ipcMain.handle('sched:move', (_e, id, to) => schedules.move(id, to, syncToServer));
 ipcMain.handle('sched:run', (_e, id) => schedules.runNow(id));
+ipcMain.handle('sched:infra', () => schedules.infra().catch(e => ({ reachable: false, items: [], err: String(e) })));
+ipcMain.handle('sched:infraEnable', (_e, id, on) => schedules.setInfraEnabled(id, on));
+// Apps Script triggers (gas.js): live list via the app's own Google session; editing in Google's editor
+const gas = require('./gas');
+app.whenReady().then(() => gas.init(app.getPath('userData')));
+ipcMain.handle('gas:cached', () => gas.cached());
+ipcMain.handle('gas:refresh', () => gas.refresh());
+ipcMain.handle('gas:edit', (_e, scriptId) => gas.edit(scriptId));
+ipcMain.handle('gas:open', (_e, url) => gas.openUrl(url));
+const gasConstants = require('./gasConstants');
+ipcMain.handle('gasDue:list', () => gasConstants.list());
+ipcMain.handle('gasDue:set', (_e, id, i, iso) => gasConstants.set(id, i, iso));
 
 // ---------------- background agents (`claude agents`, `claude --bg`) ----------------
 let claudeBin = null;            // resolved once through a login shell (PATH from the user's profile)
