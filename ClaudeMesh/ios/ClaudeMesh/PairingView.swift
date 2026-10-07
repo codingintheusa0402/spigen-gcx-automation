@@ -13,8 +13,8 @@ struct PairingView: View {
             VStack(spacing: 22) {
                 Image("AppIconImage").resizable().frame(width: 84, height: 84).clipShape(RoundedRectangle(cornerRadius: 20))
                     .shadow(color: .blue.opacity(0.5), radius: 18)
-                Text("C L A U D E   M E S H").font(.system(size: 17, weight: .light)).foregroundStyle(.white)
-                Text("On your Mac open Claude Mesh, click 📱, turn on phone access, then scan the QR code.\nUse the Tailscale code to connect from anywhere.")
+                Text("G C X   M E S H").font(.system(size: 17, weight: .light)).foregroundStyle(.white)
+                Text("On your Mac open GCX Mesh, click 📱, turn on phone access, then scan the QR code.\nUse the Tailscale code to connect from anywhere.")
                     .font(.footnote).multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.65)).padding(.horizontal, 28)
                 Button { scanning = true } label: {
                     Label("Scan QR code", systemImage: "qrcode.viewfinder").font(.headline).padding(.horizontal, 26).padding(.vertical, 13)
@@ -24,7 +24,7 @@ struct PairingView: View {
                 VStack(spacing: 8) {
                     TextField("…or paste the pairing link", text: $pasted).textInputAutocapitalization(.never).autocorrectionDisabled()
                         .padding(12).background(RoundedRectangle(cornerRadius: 14).fill(.white.opacity(0.08))).foregroundStyle(.white)
-                    Button("Connect") { if !pairing.add(pasted) { error = "That isn't a Claude Mesh pairing link." } }.disabled(pasted.isEmpty)
+                    Button("Connect") { if !pairing.add(pasted) { error = "That isn't a GCX Mesh pairing link." } }.disabled(pasted.isEmpty)
                 }.padding(.horizontal, 28)
                 if let error { Text(error).font(.footnote).foregroundStyle(.red.opacity(0.85)) }
             }
@@ -32,7 +32,7 @@ struct PairingView: View {
         .sheet(isPresented: $scanning) {
             QRScanner { code in
                 scanning = false
-                if !pairing.add(code) { error = "That QR code isn't a Claude Mesh pairing code." }
+                if !pairing.add(code) { error = "That QR code isn't a GCX Mesh pairing code." }
             }
             .ignoresSafeArea()
         }

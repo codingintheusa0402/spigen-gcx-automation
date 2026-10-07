@@ -28,22 +28,22 @@
     "electron@44.5.1": true,
     "node-pty@1.1.0": true
   },
-  "productName": "Claude Mesh",
+  "productName": "GCX Mesh",
   "build": {
     "appId": "com.kevinkim.claudemesh",
-    "productName": "Claude Mesh",
+    "productName": "GCX Mesh",
     "mac": {
       "target": "dir",
       "category": "public.app-category.developer-tools",
       "identity": null,
       "icon": "build/icon.icns",
       "extendInfo": {
-        "NSDesktopFolderUsageDescription": "Claude Code sessions run inside Claude Mesh and work with files on your Desktop.",
-        "NSDocumentsFolderUsageDescription": "Claude Code sessions run inside Claude Mesh and work with files in Documents.",
-        "NSDownloadsFolderUsageDescription": "Claude Code sessions run inside Claude Mesh and work with files in Downloads.",
-        "NSRemovableVolumesUsageDescription": "Claude Code sessions run inside Claude Mesh and may use files on external drives.",
-        "NSNetworkVolumesUsageDescription": "Claude Code sessions run inside Claude Mesh and may use files on network drives.",
-        "NSAppleEventsUsageDescription": "Claude Mesh controls Claude Code sessions running in Terminal."
+        "NSDesktopFolderUsageDescription": "Claude Code sessions run inside GCX Mesh and work with files on your Desktop.",
+        "NSDocumentsFolderUsageDescription": "Claude Code sessions run inside GCX Mesh and work with files in Documents.",
+        "NSDownloadsFolderUsageDescription": "Claude Code sessions run inside GCX Mesh and work with files in Downloads.",
+        "NSRemovableVolumesUsageDescription": "Claude Code sessions run inside GCX Mesh and may use files on external drives.",
+        "NSNetworkVolumesUsageDescription": "Claude Code sessions run inside GCX Mesh and may use files on network drives.",
+        "NSAppleEventsUsageDescription": "GCX Mesh controls Claude Code sessions running in Terminal."
       }
     },
     "files": [

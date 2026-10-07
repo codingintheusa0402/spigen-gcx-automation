@@ -144,7 +144,7 @@ function renderCtl() {
       <button id="cFocus">${owned ? 'Show terminal' : 'Focus in Terminal'}</button>
       ${owned ? '<button class="danger" id="cKill">Kill</button>' : ''}
     </div>
-    <div class="note">${owned ? 'Runs inside Claude Mesh — keystrokes go straight to its terminal.' :
+    <div class="note">${owned ? 'Runs inside GCX Mesh — keystrokes go straight to its terminal.' :
       ext ? 'Lives in a Terminal.app window. Prompts are typed into that tab via AppleScript (first use asks for Automation permission). Multi-line text is sent as one line.' :
       'Background job — view only.'}</div></div>`;
   const send = async (text) => {

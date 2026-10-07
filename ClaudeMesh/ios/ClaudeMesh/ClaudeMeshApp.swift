@@ -1,7 +1,7 @@
 import SwiftUI
 
-// Claude Mesh for iPhone — a native shell around the live mesh your Mac serves
-// (Claude Mesh → 📱). The app remembers the paired address(es) and opens straight into the mesh.
+// GCX Mesh for iPhone — a native shell around the live mesh your Mac serves
+// (GCX Mesh → 📱). The app remembers the paired address(es) and opens straight into the mesh.
 @main
 struct ClaudeMeshApp: App {
     @StateObject private var pairing = Pairing()
@@ -21,7 +21,7 @@ final class Pairing: ObservableObject {
     @Published var urls: [URL] { didSet { UserDefaults.standard.set(urls.map(\.absoluteString), forKey: "pairing.urls") } }
     init() { urls = (UserDefaults.standard.stringArray(forKey: "pairing.urls") ?? []).compactMap(URL.init(string:)) }
 
-    /// Accepts the link from the Mac's QR code / copy. Returns false if it isn't a Claude Mesh pairing link.
+    /// Accepts the link from the Mac's QR code / copy. Returns false if it isn't a GCX Mesh pairing link.
     @discardableResult func add(_ text: String) -> Bool {
         guard let u = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)),
               let scheme = u.scheme, scheme.hasPrefix("http"), u.host != nil, u.port == 47320,

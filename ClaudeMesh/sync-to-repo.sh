@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copy Claude Mesh source (no node_modules/dist/backups) into the GCX repo's ClaudeMesh/ folder.
+# Copy GCX Mesh source (no node_modules/dist/backups) into the GCX repo's ClaudeMesh/ folder.
 # Then commit + push from ~/Desktop/GCX as usual (stage ClaudeMesh/ only).
 set -e
 SRC="$(cd "$(dirname "$0")" && pwd)"

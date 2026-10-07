@@ -11,6 +11,8 @@ const ptyBus = new EventEmitter(); ptyBus.setMaxListeners(50);   // pty output f
 let lastSnap = null, phone = null;
 
 const HOME = os.homedir();
+// renamed Claude Mesh → GCX Mesh: keep using the original data folder so pairing, caches and saved orbits survive
+app.setPath('userData', path.join(app.getPath('appData'), 'Claude Mesh'));
 const collector = new Collector();
 const ptys = new Map();          // id -> { proc, title, kind, cwd }
 let win = null;
@@ -19,7 +21,7 @@ let nextId = 1;
 function createWindow() {
   win = new BrowserWindow({
     width: 1680, height: 1020, minWidth: 1100, minHeight: 700,
-    backgroundColor: '#05060a', title: 'Claude Mesh',
+    backgroundColor: '#05060a', title: 'GCX Mesh',
     titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 },
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: true },
   });
@@ -479,7 +481,7 @@ async function loop() {
 }
 
 app.whenReady().then(() => {
-  app.setName('Claude Mesh');
+  app.setName('GCX Mesh');
   createWindow();
   initPhone();
   loop();

@@ -18,7 +18,7 @@ struct MeshScreen: View {
                 VStack(spacing: 14) {
                     Image(systemName: "wifi.exclamationmark").font(.system(size: 40)).foregroundStyle(.white.opacity(0.7))
                     Text("Can’t reach your Mac").font(.headline).foregroundStyle(.white)
-                    Text("Claude Mesh must be open on the Mac with phone access on.\nAway from home, turn on Tailscale on this iPhone.")
+                    Text("GCX Mesh must be open on the Mac with phone access on.\nAway from home, turn on Tailscale on this iPhone.")
                         .font(.footnote).multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.65))
                     HStack { Button("Retry") { failed = false; attempt += 1 }.buttonStyle(.borderedProminent)
                              Button("Re-pair") { pairing.reset() }.buttonStyle(.bordered) }
@@ -28,7 +28,7 @@ struct MeshScreen: View {
         .onChange(of: phase) { _, p in if p == .active && failed { failed = false; attempt += 1 } }
         // long-press with three fingers anywhere → connection menu
         .overlay(ThreeFingerHold { showMenu = true }.allowsHitTesting(true).opacity(0.001))
-        .confirmationDialog("Claude Mesh", isPresented: $showMenu) {
+        .confirmationDialog("GCX Mesh", isPresented: $showMenu) {
             Button("Reload") { attempt += 1 }
             Button("Re-pair with Mac", role: .destructive) { pairing.reset() }
         }

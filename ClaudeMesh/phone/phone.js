@@ -1,4 +1,4 @@
-// Claude Mesh for iPhone — a home-screen web app served by the Mac app (phone-server.js).
+// GCX Mesh for iPhone — a home-screen web app served by the Mac app (phone-server.js).
 // Same mesh engine as the desktop (mesh/mother/bubbles/organism.js); live data arrives over SSE,
 // controls go back as small JSON POSTs. Pairing key: ?t=… in the URL, remembered on the phone.
 const $ = s => document.querySelector(s);
@@ -76,7 +76,7 @@ cv.addEventListener('touchend', e => {
 // ---------- live data ----------
 let es = null, lastMsg = 0;
 function connect() {
-  if (!TOKEN) return offline('Not paired yet.<br>On your Mac open <b>Claude Mesh → 📱</b> and scan the QR code.');
+  if (!TOKEN) return offline('Not paired yet.<br>On your Mac open <b>GCX Mesh → 📱</b> and scan the QR code.');
   es && es.close();
   es = new EventSource('/api/events?t=' + encodeURIComponent(TOKEN));
   es.addEventListener('telemetry', ev => {
@@ -88,11 +88,11 @@ function connect() {
 setInterval(() => {
   if (Date.now() - lastMsg > 8000) {
     $('#conn').classList.remove('on');
-    if (lastMsg) offline('Can’t reach your Mac.<br><span style="font-size:13px">Is Claude Mesh open and awake, with phone access on? Away from home, turn on Tailscale on this phone.</span>');
+    if (lastMsg) offline('Can’t reach your Mac.<br><span style="font-size:13px">Is GCX Mesh open and awake, with phone access on? Away from home, turn on Tailscale on this phone.</span>');
     if (!es || es.readyState === 2) connect();
   }
 }, 3000);
-fetch('/api/history?t=' + encodeURIComponent(TOKEN)).then(r => { if (r.status === 401) offline('This pairing key is no longer valid.<br>Scan the QR code in <b>Claude Mesh → 📱</b> again.'); else connect(); }).catch(() => connect());
+fetch('/api/history?t=' + encodeURIComponent(TOKEN)).then(r => { if (r.status === 401) offline('This pairing key is no longer valid.<br>Scan the QR code in <b>GCX Mesh → 📱</b> again.'); else connect(); }).catch(() => connect());
 document.addEventListener('visibilitychange', () => { if (!document.hidden && (!es || es.readyState !== 1)) connect(); });
 
 function render() {

@@ -66,7 +66,7 @@ spigen-gcx-automation/
 │   ├── sq2gcx_AmazonHelpcenter/         # Amazon EU claim-form Help Center theme
 │   └── spigen-eu_ShopifyHelpcenter/     # Shopify EU claim-form Help Center theme
 │
-├── ClaudeMesh/                          # Electron Mac app — live mission control for Claude Code sessions
+├── ClaudeMesh/                          # GCX Mesh — Electron Mac app: live mission control for Claude Code sessions
 │
 └── reference/                           # Internal reference docs
 ```
@@ -142,7 +142,7 @@ spigen-gcx-automation/
 
 | Project | Description | README |
 |---------|-------------|--------|
-| [ClaudeMesh](ClaudeMesh/) | **Claude Mesh**, a native macOS app (Electron) that is mission control for Claude Code. Every session is shown as a living bubble orbiting a "mother" star that ages with plan usage (5-hour / week / month). It shows per-model spend, tok/s, health, context and usage left. It can resume or rename any past session, convert a session to a background agent, send slash commands, and run in-app terminals. Working copy is `~/Apps/ClaudeMesh` (`sync-to-repo.sh` copies it here); `install.sh` builds it into /Applications. | [README](ClaudeMesh/README.md) |
+| [ClaudeMesh](ClaudeMesh/) | **GCX Mesh** (formerly Claude Mesh), a native macOS app (Electron) that is mission control for Claude Code. Every session is shown as a living bubble orbiting a "mother" star that ages with plan usage (5-hour / week / month). It shows per-model spend, tok/s, health, context and usage left. It can resume or rename any past session, convert a session to a background agent, send slash commands, and run in-app terminals. Working copy is `~/Apps/ClaudeMesh` (`sync-to-repo.sh` copies it here); `install.sh` builds it into /Applications. | [README](ClaudeMesh/README.md) |
 
 ### Zendesk Guide theme exports
 

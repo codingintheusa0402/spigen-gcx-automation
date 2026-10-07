@@ -53,11 +53,11 @@ function createPhoneServer(ctx) {
     if (p === '/manifest.webmanifest') {      // start_url carries the token so the home-screen app is paired
       if (!okToken(tok)) { res.writeHead(401); return res.end(); }
       res.writeHead(200, { 'Content-Type': MIME['.webmanifest'] });
-      return res.end(JSON.stringify({ name: 'Claude Mesh', short_name: 'Mesh', start_url: '/?t=' + cfg.token, display: 'standalone', background_color: '#05041a', theme_color: '#0a0826',
+      return res.end(JSON.stringify({ name: 'GCX Mesh', short_name: 'Mesh', start_url: '/?t=' + cfg.token, display: 'standalone', background_color: '#05041a', theme_color: '#0a0826',
         icons: [{ src: '/apple-touch-icon.png', sizes: '1024x1024', type: 'image/png' }] }));
     }
     if (!p.startsWith('/api/')) { res.writeHead(404); return res.end(); }
-    if (!okToken(tok)) return json(res, 401, { error: 'not paired — scan the QR code in Claude Mesh on your Mac' });
+    if (!okToken(tok)) return json(res, 401, { error: 'not paired — scan the QR code in GCX Mesh on your Mac' });
 
     if (p === '/api/events' && req.method === 'GET') {
       sse(res); const c = { res }; clients.add(c);

@@ -177,10 +177,10 @@ window.api.phone.onResume(async sid => { if (!hist.length) await loadHistory(); 
 async function openPhone() {
   const st = await window.api.phone.status();
   const qrs = await Promise.all(st.urls.map(u => window.api.phone.qr(u.url)));
-  modal(`<h2>Claude Mesh on iPhone</h2>
+  modal(`<h2>GCX Mesh on iPhone</h2>
     <label class="chk" style="margin:4px 0 10px"><input type="checkbox" id="phOn" ${st.enabled ? 'checked' : ''}> Allow phone access <span style="color:var(--dim)">(off = nothing listens)</span></label>
     ${st.enabled ? (st.urls.length ? `<div class="ph-qrs">${st.urls.map((u, i) => `<div class="ph-qr"><img src="${qrs[i]}" alt=""><b>${esc(u.kind)}</b><code>${esc(u.url.replace(/\?t=.*/, ''))}</code><button data-copy="${esc(u.url)}">Copy link</button></div>`).join('')}</div>
-      <div style="color:var(--dim);font-size:12px;line-height:1.6;margin-top:10px">1. Scan with the iPhone camera → it opens in Safari.<br>2. Share → <b style="color:var(--text)">Add to Home Screen</b> — or scan it inside the native Claude Mesh iPhone app.<br>
+      <div style="color:var(--dim);font-size:12px;line-height:1.6;margin-top:10px">1. Scan with the iPhone camera → it opens in Safari.<br>2. Share → <b style="color:var(--text)">Add to Home Screen</b> — or scan it inside the native GCX Mesh iPhone app.<br>
       Tailscale works from anywhere (phone needs Tailscale on). The QR holds a private pairing key — don't share it. ${st.clients ? `<br><b style="color:var(--ok)">${st.clients} phone(s) connected</b>` : ''}</div>` : '<div style="color:var(--dim)">No network address found — connect to Wi-Fi or Tailscale.</div>')
       : '<div style="color:var(--dim);font-size:13px">Turn on to show the pairing QR code.</div>'}
     <div class="btns" style="justify-content:space-between;margin-top:14px">${st.enabled ? '<button id="phRegen">New pairing key</button>' : '<span></span>'}<button id="mCancel">Close</button></div>`);

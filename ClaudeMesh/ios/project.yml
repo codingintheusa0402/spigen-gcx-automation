@@ -19,18 +19,18 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kevinkim.claudemesh.ios
-        PRODUCT_NAME: Claude Mesh
+        PRODUCT_NAME: GCX Mesh
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Claude Mesh
+        INFOPLIST_KEY_CFBundleDisplayName: GCX Mesh
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
         INFOPLIST_KEY_UIStatusBarStyle: UIStatusBarStyleLightContent
         INFOPLIST_KEY_UIUserInterfaceStyle: Dark
-        INFOPLIST_KEY_NSCameraUsageDescription: Scan the pairing QR code shown in Claude Mesh on your Mac.
-        INFOPLIST_KEY_NSLocalNetworkUsageDescription: Connect to Claude Mesh running on your Mac.
+        INFOPLIST_KEY_NSCameraUsageDescription: Scan the pairing QR code shown in GCX Mesh on your Mac.
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: Connect to GCX Mesh running on your Mac.
     info:
       path: ClaudeMesh/Info.plist
       properties:

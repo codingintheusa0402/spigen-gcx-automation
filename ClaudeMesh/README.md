@@ -1,10 +1,12 @@
-# Claude Mesh
+# GCX Mesh
+
+*(formerly Claude Mesh — the source folder is still `ClaudeMesh/`, the bundle id `com.kevinkim.claudemesh` and the data folder `~/Library/Application Support/Claude Mesh` are kept so permissions, pairing and saved state carry over)*
 
 A native macOS mission-control app for **Claude Code**. It shows every running Claude Code session as a living bubble orbiting a central "mother" star, with real-time spend, speed, health and plan-usage limits, and it can run, resume, rename and command sessions in built-in terminals.
 
 Electron app · personal tool, separate from the Spigen automations · macOS (Apple Silicon)
 
-![Claude Mesh: sessions orbiting the mother star, load strands, usage left](docs/overview.jpg)
+![GCX Mesh: sessions orbiting the mother star, load strands, usage left](docs/overview.jpg)
 
 | Session orb close-up | Session panel & commands | Pixel mode |
 |---|---|---|
@@ -22,7 +24,7 @@ The Mac app also serves a **home-screen web app** for iPhone. It has the same li
 
 1. On the Mac, click **📱** in the header, then turn on **Allow phone access**.
 2. Scan the QR code with the iPhone camera. Use **Wi-Fi** on the same network, or **Tailscale** from anywhere; the phone needs Tailscale on for the second.
-3. In Safari choose Share → **Add to Home Screen**. It then opens full-screen with the Claude Mesh icon.
+3. In Safari choose Share → **Add to Home Screen**. It then opens full-screen with the GCX Mesh icon.
 
 **Native iPhone app (optional):** `ios/` is a SwiftUI app built with XcodeGen. It wraps the same live mesh in a native WKWebView, with a camera QR-scanner pairing screen, native dialogs, automatic fallback between the Tailscale and Wi-Fi addresses, and a three-finger long-press menu to reload or re-pair. To build it and install it on a USB-connected iPhone:
 
@@ -90,7 +92,7 @@ How it works and how it's protected:
 - `~/.claude/projects/<enc-cwd>/<sid>.jsonl`, plus `subagents/`: per-message model and token usage. Spend is computed at list price per token type (`PRICES` in `collector.js`). Messages repeated per content block are de-duplicated by `message.id`.
 - **Plan usage**: the same request `/usage` makes (`GET api.anthropic.com/api/oauth/usage`), using the Claude Code login read from the macOS keychain at request time. The token is never stored or logged.
   - Fallback: `~/.claude/state/mesh-statusline.json`, which a one-line addition to the user's status-line script saves.
-- The weekly peaks behind the monthly estimate are saved in `~/Library/Application Support/Claude Mesh/weekly-usage.json`. The history-list cache is saved in `history-cache.json` in the same folder.
+- The weekly peaks behind the monthly estimate are saved in `~/Library/Application Support/GCX Mesh/weekly-usage.json`. The history-list cache is saved in `history-cache.json` in the same folder.
 - **Writes**:
   - Renaming a session that isn't running appends a `custom-title` line to its transcript, the same record `/rename` writes.
   - Dragged orbits are saved in localStorage.
@@ -133,6 +135,8 @@ bash install.sh        # build, sign, install to /Applications, relaunch
 ```
 
 `install.sh` signs with a local self-signed identity named **"Claude Mesh Local Signing"** if it is in the login keychain. A stable signature means macOS remembers file-access permissions (and a one-time Full Disk Access grant) across rebuilds. Without the identity it falls back to ad-hoc signing.
+
+Updates are written **in place** into `/Applications/GCX Mesh.app` (deleting and re-copying the bundle made the Dock drop a pinned icon).
 
 ⚠ **Reinstalling quits the app, and that ends every session running in its terminals.** Resume them with one click from **All sessions**.
 
