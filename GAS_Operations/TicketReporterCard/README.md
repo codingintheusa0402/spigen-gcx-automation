@@ -21,7 +21,7 @@ note, with a per-sender confirmer code appended automatically.
 
 ---
 
-## Three ways to trigger it
+## Five ways to trigger it
 
 ### 1. `"티켓 <번호>"` or a pasted report → interactive card
 `onMessage` renders a card: the report text, a single reference dropdown (43 canned phrases
@@ -60,6 +60,31 @@ The `ticket-reporter` Claude session applies these: `check_feedback.py list` at 
 every monitor tick returns unapplied rows (empty `appliedAt`), the session updates
 `SKILL.md`'s writing rules accordingly, then `check_feedback.py mark-applied <row>` stamps it
 done.
+
+### 4. `/manual` → full SKILL.md text
+Checked before the ticket-number regex for the same reason as `/revision`. `handleManualRequest_`
+reads the ticket-reporter `SKILL.md` text back out of the `Manual` tab of the same `TicketQueue`
+sheet (mirrored there by the monitor session whenever `SKILL.md` changes — the file itself only
+lives on the machine running the monitor) and replies with a short preview (1,500 chars) plus a
+link button straight to that tab. A full-text card was tried first but silently failed once
+`SKILL.md` passed ~24KB (Chat's payload limit, with no error surfaced on the Apps Script side).
+
+### 5. `/btw <question>` → general Q&A, not a ticket action
+Anything after `/btw` is answered directly via the Claude API instead of being parsed as a
+ticket trigger/report — also checked before the ticket-number regex, since a free-form
+question often contains its own digit sequences (order numbers, dates, example ticket
+numbers) that must not get misread as "open ticket card for this id". `handleBtwQuestion_`
+calls `askClaude_` (needs the `ANTHROPIC_API_KEY` Script Property) and returns the answer as a
+card through the normal synchronous reply.
+
+Because this app has no `chat.bot` scope (see limitation below), a single invocation can only
+return one reply — there's no way to "stream" progress inside that one card. So if the answer
+takes a while, `postProgress_` posts short interim status lines ("🤔 질문 확인 중…", "📡 답변
+생성 중…", and — only past a 10s threshold — "✅ 답변 생성 완료 (N초 소요)") **proactively**
+through the room's own incoming webhook (`PROGRESS_WEBHOOK_URL` Script Property, same kind of
+URL `send.py` already posts reports through), as separate plain-text messages. The final
+answer always arrives through the normal card reply, never through the webhook. If
+`PROGRESS_WEBHOOK_URL` isn't set, these pings just no-op — `/btw` still answers.
 
 ---
 
