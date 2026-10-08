@@ -75,6 +75,8 @@ Sheets are read with the gws_shim token (`~/.config/gws_shim/token.json`).
      `[배드리뷰N]` labels hyperlinked, product line with ASIN, image grid) to the room the
      user names, then build the deck:
      `python3 ~/.claude/skills/siren-report/build_siren_slides.py --data case_N.json`.
+     **Global 리뷰 평점** is filled automatically by siren-report (Amazon rating of the 제품명-linked ASIN: `4.5(DE)`,
+     fallback US→UK→JP, else `N/A`) — leave `overview.global_rating` empty; never type it by hand.
 
 ## Output-size gotchas
 

@@ -40,6 +40,10 @@ https://docs.google.com/presentation/d/1_ncdmLrNjG5WjuCltG_mZcNZke7DM72pCkC5ttlb
   case slide per maker (name suffix "(듀센)", numbering shifts). Example: Galaxy S25 TA(AI) Mag Fit 코팅벗겨짐 → 듀센 (S25 Ultra/+/Edge)
   1mvFM_Jv88DZlrucQrDvyCK20Nm6UDu17gNixY-a7HwY + 영광 (S25) 1CNGc2H7mQF8XMSNPLoIZwWfOBxjeeFwphu1PnDNuObo. Watch SKU_Master vs product
   master disagreements (ACS08964 said CASESPICES/CN in SKU_Master) and non-case tickets filed under a case SKU (e.g. a glass ticket).
+- **Global 리뷰 평점 (default since 2026-10-08)**: every SIREN deck's 제품 클레임 개요 shows the Amazon rating of the 제품명-linked
+  ASIN (`4.5(DE)`; fallback .com→.co.uk→.co.jp; else `N/A`) — siren-report fills it in step 5. When editing/re-checking existing
+  decks, backfill any `-`/empty value the same way (`siren-report/amazon_rating.py`) and confirm the 제품명 link ASIN is one of
+  the deck's own SKU/ASIN pairs (wrong-product links happened).
 - **After any build: render every slide and fix unintended text wraps** (memory `feedback_slides_text_wrap_check`) — text boxes lose ~7.2pt per side to insets.
 
 ## Workflow (scripts in `scripts/`, each `import common` → work dir `~/.config/siren_sweeper/<yymmdd>/`, override with `SWEEP_DIR`)

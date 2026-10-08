@@ -391,12 +391,16 @@ def export_case(c, pm):
     for r in c["reviews"]:
         by_r[r["country"]] += 1
     skus = sorted(c["skus"])
+    sku_asins = [pm.by_sku.get(s, {}).get("asin", "") for s in skus]
+    # 제품명 link + Global 리뷰 평점 source: the case's own product-master ASIN (valid 10-char), never a claim-typed one
+    own = [a for a in sku_asins if re.fullmatch(r"B0[A-Z0-9]{8}", a or "")]
+    main_asin = own[0] if own else next((a for a in sorted(c["asins"]) if re.fullmatch(r"B0[A-Z0-9]{8}", a)), "")
     return {"issue_title": f"{c['name']} {c['defect'].split('_', 1)[-1]} 이슈", "author": "김지우",
             "product": {"device": c["lineup"][0] or "-", "product_name": c["name"], "defect_type": c["defect"].split("_", 1)[-1],
                         "skus": [{"sku": s, "asin": pm.by_sku.get(s, {}).get("asin", "")} for s in skus],
-                        "manufacturer": "", "asin": next(iter(sorted(c["asins"])), "")},
+                        "manufacturer": "", "asin": main_asin},
             "overview": {"total_count": c["total"], "bad_review_count": len(c["reviews"]),
-                         "zendesk_count": len(c["claims"]), "global_rating": "-",
+                         "zendesk_count": len(c["claims"]), "global_rating": "",  # "" -> siren-report fills it from Amazon (DE→US→UK→JP)
                          "by_country_bad_review": dict(by_r), "by_country_zendesk": dict(by_z)},
             "claims": items}
 
