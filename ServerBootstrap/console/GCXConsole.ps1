@@ -45,12 +45,21 @@ $tiles = @(
         <TextBlock Text="HEALTH &amp; STATUS" Foreground="#6F77A3" FontSize="13" FontFamily="Segoe UI Semibold"/>
       </DockPanel>
       <WrapPanel x:Name="Health"/>
+      <Grid Margin="6,14,6,0">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <Border Grid.Column="0" Background="#121528" CornerRadius="10" Padding="16,12">
+          <StackPanel><TextBlock Text="RUNNING NOW" Foreground="#6F77A3" FontSize="13" FontFamily="Segoe UI Semibold" Margin="0,0,0,6"/>
+            <StackPanel x:Name="Running"/></StackPanel></Border>
+        <Border Grid.Column="2" Background="#121528" CornerRadius="10" Padding="16,12">
+          <StackPanel><TextBlock Text="UP NEXT" Foreground="#6F77A3" FontSize="13" FontFamily="Segoe UI Semibold" Margin="0,0,0,6"/>
+            <StackPanel x:Name="Upnext"/></StackPanel></Border>
+      </Grid>
     </StackPanel>
   </Grid>
 </Window>
 "@
 $win = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $xaml))
-$wrap = $win.FindName("Tiles"); $health = $win.FindName("Health"); $checked = $win.FindName("Checked"); $clock = $win.FindName("Clock"); $sub = $win.FindName("Sub")
+$wrap = $win.FindName("Tiles"); $health = $win.FindName("Health"); $running = $win.FindName("Running"); $upnext = $win.FindName("Upnext"); $checked = $win.FindName("Checked"); $clock = $win.FindName("Clock"); $sub = $win.FindName("Sub")
 
 $bc = New-Object Windows.Media.BrushConverter
 foreach ($x in $tiles) {
@@ -114,10 +123,20 @@ $HealthJob = {
   $mem = [math]::Round(100 - 100 * $os.FreePhysicalMemory / $os.TotalVisibleMemorySize)
   $r.disk = "$(if ($free -lt 10) { 'bad' } elseif ($free -lt 25) { 'warn' } else { 'ok' })|C: $free GB free · RAM $mem% used"
   # linux side
-  $lx = wsl.exe -d Ubuntu -u kevinkim -- bash -lc "~/gcx-health.sh" 2>$null
+  $lx = wsl.exe -d Ubuntu -u kevinkim -- bash -lc "~/Desktop/GCX/ServerBootstrap/console/gcx-health.sh" 2>$null
   if ($lx) { foreach ($l in $lx) { $p = "$l".Split("|", 3); if ($p.Count -eq 3) { $r[$p[0]] = "$($p[1])|$($p[2])" } } }
   else { $r.wsl = "bad|Ubuntu not responding" }
+  $r.jobs = @(wsl.exe -d Ubuntu -u kevinkim -- python3 /home/kevinkim/Desktop/GCX/ServerBootstrap/console/gcx-jobs.py 2>$null)
   $r
+}
+
+function JobRow($name, $detail, $color) {
+  $d = New-Object Windows.Controls.DockPanel; $d.Margin = "0,4,0,4"
+  $dot = New-Object Windows.Shapes.Ellipse; $dot.Width = 9; $dot.Height = 9; $dot.Margin = "0,0,10,0"; $dot.Fill = $bc.ConvertFromString($color)
+  [Windows.Controls.DockPanel]::SetDock($dot, "Left")
+  $t2 = New-Object Windows.Controls.TextBlock; $t2.Text = $detail; $t2.FontSize = 13; $t2.Foreground = $bc.ConvertFromString("#8C93B8"); [Windows.Controls.DockPanel]::SetDock($t2, "Right")
+  $t1 = New-Object Windows.Controls.TextBlock; $t1.Text = $name; $t1.FontSize = 14; $t1.Foreground = $bc.ConvertFromString("#E4E6FF")
+  [void]$d.Children.Add($dot); [void]$d.Children.Add($t2); [void]$d.Children.Add($t1); return $d
 }
 
 function Refresh {
@@ -127,6 +146,12 @@ function Refresh {
   if (Wait-Job $job -Timeout 25) {
     $r = Receive-Job $job; $health.Children.Clear()
     foreach ($k in $LABELS.Keys) { $v = $r[$k]; if (-not $v) { $v = "na|—" }; $lv, $tx = "$v".Split("|", 2); [void]$health.Children.Add((Card $k $lv $tx)) }
+    $running.Children.Clear(); $upnext.Children.Clear()
+    foreach ($l in $r.jobs) { $p = "$l".Split("|", 3); if ($p.Count -lt 3) { continue }
+      if ($p[0] -eq "run")  { [void]$running.Children.Add((JobRow $p[1] $p[2] "#3DDC97")) }
+      if ($p[0] -eq "next") { [void]$upnext.Children.Add((JobRow $p[1] $p[2] "#8FA2FF")) } }
+    if ($running.Children.Count -eq 0) { [void]$running.Children.Add((JobRow "Nothing running" "" "#5D648C")) }
+    if ($upnext.Children.Count -eq 0) { [void]$upnext.Children.Add((JobRow "No scheduled jobs" "" "#5D648C")) }
     $checked.Text = "checked " + (Get-Date).ToString("HH:mm:ss") + "  ·  every 30 s  ·  F5 to refresh"
   }
   Remove-Job $job -Force
