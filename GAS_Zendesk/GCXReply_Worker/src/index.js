@@ -8,7 +8,7 @@
 //   GET /?orderId=XXX&asin=XXX   → both merged (same as GAS doGet)
 // Everything else (ABM relay log/claims, inferReason, MCF) stays on GAS.
 //
-// Ported 1:1 from GCXReply_GAS/Code.js v2.7.2 (fetchOrderDataFresh_, findOrderRegion_,
+// Ported 1:1 from GCXReply_GAS/Code.js v2.7.3 (fetchOrderDataFresh_, findOrderRegion_,
 // fetchBuyerPurchaseStats_, fetchBuyerRefundCount_, lookupFromIndex_). Any change to
 // those GAS functions must be mirrored here — the panel falls back to GAS whenever
 // this Worker errors, but silently-different data would not be caught by that.
@@ -276,31 +276,29 @@ async function findOrderRegion(env, orderId) {
 
 async function fetchOrderDataFresh(env, orderId) {
   const { endpoint, region, cred, order } = await findOrderRegion(env, orderId);
-  const noRdtKey = 'nordt_v1_' + cred;
+  // Same as GAS v2.7.3: skip only the always-failing RDT + items calls; buyerInfo
+  // is always fetched (it returns BuyerName for many orders even without an RDT).
+  const noRdtKey = 'nordt_v2_' + cred;
   let known = null;
   try { known = JSON.parse((await cacheGet(env, noRdtKey)) || 'null'); } catch {}
 
   let rdtResult, itemsR, addrR, buyerR;
   if (known) {
     rdtResult = { token: null, status: known.rdtStatus, error: known.rdtError };
-    addrR = await spApiGet(env, endpoint, region, cred, `/orders/v0/orders/${orderId}/address`);
     itemsR = { status: known.itemsStatus, body: known.itemsError };
-    buyerR = { status: 200, body: JSON.stringify({ payload: { AmazonOrderId: orderId } }) };
+    [addrR, buyerR] = await Promise.all([
+      spApiGet(env, endpoint, region, cred, `/orders/v0/orders/${orderId}/address`),
+      spApiGet(env, endpoint, region, cred, `/orders/v0/orders/${orderId}/buyerInfo`),
+    ]);
   } else {
     rdtResult = await getRdt(env, endpoint, region, cred, orderId);
     const rdtToken = rdtResult.token || undefined;
-    // Items + buyerInfo use the RDT as their access token when one was issued (as in GAS)
     [itemsR, addrR, buyerR] = await Promise.all([
       spApiGet(env, endpoint, region, cred, `/orders/v0/orders/${orderId}/items`, rdtToken),
       spApiGet(env, endpoint, region, cred, `/orders/v0/orders/${orderId}/address`),
       spApiGet(env, endpoint, region, cred, `/orders/v0/orders/${orderId}/buyerInfo`, rdtToken),
     ]);
-    let buyerOnlyEcho = false;
-    try {
-      const bp = buyerR.status === 200 ? JSON.parse(buyerR.body).payload || {} : null;
-      buyerOnlyEcho = !!bp && Object.keys(bp).length === 1 && bp.AmazonOrderId === orderId;
-    } catch {}
-    if (!rdtResult.token && rdtResult.status === 400 && itemsR.status === 403 && buyerOnlyEcho) {
+    if (!rdtResult.token && rdtResult.status === 400 && itemsR.status === 403) {
       try {
         await cachePut(env, noRdtKey, JSON.stringify({
           rdtStatus: rdtResult.status, rdtError: rdtResult.error, itemsStatus: itemsR.status, itemsError: itemsR.body,

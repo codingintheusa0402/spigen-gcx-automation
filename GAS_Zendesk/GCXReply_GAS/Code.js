@@ -1,4 +1,4 @@
-// GCX Reply — Apps Script Web App (v2.7.2)
+// GCX Reply — Apps Script Web App (v2.7.3)
 // Endpoint: ?orderId=XXX  |  ?asin=XXX  |  ?orderId=XXX&asin=XXX
 // Deploy as: Execute as Me, Access: Anyone (or Anyone anonymous)
 // Script Properties required: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
@@ -456,6 +456,9 @@ function doPost(e) {
     if (body.action === 'claimAbmSend') {
       return respond(claimAbmSend_(body.key));
     }
+    if (body.action === 'setWorkerConfig') {
+      return respond(setWorkerConfig_(body));
+    }
     return respond({ error: 'unknown action' });
   } catch (err) {
     return respond({ error: err.message });
@@ -818,23 +821,26 @@ function findOrderRegion_(orderId) {
 function fetchOrderDataFresh_(orderId) {
   const { endpoint, region, cred, order } = findOrderRegion_(orderId);
 
-  // This app has no buyerInfo data role and no order-items role, so RDT
-  // always 400s, items always 403s and buyerInfo (no RDT) only echoes the
-  // order ID — 1 sequential POST + 2 wasted calls on every order. Once that
-  // outcome is observed it's cached per credential set for 6 h and the calls
-  // are skipped, returning the identical fields; if Amazon ever grants the
-  // roles, the next uncached run picks it up.
+  // This app has no buyerInfo data role and no order-items role, so the RDT
+  // request always 400s and items always 403. Once that outcome is observed it
+  // is cached per credential set for 6 h and those two calls are skipped
+  // (identical fields returned). buyerInfo is ALWAYS still called: without an
+  // RDT it still returns BuyerName for many orders (Auto-Fill's Customer Full
+  // Name) — v2.7.2 wrongly skipped it too. If Amazon ever grants the roles,
+  // the next uncached run picks it up.
   const cache   = CacheService.getScriptCache();
-  const noRdtKey = 'nordt_v1_' + cred;
+  const noRdtKey = 'nordt_v2_' + cred;
   let known = null;
   try { known = JSON.parse(cache.get(noRdtKey) || 'null'); } catch (_) {}
 
   let rdtResult, itemsR, addrR, buyerR;
   if (known) {
     rdtResult = { token: null, status: known.rdtStatus, error: known.rdtError };
-    addrR  = spApiGet_(endpoint, region, cred, `/orders/v0/orders/${orderId}/address`);
     itemsR = { status: known.itemsStatus, body: known.itemsError };
-    buyerR = { status: 200, body: JSON.stringify({ payload: { AmazonOrderId: orderId } }) };
+    [addrR, buyerR] = UrlFetchApp.fetchAll([
+      spApiBuildFetch_(endpoint, region, cred, `/orders/v0/orders/${orderId}/address`),
+      spApiBuildFetch_(endpoint, region, cred, `/orders/v0/orders/${orderId}/buyerInfo`),
+    ]).map(res => ({ status: res.getResponseCode(), body: res.getContentText() }));
   } else {
     rdtResult = getRdt_(endpoint, region, cred, orderId);
     const rdtToken  = rdtResult.token || undefined;
@@ -846,12 +852,7 @@ function fetchOrderDataFresh_(orderId) {
       spApiBuildFetch_(endpoint, region, cred, `/orders/v0/orders/${orderId}/buyerInfo`, rdtToken),
     ]).map(res => ({ status: res.getResponseCode(), body: res.getContentText() }));
 
-    let buyerOnlyEcho = false;
-    try {
-      const bp = buyerR.status === 200 ? JSON.parse(buyerR.body).payload || {} : null;
-      buyerOnlyEcho = !!bp && Object.keys(bp).length === 1 && bp.AmazonOrderId === orderId;
-    } catch (_) {}
-    if (!rdtResult.token && rdtResult.status === 400 && itemsR.status === 403 && buyerOnlyEcho) {
+    if (!rdtResult.token && rdtResult.status === 400 && itemsR.status === 403) {
       try {
         cache.put(noRdtKey, JSON.stringify({
           rdtStatus: rdtResult.status, rdtError: rdtResult.error,
@@ -1152,9 +1153,60 @@ function buildProductIndex_() {
     }
     toPut[k] = json;
   }
-  toPut[PIDX_META_KEY] = JSON.stringify({ builtAt: Date.now(), asins: all.size });
+  const builtAt = Date.now();
+  toPut[PIDX_META_KEY] = JSON.stringify({ builtAt, asins: all.size });
   CacheService.getScriptCache().putAll(toPut, PIDX_TTL);
+  const forWorker = Object.assign({}, toPut);
+  delete forWorker[PIDX_META_KEY];
+  pushIndexToWorker_(forWorker, builtAt);
   return buckets;
+}
+
+// ── GCX Reply Worker (Cloudflare) — product-index mirror ─────────────────────
+// The panel reads product data from the Worker first (GCXReply_Worker/), which
+// serves it from this same index. GAS stays the source of truth: after every
+// rebuild the buckets are POSTed to the Worker. WORKER_URL / WORKER_PUSH_KEY
+// live in Script Properties (set once via the setWorkerConfig doPost action —
+// never in this file, which is in a public repo). Failures only log: the
+// Worker falls back to asking GAS when its copy is missing or >6 h old.
+function pushIndexToWorker_(bucketJsonByKey, builtAt) {
+  const props = PropertiesService.getScriptProperties();
+  const url = props.getProperty('WORKER_URL'), key = props.getProperty('WORKER_PUSH_KEY');
+  if (!url || !key) return false;
+  try {
+    const r = UrlFetchApp.fetch(url.replace(/\/$/, '') + '/admin/pidx', {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: { 'x-push-key': key },
+      payload: JSON.stringify({ builtAt, buckets: bucketJsonByKey }),
+    });
+    if (r.getResponseCode() !== 200) Logger.log('pushIndexToWorker_: HTTP ' + r.getResponseCode() + ' ' + r.getContentText().slice(0, 200));
+    return r.getResponseCode() === 200;
+  } catch (e) { Logger.log('pushIndexToWorker_: ' + e.message); return false; }
+}
+
+// Re-push the index currently in ScriptCache (no sheet reads) — used right
+// after the Worker is configured so it doesn't wait for the next rebuild.
+function pushCachedIndexToWorker_() {
+  const cache = CacheService.getScriptCache();
+  const keys = [];
+  for (let i = 0; i < PIDX_BUCKETS; i++) keys.push(PIDX_PREFIX + i);
+  const got = cache.getAll(keys.concat([PIDX_META_KEY]));
+  if (!got[PIDX_META_KEY] || keys.some(k => got[k] == null)) return false;
+  const buckets = {};
+  keys.forEach(k => { buckets[k] = got[k]; });
+  return pushIndexToWorker_(buckets, JSON.parse(got[PIDX_META_KEY]).builtAt);
+}
+
+// doPost { action:'setWorkerConfig', workerUrl, pushKey, proof } where
+// proof = hex(sha256(AWS_SECRET_ACCESS_KEY + '|' + pushKey + '|' + workerUrl)).
+// Only someone who already holds this project's SP-API secret can compute it,
+// so the endpoint can stay public without exposing anything new.
+function setWorkerConfig_(body) {
+  const secret = scriptProps_()['AWS_SECRET_ACCESS_KEY'] || '';
+  const expected = sha256Hex_(secret + '|' + body.pushKey + '|' + body.workerUrl);
+  if (!secret || !body.pushKey || !body.workerUrl || body.proof !== expected) return { ok: false, error: 'bad proof' };
+  PropertiesService.getScriptProperties().setProperties({ WORKER_URL: body.workerUrl, WORKER_PUSH_KEY: body.pushKey });
+  return { ok: true, pushed: pushCachedIndexToWorker_() };
 }
 
 // Keeps overlapping trigger runs (keepWarm + refreshProductIndex) from both
