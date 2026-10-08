@@ -1,4 +1,4 @@
-// GCX Reply — Apps Script Web App (v2.7.1)
+// GCX Reply — Apps Script Web App (v2.7.2)
 // Endpoint: ?orderId=XXX  |  ?asin=XXX  |  ?orderId=XXX&asin=XXX
 // Deploy as: Execute as Me, Access: Anyone (or Anyone anonymous)
 // Script Properties required: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
@@ -528,7 +528,10 @@ function getLwaToken_(cred) {
 
   const d = JSON.parse(resp.getContentText());
   if (!d.access_token) throw new Error('LWA failed: ' + resp.getContentText());
-  cache.put(cacheKey, d.access_token, Math.min(d.expires_in - 180, 180));
+  // LWA access tokens live 3600 s. This used to cache for at most 180 s, so
+  // every 3 min per credential set an agent's request paid an extra LWA
+  // round-trip. Keep a 5-min safety margin; a 403 'expired' still evicts it.
+  cache.put(cacheKey, d.access_token, Math.max(60, Math.min(d.expires_in - 300, 21600)));
   return d.access_token;
 }
 
@@ -771,9 +774,18 @@ function fetchOrderData_(orderId) {
 // always succeeds on the very first (EU) attempt for this account's order mix,
 // so parallelizing traded a rare slow path for a much more common slower one.
 // Keep this sequential; scriptProps_() memoization below is the safe win.
+// Order-ID prefix → REGIONS index learned from past hits (7 days): a JP/NA/IN
+// order no longer pays a wasted EU attempt first. Unknown prefix or a miss on
+// the hinted region falls through to the original EU→FE→NA→IN order.
 function findOrderRegion_(orderId) {
   const regionErrors = [];
-  for (const { endpoint, region, cred } of REGIONS) {
+  const cache   = CacheService.getScriptCache();
+  const hintKey = 'oreg_' + orderId.slice(0, 3);
+  const hint    = Number(cache.get(hintKey));
+  const order_  = REGIONS.map((r, i) => i);
+  if (hint > 0 && hint < REGIONS.length) { order_.splice(hint, 1); order_.unshift(hint); }
+  for (const ri of order_) {
+    const { endpoint, region, cred } = REGIONS[ri];
     let r;
     try { r = spApiGet_(endpoint, region, cred, `/orders/v0/orders/${orderId}`); }
     catch (e) { regionErrors.push(`${cred}:LWA(${e.message})`); continue; }
@@ -797,6 +809,7 @@ function findOrderRegion_(orderId) {
       continue;
     }
 
+    try { cache.put(hintKey, String(ri), 604800); } catch (_) {}
     return { endpoint, region, cred, order };
   }
   throw new Error('Order not found — ' + regionErrors.join(' | '));
@@ -805,15 +818,48 @@ function findOrderRegion_(orderId) {
 function fetchOrderDataFresh_(orderId) {
   const { endpoint, region, cred, order } = findOrderRegion_(orderId);
 
-  const rdtResult = getRdt_(endpoint, region, cred, orderId);
-  const rdtToken  = rdtResult.token || undefined;
+  // This app has no buyerInfo data role and no order-items role, so RDT
+  // always 400s, items always 403s and buyerInfo (no RDT) only echoes the
+  // order ID — 1 sequential POST + 2 wasted calls on every order. Once that
+  // outcome is observed it's cached per credential set for 6 h and the calls
+  // are skipped, returning the identical fields; if Amazon ever grants the
+  // roles, the next uncached run picks it up.
+  const cache   = CacheService.getScriptCache();
+  const noRdtKey = 'nordt_v1_' + cred;
+  let known = null;
+  try { known = JSON.parse(cache.get(noRdtKey) || 'null'); } catch (_) {}
 
-  // Fire items + address + buyerInfo in parallel — saves ~600 ms vs sequential
-  const [itemsR, addrR, buyerR] = UrlFetchApp.fetchAll([
-    spApiBuildFetch_(endpoint, region, cred, `/orders/v0/orders/${orderId}/items`,     rdtToken),
-    spApiBuildFetch_(endpoint, region, cred, `/orders/v0/orders/${orderId}/address`),
-    spApiBuildFetch_(endpoint, region, cred, `/orders/v0/orders/${orderId}/buyerInfo`, rdtToken),
-  ]).map(res => ({ status: res.getResponseCode(), body: res.getContentText() }));
+  let rdtResult, itemsR, addrR, buyerR;
+  if (known) {
+    rdtResult = { token: null, status: known.rdtStatus, error: known.rdtError };
+    addrR  = spApiGet_(endpoint, region, cred, `/orders/v0/orders/${orderId}/address`);
+    itemsR = { status: known.itemsStatus, body: known.itemsError };
+    buyerR = { status: 200, body: JSON.stringify({ payload: { AmazonOrderId: orderId } }) };
+  } else {
+    rdtResult = getRdt_(endpoint, region, cred, orderId);
+    const rdtToken  = rdtResult.token || undefined;
+
+    // Fire items + address + buyerInfo in parallel — saves ~600 ms vs sequential
+    [itemsR, addrR, buyerR] = UrlFetchApp.fetchAll([
+      spApiBuildFetch_(endpoint, region, cred, `/orders/v0/orders/${orderId}/items`,     rdtToken),
+      spApiBuildFetch_(endpoint, region, cred, `/orders/v0/orders/${orderId}/address`),
+      spApiBuildFetch_(endpoint, region, cred, `/orders/v0/orders/${orderId}/buyerInfo`, rdtToken),
+    ]).map(res => ({ status: res.getResponseCode(), body: res.getContentText() }));
+
+    let buyerOnlyEcho = false;
+    try {
+      const bp = buyerR.status === 200 ? JSON.parse(buyerR.body).payload || {} : null;
+      buyerOnlyEcho = !!bp && Object.keys(bp).length === 1 && bp.AmazonOrderId === orderId;
+    } catch (_) {}
+    if (!rdtResult.token && rdtResult.status === 400 && itemsR.status === 403 && buyerOnlyEcho) {
+      try {
+        cache.put(noRdtKey, JSON.stringify({
+          rdtStatus: rdtResult.status, rdtError: rdtResult.error,
+          itemsStatus: itemsR.status, itemsError: itemsR.body,
+        }), 21600);
+      } catch (_) {}
+    }
+  }
 
   const buyer = buyerR.status === 200 ? JSON.parse(buyerR.body).payload || {} : {};
   const stats = fetchBuyerPurchaseStats_(endpoint, region, cred, order.SalesChannel, buyer.BuyerEmail || null);
@@ -1111,13 +1157,17 @@ function buildProductIndex_() {
   return buckets;
 }
 
-// Lock so overlapping trigger runs (keepWarm + refreshProductIndex) don't
-// both rebuild at once.
+// Keeps overlapping trigger runs (keepWarm + refreshProductIndex) from both
+// rebuilding. Deliberately NOT LockService.getScriptLock(): a rebuild takes
+// 20-40 s, and holding the script lock that long made claimAbmRelay_/
+// claimAbmSend_ (waitLock 5-10 s) fail with lock_timeout during rebuilds.
+// A short-lived cache flag is enough here — a rare double rebuild is harmless.
 function rebuildProductIndexLocked_() {
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(0)) return null;
+  const cache = CacheService.getScriptCache();
+  if (cache.get(PIDX_PREFIX + 'building')) return null;
+  cache.put(PIDX_PREFIX + 'building', '1', 120);
   try { return buildProductIndex_(); }
-  finally { lock.releaseLock(); }
+  finally { cache.remove(PIDX_PREFIX + 'building'); }
 }
 
 function refreshProductIndexIfStale_() {
