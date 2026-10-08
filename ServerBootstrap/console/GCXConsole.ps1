@@ -65,12 +65,13 @@ $bc = New-Object Windows.Media.BrushConverter
 foreach ($x in $tiles) {
   $b = New-Object Windows.Controls.Button
   $b.Width = 300; $b.Height = 150; $b.Margin = "10"; $b.Cursor = "Hand"; $b.BorderThickness = "1"
+  $b.HorizontalContentAlignment = "Stretch"; $b.VerticalContentAlignment = "Center"; $b.Padding = "24,0,16,0"   # every tile: content flush left at the same x
   $b.Background = $bc.ConvertFromString("#161A33"); $b.BorderBrush = $bc.ConvertFromString("#2A3060")
-  $sp = New-Object Windows.Controls.StackPanel; $sp.Margin = "20,0,0,0"; $sp.HorizontalAlignment = "Left"; $sp.VerticalAlignment = "Center"
-  $ic = New-Object Windows.Controls.TextBlock; $ic.Text = $x.i; $ic.FontFamily = "Segoe Fluent Icons, Segoe MDL2 Assets"; $ic.FontSize = 30
+  $sp = New-Object Windows.Controls.StackPanel; $sp.Margin = "0"; $sp.HorizontalAlignment = "Stretch"; $sp.VerticalAlignment = "Center"
+  $ic = New-Object Windows.Controls.TextBlock; $ic.Text = $x.i; $ic.FontFamily = "Segoe Fluent Icons, Segoe MDL2 Assets"; $ic.FontSize = 30; $ic.HorizontalAlignment = "Left"; $ic.TextAlignment = "Left"
   $ic.Foreground = $bc.ConvertFromString("#8FA2FF"); $ic.Margin = "0,0,0,12"
-  $t1 = New-Object Windows.Controls.TextBlock; $t1.Text = $x.t; $t1.FontSize = 20; $t1.FontFamily = "Segoe UI Semibold"; $t1.Foreground = $bc.ConvertFromString("#EEF0FF")
-  $t2 = New-Object Windows.Controls.TextBlock; $t2.Text = $x.s; $t2.FontSize = 13; $t2.Foreground = $bc.ConvertFromString("#7A82AE"); $t2.Margin = "0,4,0,0"
+  $t1 = New-Object Windows.Controls.TextBlock; $t1.Text = $x.t; $t1.FontSize = 20; $t1.FontFamily = "Segoe UI Semibold"; $t1.Foreground = $bc.ConvertFromString("#EEF0FF"); $t1.HorizontalAlignment = "Left"; $t1.TextAlignment = "Left"
+  $t2 = New-Object Windows.Controls.TextBlock; $t2.Text = $x.s; $t2.FontSize = 13; $t2.Foreground = $bc.ConvertFromString("#7A82AE"); $t2.Margin = "0,4,0,0"; $t2.HorizontalAlignment = "Left"; $t2.TextAlignment = "Left"
   [void]$sp.Children.Add($ic); [void]$sp.Children.Add($t1); [void]$sp.Children.Add($t2); $b.Content = $sp
   $act = $x.a; $b.Add_Click({ try { & $act } catch { [System.Windows.MessageBox]::Show($_.Exception.Message, "GCX Server") } }.GetNewClosure())
   [void]$wrap.Children.Add($b)
