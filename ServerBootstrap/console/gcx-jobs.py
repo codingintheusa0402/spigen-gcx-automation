@@ -39,10 +39,8 @@ for line in ps:
     if n and n not in seen and "ps -eo" not in args:
         seen.add(n); m = int(secs) // 60
         print(f"run|{n}|running {m // 60}h {m % 60}m" if m >= 60 else f"run|{n}|running {m}m")
-for line in ps:
-    m = re.search(r"claude --remote-control (gcx-[\w-]+)", line)
-    if m and "ticket-monitor" in m.group(1):
-        print("run|Ticket monitor (Claude loop)|checks Zendesk every minute")
+if any(re.search(r"^\S*claude --remote-control gcx-ticket-monitor", l.strip().partition(" ")[2]) for l in ps):
+    print("run|Ticket monitor (Claude loop)|checks Zendesk every minute")
 
 # upcoming: next fire time of each cron line
 cron = subprocess.run(["crontab", "-l"], capture_output=True, text=True).stdout.splitlines()
