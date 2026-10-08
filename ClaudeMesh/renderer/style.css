@@ -344,3 +344,9 @@ body.pixel .sc-row, body.pixel .sc-edit { border-radius: 0; }
 .sc-due { display: flex; gap: 8px; align-items: center; margin-top: 6px; font-size: 12px; flex-wrap: wrap; } .sc-due input { padding: 3px 8px; } .sc-due code { color: var(--faint); font-size: 10.5px; }
 .w-cloud { color: #ffcf6b; border-color: rgba(255,207,107,.5); }
 .sc-past { color: var(--warn); font-weight: 500; font-size: 11.5px; }
+
+/* All sessions: groups, pins, drag-reorder */
+.hgh { margin: 8px 18px 2px; font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--faint); } .hgh i { font-style: normal; opacity: .7; }
+.hrow .pin { padding: 0 3px; font-size: 11px; opacity: 0; filter: grayscale(1); cursor: pointer; } .hrow:hover .pin { opacity: .55; }
+.hrow .pin.on { opacity: 1; filter: none; } .hrow.pinned .t { color: #ffe9a6; }
+.hrow.dragging { opacity: .35; } .hrow[draggable=true] { cursor: grab; }

@@ -12,19 +12,68 @@ async function loadHistory() {
   try { hist = await window.api.history(); } catch { }
   renderHistory();
 }
+// groups: Running (live) on top, then 📌 Pinned, then everything else by recency.
+// Within each group you can press-and-drag rows to set your own order (saved per group).
+let histPins = store.get('hist.pins', []), histOrder = store.get('hist.order', {}), histDragging = false;
+const savePins = () => store.set('hist.pins', histPins), saveOrder = () => store.set('hist.order', histOrder);
+function orderGroup(key, list) {
+  const ord = histOrder[key] || [], pos = new Map(ord.map((sid, i) => [sid, i]));
+  return list.sort((a, b) => (pos.has(a.sid) ? pos.get(a.sid) : 1e6) - (pos.has(b.sid) ? pos.get(b.sid) : 1e6) || b.mtime - a.mtime);
+}
 function renderHistory() {
+  if (histDragging) return;                                   // don't redraw under a drag
   const q = $('#hSearch').value.trim().toLowerCase(), auto = $('#hAuto').checked;
   const liveSids = new Set(snap.sessions.map(s => s.sid)), agentSids = new Set((snap.agents || []).map(a => a.sessionId));
   const rows = hist.filter(h => (auto || h.entry !== 'sdk-cli') &&
     (!q || [h.title, h.aiTitle, h.first, h.last, h.cwd, h.branch, h.sid].some(v => v && v.toLowerCase().includes(q))));
   $('#hCount').textContent = '· ' + rows.length;
-  $('#hList').innerHTML = rows.slice(0, histShown).map(h => {
-    const live = liveSids.has(h.sid), ag = agentSids.has(h.sid);
-    return `<div class="hrow ${live ? 'live' : ''}" data-hsid="${h.sid}" title="${esc(histTitle(h))}\n${esc(h.cwd)}${h.last ? '\nlast: ' + esc(h.last) : ''}">
-      <div class="n"><span class="t">${esc(histTitle(h))}</span>${live ? '<span class="tag">live</span>' : ag ? '<span class="tag">agent</span>' : ''}<span class="more" data-hmore="${h.sid}">⋯</span></div>
+  const pins = new Set(histPins);
+  const groups = [
+    ['live', 'Running', orderGroup('live', rows.filter(h => liveSids.has(h.sid)))],
+    ['pinned', '📌 Pinned', orderGroup('pinned', rows.filter(h => !liveSids.has(h.sid) && pins.has(h.sid)))],
+    ['rest', 'Recent', orderGroup('rest', rows.filter(h => !liveSids.has(h.sid) && !pins.has(h.sid)))],
+  ];
+  let shown = 0;
+  const rowHtml = (h, g) => {
+    const live = liveSids.has(h.sid), ag = agentSids.has(h.sid), pinned = pins.has(h.sid);
+    return `<div class="hrow ${live ? 'live' : ''} ${pinned ? 'pinned' : ''}" draggable="true" data-group="${g}" data-hsid="${h.sid}" title="${esc(histTitle(h))}\n${esc(h.cwd)}${h.last ? '\nlast: ' + esc(h.last) : ''}\n(drag to reorder)">
+      <div class="n"><span class="t">${esc(histTitle(h))}</span>${live ? '<span class="tag">live</span>' : ag ? '<span class="tag">agent</span>' : ''}<span class="pin ${pinned ? 'on' : ''}" data-pin="${h.sid}" title="${pinned ? 'Unpin' : 'Pin'}">📌</span><span class="more" data-hmore="${h.sid}">⋯</span></div>
       <div class="m">${esc(projName(h.cwd))}${h.branch && h.branch !== 'HEAD' ? ' · ' + esc(h.branch) : ''} · ${agoT(h.mtime)} · ${h.size > 1e6 ? (h.size / 1e6).toFixed(1) + 'MB' : Math.round(h.size / 1e3) + 'kB'}</div></div>`;
-  }).join('') + (rows.length > histShown ? `<div class="hmore" id="hMore">Show ${Math.min(100, rows.length - histShown)} more…</div>` : '');
+  };
+  let html = '';
+  for (const [g, label, list] of groups) {
+    if (!list.length) continue;
+    const vis = g === 'rest' ? list.slice(0, Math.max(0, histShown - shown)) : list; shown += vis.length;
+    html += `<div class="hgroup" data-group="${g}"><div class="hgh">${label} <i>${list.length}</i></div>${vis.map(h => rowHtml(h, g)).join('')}</div>`;
+  }
+  const restLen = groups[2][2].length, restShown = Math.max(0, histShown - groups[0][2].length - groups[1][2].length);
+  $('#hList').innerHTML = html + (restLen > restShown ? `<div class="hmore" id="hMore">Show ${Math.min(100, restLen - restShown)} more…</div>` : '');
   const m = $('#hMore'); if (m) m.onclick = () => { histShown += 100; renderHistory(); };
+}
+function togglePin(sid) {
+  histPins = histPins.includes(sid) ? histPins.filter(x => x !== sid) : [sid, ...histPins]; savePins(); renderHistory();
+  toast(histPins.includes(sid) ? 'Pinned' : 'Unpinned');
+}
+// drag-to-reorder (within the row's own group)
+{
+  const L = $('#hList'); let dragSid = null, dragGroup = null;
+  L.addEventListener('dragstart', e => { const r = e.target.closest('.hrow'); if (!r) return; dragSid = r.dataset.hsid; dragGroup = r.dataset.group; histDragging = true;
+    r.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragSid); });
+  L.addEventListener('dragover', e => {
+    const over = e.target.closest('.hrow'); if (!dragSid || !over || over.dataset.group !== dragGroup) return;
+    e.preventDefault(); const dragged = L.querySelector(`.hrow[data-hsid="${dragSid}"]`); if (!dragged || over === dragged) return;
+    const r = over.getBoundingClientRect(), after = e.clientY > r.top + r.height / 2;
+    over.parentNode.insertBefore(dragged, after ? over.nextSibling : over);
+  });
+  const end = () => {
+    if (!dragSid) return;
+    const grp = L.querySelector(`.hgroup[data-group="${dragGroup}"]`);
+    if (grp) { histOrder[dragGroup] = [...grp.querySelectorAll('.hrow')].map(r => r.dataset.hsid); saveOrder(); }
+    L.querySelectorAll('.dragging').forEach(r => r.classList.remove('dragging'));
+    dragSid = dragGroup = null; histDragging = false; renderHistory();
+  };
+  L.addEventListener('drop', e => { e.preventDefault(); end(); });
+  L.addEventListener('dragend', end);
 }
 $('#hSearch').oninput = () => { histShown = 60; renderHistory(); };
 $('#hAuto').onchange = () => { store.set('hAuto', $('#hAuto').checked); renderHistory(); };
@@ -58,6 +107,7 @@ function attachAgent(a) {
 }
 
 $('#hList').addEventListener('click', e => {
+  const pn = e.target.closest('[data-pin]'); if (pn) { e.stopPropagation(); return togglePin(pn.dataset.pin); }
   const m = e.target.closest('[data-hmore]');
   if (m) { e.stopPropagation(); const r = m.getBoundingClientRect(); return openSessMenu(m.dataset.hmore, r.right + 6, r.top); }
   const row = e.target.closest('.hrow'); if (row) resumeSession(row.dataset.hsid);
@@ -76,6 +126,7 @@ function openSessMenu(sid, x, y, agent) {
     ['Stop agent', () => stopAgent(ag), true],
   ] : [
     [live ? 'Go to live session' : 'Resume here', () => resumeSession(sid)],
+    [histPins.includes(sid) ? 'Unpin' : '📌 Pin to top', () => togglePin(sid)],
     ['Rename…', () => renameSession(sid, h ? histTitle(h) : live && live.name)],
     ['Convert to background agent…', () => convertToAgent(sid)],
   ];
