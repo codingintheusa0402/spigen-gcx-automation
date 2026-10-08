@@ -54,7 +54,8 @@ cv.addEventListener('touchmove', e => {
     viz.clampCam(); c.s = c.ts; c.tx = c.ttx; c.ty = c.tty; return;
   }
   const p = pt(e.touches[0]);
-  if (T.held) return;
+  if (T.held && Math.hypot(p.clientX - T.x0, p.clientY - T.y0) < 12) return;   // after a hold, a real drag still moves it
+  if (T.held && !T.moved) { T.held = false; closeSheet(); }
   if (!T.moved && Math.hypot(p.clientX - T.x0, p.clientY - T.y0) > 8) { clearTimeout(holdT);
     T.moved = true;
     if (T.hit && T.hit !== 'hub') { T.mode = 'drag'; viz.dragStart({ clientX: T.x0, clientY: T.y0 }, T.hit); }
@@ -65,7 +66,7 @@ cv.addEventListener('touchmove', e => {
 }, { passive: false });
 cv.addEventListener('touchend', e => {
   e.preventDefault(); clearTimeout(holdT); if (!T) return;
-  if (T.held) { if (e.touches.length === 0) T = null; return; }
+  if (T.held && !T.moved) { if (e.touches.length === 0) T = null; return; }
   if (T.mode === 'drag') { viz.dragEnd(); toast('Orbit saved on this phone'); }
   else if (!T.moved && e.touches.length === 0) {
     if (T.hit === 'hub') openBroadcast(); else if (T.hit) openSession(T.hit);

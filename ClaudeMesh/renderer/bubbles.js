@@ -219,14 +219,17 @@ Object.assign(Mesh.prototype, {
   },
   dragMove(e) {
     const d = this.drag; if (!d) return false;
-    if (!d.moved && !d.held && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > 4) { d.moved = true; clearTimeout(this.holdTimer); }
+    if (!d.moved && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > (d.held ? 8 : 4)) {   // moving after a hold still drags
+      d.moved = true; clearTimeout(this.holdTimer);
+      if (d.held && typeof closeHoldCard === 'function') closeHoldCard();
+    }
     const n = this.nodes.get(d.sid);
     if (d.moved && n) { const p = this.toWorld(e); n.x = p.x; n.y = p.y; n.dragging = true; this.c.style.cursor = 'grabbing'; }
     return true;
   },
   dragEnd() {
     const d = this.drag; if (!d) return; this.drag = null; this.c.style.cursor = ''; clearTimeout(this.holdTimer);
-    if (d.held) return;                                            // the hold already opened the details
+    if (d.held && !d.moved) return;                                // a hold without moving just opened the details
     const n = this.nodes.get(d.sid);
     if (!d.moved) return this.onSelect(d.sid);
     if (n) { n.dragging = false; this.dropOrbit(n); }
