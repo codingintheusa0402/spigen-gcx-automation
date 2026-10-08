@@ -18,7 +18,7 @@ struct PairingView: View {
                     .font(.footnote).multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.65)).padding(.horizontal, 28)
                 Button { scanning = true } label: {
                     Label("Scan QR code", systemImage: "qrcode.viewfinder").font(.headline).padding(.horizontal, 26).padding(.vertical, 13)
-                        .background(Capsule().fill(LinearGradient(colors: [Color(red: 0.62, green: 0.85, blue: 1), Color(red: 0.31, green: 0.49, blue: 1)], startPoint: .topLeading, endPoint: .bottomTrailing)))
+                        .background(Capsule().fill(Color(red: 0.435, green: 0.608, blue: 1)))
                         .foregroundStyle(Color(red: 0.03, green: 0.06, blue: 0.23))
                 }
                 VStack(spacing: 8) {
