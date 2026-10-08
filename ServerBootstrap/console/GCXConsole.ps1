@@ -48,10 +48,10 @@ $tiles = @(
       <Grid Margin="6,14,6,0">
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
         <Border Grid.Column="0" Background="#121528" CornerRadius="10" Padding="16,12">
-          <StackPanel><TextBlock Text="RUNNING NOW" Foreground="#6F77A3" FontSize="13" FontFamily="Segoe UI Semibold" Margin="0,0,0,6"/>
+          <StackPanel><TextBlock x:Name="RunTitle" Text="RUNNING NOW" Foreground="#6F77A3" FontSize="13" FontFamily="Segoe UI Semibold" Margin="0,0,0,6"/>
             <ScrollViewer MaxHeight="172" VerticalScrollBarVisibility="Auto" PanningMode="VerticalOnly"><StackPanel x:Name="Running" Margin="0,0,8,0"/></ScrollViewer></StackPanel></Border>
         <Border Grid.Column="2" Background="#121528" CornerRadius="10" Padding="16,12">
-          <StackPanel><TextBlock Text="UP NEXT" Foreground="#6F77A3" FontSize="13" FontFamily="Segoe UI Semibold" Margin="0,0,0,6"/>
+          <StackPanel><TextBlock x:Name="NextTitle" Text="UP NEXT" Foreground="#6F77A3" FontSize="13" FontFamily="Segoe UI Semibold" Margin="0,0,0,6"/>
             <ScrollViewer MaxHeight="172" VerticalScrollBarVisibility="Auto" PanningMode="VerticalOnly"><StackPanel x:Name="Upnext" Margin="0,0,8,0"/></ScrollViewer></StackPanel></Border>
       </Grid>
     </StackPanel>
@@ -59,7 +59,7 @@ $tiles = @(
 </Window>
 "@
 $win = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $xaml))
-$wrap = $win.FindName("Tiles"); $health = $win.FindName("Health"); $running = $win.FindName("Running"); $upnext = $win.FindName("Upnext"); $checked = $win.FindName("Checked"); $clock = $win.FindName("Clock"); $sub = $win.FindName("Sub")
+$wrap = $win.FindName("Tiles"); $health = $win.FindName("Health"); $running = $win.FindName("Running"); $upnext = $win.FindName("Upnext"); $runTitle = $win.FindName("RunTitle"); $nextTitle = $win.FindName("NextTitle"); $checked = $win.FindName("Checked"); $clock = $win.FindName("Clock"); $sub = $win.FindName("Sub")
 
 $bc = New-Object Windows.Media.BrushConverter
 foreach ($x in $tiles) {
@@ -127,7 +127,6 @@ $HealthJob = {
   $lx = wsl.exe -d Ubuntu -u kevinkim -- bash -lc "~/Desktop/GCX/ServerBootstrap/console/gcx-health.sh" 2>$null
   if ($lx) { foreach ($l in $lx) { $p = "$l".Split("|", 3); if ($p.Count -eq 3) { $r[$p[0]] = "$($p[1])|$($p[2])" } } }
   else { $r.wsl = "bad|Ubuntu not responding" }
-  $r.jobs = @(wsl.exe -d Ubuntu -u kevinkim -- python3 /home/kevinkim/Desktop/GCX/ServerBootstrap/console/gcx-jobs.py 2>$null)
   $r
 }
 
@@ -147,17 +146,33 @@ function Refresh {
   if (Wait-Job $job -Timeout 25) {
     $r = Receive-Job $job; $health.Children.Clear()
     foreach ($k in $LABELS.Keys) { $v = $r[$k]; if (-not $v) { $v = "na|—" }; $lv, $tx = "$v".Split("|", 2); [void]$health.Children.Add((Card $k $lv $tx)) }
+    $checked.Text = "checked " + (Get-Date).ToString("HH:mm:ss") + "  ·  every 30 s  ·  F5 to refresh"
+  } else { Log "health refresh timed out" }
+  Remove-Job $job -Force
+}
+
+function Log($m) { try { Add-Content C:\GCX-Setup\console\console.log ("[" + (Get-Date).ToString("MM-dd HH:mm:ss") + "] " + $m) } catch { } }
+
+# RUNNING NOW / UP NEXT: own 1-minute update, read live from the server (processes + crontab) each time
+function RefreshSchedule {
+  try {
+    $job = Start-Job { [Console]::OutputEncoding = [Text.Encoding]::UTF8; wsl.exe -d Ubuntu -u kevinkim -- python3 /home/kevinkim/Desktop/GCX/ServerBootstrap/console/gcx-jobs.py 2>&1 }
+    if (-not (Wait-Job $job -Timeout 20)) { Log "schedule refresh timed out"; Remove-Job $job -Force; return }
+    $lines = @(Receive-Job $job); Remove-Job $job -Force
+    $ok = @($lines | ? { "$_" -match "^(run|next)\|" })
+    if (-not $ok.Count -and $lines.Count) { Log ("schedule refresh output: " + (($lines | Select -First 3) -join " / ")) }
     $running.Children.Clear(); $upnext.Children.Clear()
-    foreach ($l in $r.jobs) { $p = "$l".Split("|", 3); if ($p.Count -lt 3) { continue }
+    foreach ($l in $ok) { $p = "$l".Split("|", 3)
       if ($p[0] -eq "run")  { [void]$running.Children.Add((JobRow $p[1] $p[2] "#3DDC97")) }
       if ($p[0] -eq "next") { [void]$upnext.Children.Add((JobRow $p[1] $p[2] "#8FA2FF")) } }
     if ($running.Children.Count -eq 0) { [void]$running.Children.Add((JobRow "Nothing running" "" "#5D648C")) }
     if ($upnext.Children.Count -eq 0) { [void]$upnext.Children.Add((JobRow "No scheduled jobs" "" "#5D648C")) }
-    $checked.Text = "checked " + (Get-Date).ToString("HH:mm:ss") + "  ·  every 30 s  ·  F5 to refresh"
-  }
-  Remove-Job $job -Force
+    $u = (Get-Date).ToString("HH:mm:ss")
+    $runTitle.Text = "RUNNING NOW  ·  live, updated $u"; $nextTitle.Text = "UP NEXT  ·  live, updated $u"
+  } catch { Log ("schedule refresh error: " + $_.Exception.Message) }
 }
 $timer = New-Object Windows.Threading.DispatcherTimer; $timer.Interval = [TimeSpan]::FromSeconds(30); $timer.Add_Tick({ Refresh }); $timer.Start()
-$win.Add_ContentRendered({ Refresh })
-$win.Add_KeyDown({ if ($_.Key -eq "F5") { Refresh } })
+$timer2 = New-Object Windows.Threading.DispatcherTimer; $timer2.Interval = [TimeSpan]::FromSeconds(60); $timer2.Add_Tick({ RefreshSchedule }); $timer2.Start()
+$win.Add_ContentRendered({ Refresh; RefreshSchedule })
+$win.Add_KeyDown({ if ($_.Key -eq "F5") { Refresh; RefreshSchedule } })
 [void]$win.ShowDialog()
