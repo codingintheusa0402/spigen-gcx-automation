@@ -75,7 +75,8 @@ spigen-gcx-automation/
 ├── GAS_Zendesk/                         # GAS — Zendesk / CS ticketing operations
 │   ├── ABM_TicketMerge/                 # Merges duplicate Amazon Buyer Message tickets + inbound cleanup
 │   ├── PurchaseDate_Sync/               # Syncs Zendesk's custom Purchase Date field to a Monday.com board
-│   └── GCXReply_GAS/                    # GCX Reply's SP-API/Sheet-lookup backend + versioned script archive
+│   ├── GCXReply_GAS/                    # GCX Reply's SP-API/Sheet-lookup backend + versioned script archive
+│   └── GCXReply_Worker/                 # Cloudflare Worker: fast order/product read path for the GCX Reply panel
 │
 ├── Browser_Extensions/                  # Userscripts & extensions
 │   ├── tampermonkey_scripts/            # GCX Reply, MCF Autofill (EU + JP), Invoice Automation, GChat Reply Suggest
@@ -166,6 +167,7 @@ Category indexes: [Scrapers](Scrapers/README.md) · [GAS_ReviewAutomation](GAS_R
 | [GAS_Zendesk/ABM_TicketMerge](GAS_Zendesk/ABM_TicketMerge/) | Merges duplicate Zendesk tickets created from consecutive Amazon Buyer Messages by the same buyer into one thread (Zendesk creates one ticket per ABM email; this mirrors Seller Central's own case threading). Also cleans up the raw marketing-template HTML Zendesk creates from each inbound ABM email into a readable message. | [README](GAS_Zendesk/ABM_TicketMerge/README.md) |
 | [GAS_Zendesk/PurchaseDate_Sync](GAS_Zendesk/PurchaseDate_Sync/) | Syncs a Zendesk ticket's custom Purchase Date field to the matching item's date column on Monday.com board `18421346787` (native Zendesk↔Monday integration can't map custom fields). | [README](GAS_Zendesk/PurchaseDate_Sync/README.md) |
 | [GAS_Zendesk/GCXReply_GAS](GAS_Zendesk/GCXReply_GAS/) | Backend for the GCX Reply Tampermonkey script below — SP-API order lookups (SigV4-signed) and Google Sheet product lookups via a GAS web app. Also holds a versioned reference-copy archive (`v*.gs`) of every past GCX Reply script version. | [README](GAS_Zendesk/GCXReply_GAS/README.md) |
+| [GAS_Zendesk/GCXReply_Worker](GAS_Zendesk/GCXReply_Worker/) | Cloudflare Worker serving the GCX Reply panel's order (SP-API) and product (index pushed by GCXReply_GAS) lookups with GAS-identical JSON in ~0.2–1 s; Zendesk-trigger prefetch of order data. Panel falls back to GAS automatically. | [README](GAS_Zendesk/GCXReply_Worker/README.md) |
 
 ### Browser extensions & userscripts
 
