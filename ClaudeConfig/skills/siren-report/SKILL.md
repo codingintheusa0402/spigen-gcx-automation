@@ -96,7 +96,8 @@ reusing the original session-gated URL.
   rating (out of stock / not sold there / blocked), try amazon.com → amazon.co.uk → amazon.co.jp and label with that country
   (`(US)`/`(UK)`/`(JP)`); none → `N/A`. Auto-filled by `amazon_rating.global_rating()` when `overview.global_rating` is empty or
   `-`. Check one by hand: `python3 amazon_rating.py <ASIN>`. To backfill an existing deck, edit only the value cell (row 1,
-  col 3) of the table whose header has `Global 리뷰 평점` on slide 2 — don't rebuild.
+  col 3) of the table whose header has `Global 리뷰 평점` on slide 2 — don't rebuild. `product.asin` is forced to one of
+  `product.skus[].asin` (first one) if it isn't among them — claim-level ASINs have pointed at other products.
 - Table 3 (4×(1+N countries)) at (35, 252): row0 `국가별 인입 채널 | <countries>`, row1
   `배드 리뷰 수 | ...`, row2 `고객 클레임 수(Zendesk) | ...`, row3 `Total | ...`.
   Country columns = only countries that actually have data (fallback to the full

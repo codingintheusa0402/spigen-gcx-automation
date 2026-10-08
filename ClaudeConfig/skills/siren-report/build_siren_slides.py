@@ -399,6 +399,11 @@ def build_overview_slide(b: DeckBuilder, data: dict):
                   font=GOTHIC, size=23, bold=True)
 
     product_links = {}
+    # 제품명 link (and Global 리뷰 평점 source) must be one of this case's own ASINs — a claim-level ASIN from Zendesk
+    # can point at another product (2026-10-08: Flip7 deck linked an S24 Ultra case, iPhone 16 deck an iPhone 15 Plus case)
+    own = [x.get("asin", "") for x in p.get("skus", []) if x.get("asin")]
+    if own and p.get("asin") not in own:
+        p["asin"] = own[0]
     if p.get("asin"):
         product_links[(1, 1)] = f"https://www.amazon.de/dp/{p['asin']}"
     pairs = _sku_asin_pairs(p)
