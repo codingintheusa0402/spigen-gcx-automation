@@ -35,6 +35,11 @@ https://docs.google.com/presentation/d/1_ncdmLrNjG5WjuCltG_mZcNZke7DM72pCkC5ttlb
 - TOP3 tiles show the **full product name** (e.g. "Apple Watch Series 9 Rugged Armor Pro 파손").
 - Table has 생산지 (SKU_Master 생산업체·원산지). The 상태(status) column was tried and **removed by the user** — don't add it back unless asked (statuses are summarised in SKILL notes below if needed).
 - Title: **"GCX SIREN <상/하반기> 등록현황 및 VOC 점검"** (file name too). Slide 3 starts with a **작성 취지** block; the share message must state 취지/목적 + 범위.
+- **One case = one 생산지** (user 2026-10-08): if a case's SKUs come from more than one 생산업체 (SKU_Master/product master), split it into
+  one SIREN deck per maker (only that maker's claims/reviews, renumbered, overview counts/SKUs/제조 업체명 updated) and one summary row +
+  case slide per maker (name suffix "(듀센)", numbering shifts). Example: Galaxy S25 TA(AI) Mag Fit 코팅벗겨짐 → 듀센 (S25 Ultra/+/Edge)
+  1mvFM_Jv88DZlrucQrDvyCK20Nm6UDu17gNixY-a7HwY + 영광 (S25) 1CNGc2H7mQF8XMSNPLoIZwWfOBxjeeFwphu1PnDNuObo. Watch SKU_Master vs product
+  master disagreements (ACS08964 said CASESPICES/CN in SKU_Master) and non-case tickets filed under a case SKU (e.g. a glass ticket).
 - **After any build: render every slide and fix unintended text wraps** (memory `feedback_slides_text_wrap_check`) — text boxes lose ~7.2pt per side to insets.
 
 ## Workflow (scripts in `scripts/`, each `import common` → work dir `~/.config/siren_sweeper/<yymmdd>/`, override with `SWEEP_DIR`)
