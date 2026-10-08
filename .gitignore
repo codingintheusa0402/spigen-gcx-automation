@@ -28,3 +28,6 @@ _scratch*/
 /*.tsv
 /*.xlsx
 /*.har
+
+# Claude Code skills/commands live in ClaudeConfig/ (symlinked from ~/.claude); account-synced skills stay local
+ClaudeConfig/skills/synced/

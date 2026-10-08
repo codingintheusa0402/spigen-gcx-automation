@@ -145,6 +145,21 @@ def main():
     print(f"\nSummary: candidates {len(cands)} · {'filled' if a.commit else 'would fill'} {filled} · "
           f"skipped amazon.es {len(skipped)} · not filled {len(none_found)} {dict(by) if by else ''}")
 
+    # GCX server: Amazon customer session expired → alert the GCX Server room with a re-login button per site
+    signin = sorted({urlparse(c["link"]).netloc.split("amazon.")[-1] for c in none_found
+                     if "sign-in" in (c.get("note") or "")})
+    if signin and os.path.exists(os.path.expanduser("~/.config/gcx_server_webhook.txt")):
+        try:
+            sys.path.insert(0, os.path.expanduser("~/Desktop/GCX/ServerBootstrap/watchdog"))
+            from gcx_alert import alert
+            for tld in signin:
+                n = sum(1 for c in none_found if c["link"].find(f"amazon.{tld}") >= 0)
+                alert(f"Amazon login expired: amazon.{tld}",
+                      f"Photo check (Phase G) couldn't open {n} review page(s) on amazon.{tld} — it lands on the sign-in page. "
+                      f"Tap the button, sign in, then re-run the photo check.", level="bad", relogin=f"amazon:{tld}")
+        except Exception as e:
+            print(f"  (login alert failed: {e})")
+
 
 if __name__ == "__main__":
     main()

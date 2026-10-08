@@ -1,0 +1,5 @@
+// Step 2b — run AFTER JSON.stringify(window.__p) shows fin:true. Renders all records into the page so ONE
+// get_page_text(max_chars=800000) call returns them; the harness saves that big result to a tool-results file.
+document.body.innerHTML='<pre id=o></pre>';
+document.getElementById('o').textContent='@@BEGIN\n'+Object.entries(__recs).map(([k,v])=>'@@R '+JSON.stringify({id:k,...v})).join('\n')+'\n@@END';
+'ok'

@@ -1,0 +1,1 @@
+/Users/kevinkim/Desktop/GCX/Scrapers/Zendesk_Inquiry_Sync/SKILL.md

@@ -1680,6 +1680,17 @@ async def main():
             sys.exit(0)
 
         login_notice = f"Login required for: {needs_login}\n  " if needs_login else ""
+        if needs_login and sys.platform.startswith("linux") and os.path.exists(os.path.expanduser("~/.config/gcx_server_webhook.txt")):
+            try:   # GCX server: tell the GCX Server room that Seller Central needs a login now
+                sys.path.insert(0, os.path.expanduser("~/Desktop/GCX/ServerBootstrap/watchdog"))
+                from gcx_alert import alert
+                alert(f"Seller Central login needed: {', '.join(needs_login)}",
+                      f"The SC scraper on the server is waiting {LOGIN_WAIT_SECONDS // 60} min for a login on {', '.join(needs_login)}. "
+                      "Sign in in the Chrome window on the server screen (VNC from your iPhone). "
+                      "To make this hands-free, add the accounts to ~/.config/sc_scraper/credentials.txt on the server — "
+                      "then the scraper signs in by itself and only asks you for the authenticator code here.", level="bad")
+            except Exception as _e:
+                print(f"  (login alert failed: {_e})")
         print(f"\n  {login_notice}→ Log in if needed, then navigate each tab to the correct marketplace.")
         print(f"  Press Enter when ready, or wait {LOGIN_WAIT_SECONDS} s for auto-start.")
         if sys.stdin.isatty():

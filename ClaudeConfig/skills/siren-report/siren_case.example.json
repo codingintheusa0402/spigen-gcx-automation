@@ -1,0 +1,36 @@
+{
+  "issue_title": "iPhone 18 Pro용 SP_Glas.tR EZ Fit Slim 레인보우현상 이슈",
+  "author": "김지우",
+  "date": "2026. 09. 21",
+  "product": {
+    "device": "iPhone 18 Pro",
+    "product_name": "SP_Glas.tR EZ Fit Slim",
+    "defect_type": "레인보우현상",
+    "sku": "AGL07928EUPB",
+    "manufacturer": "FUTAI",
+    "asin": "B0D84YX465"
+  },
+  "overview": {
+    "total_count": 1,
+    "bad_review_count": 0,
+    "zendesk_count": 1,
+    "global_rating": "-",
+    "by_country_bad_review": {},
+    "by_country_zendesk": {"ES": 1}
+  },
+  "claims": [
+    {
+      "label": "클레임 #01",
+      "country": "ES",
+      "purchase_date": "2026-09-11",
+      "inflow_date": "2026-09-20",
+      "days_elapsed": "9일",
+      "link_label": "1000162836",
+      "link_url": "https://spigenhelp.zendesk.com/agent/tickets/1000162836",
+      "detail_text": "iPhone 18 Pro용 EZ Fit 글라스 부착 후 가장자리에서 초록색·마젠타색 반사(레인보우 현상)가 발생해 매우 거슬림. 타 리뷰에서 측면 들뜸 사례가 많아 제품 치수 문제를 의심함.",
+      "image_urls": [
+        "https://spigenhelp.zendesk.com/attachments/token/75NGNbTHemOfq4Y0BUXPCR58k/?name=IMG_0272.jpeg"
+      ]
+    }
+  ]
+}
