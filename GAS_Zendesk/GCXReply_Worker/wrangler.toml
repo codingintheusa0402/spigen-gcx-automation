@@ -1,0 +1,15 @@
+name = "gcx-reply"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+[vars]
+GAS_URL = "https://script.google.com/macros/s/AKfycbw2Vdwk197LXB6oUAzuHS8sKamD5uqKZJDLvcHzbftWJk-M65XV1fAnTqiZo7ZEm4hk/exec"
+
+# KV namespace id filled in by `wrangler kv namespace create GCX_KV`
+[[kv_namespaces]]
+binding = "GCX_KV"
+id = "__KV_ID__"
+
+[observability]
+enabled = true
