@@ -242,9 +242,10 @@ function ShowLock {
   if ($global:gcxLock) { return }
   [xml]$lx = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="GCX Server - locked" WindowStyle="None" WindowState="Maximized" ResizeMode="NoResize" Topmost="True" ShowInTaskbar="False" Background="#070912">
+        Title="GCX Server - locked" WindowStyle="None" WindowState="Maximized" ResizeMode="NoResize" Topmost="True" ShowInTaskbar="False" AllowsTransparency="True" Background="#8C070912">
   <Grid>
-    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="420">
+    <Border HorizontalAlignment="Center" VerticalAlignment="Center" Background="#E00B0D1F" BorderBrush="#2A3060" BorderThickness="1" CornerRadius="20" Padding="40,30">
+    <StackPanel Width="420">
       <Grid Width="70" Height="70" HorizontalAlignment="Center" Margin="0,0,0,18">
         <Ellipse x:Name="LRing" Width="22" Height="22" Fill="#8FA2FF" Opacity="0.5" RenderTransformOrigin="0.5,0.5">
           <Ellipse.RenderTransform><ScaleTransform/></Ellipse.RenderTransform></Ellipse>
@@ -258,6 +259,7 @@ function ShowLock {
       <TextBlock x:Name="LMsg" Foreground="#FF5C7A" FontSize="14" HorizontalAlignment="Center" Margin="0,12,0,0"/>
       <TextBlock Text="Windows password of the server" Foreground="#4A5078" FontSize="12" HorizontalAlignment="Center" Margin="0,18,0,0"/>
     </StackPanel>
+    </Border>
   </Grid>
 </Window>
 "@
