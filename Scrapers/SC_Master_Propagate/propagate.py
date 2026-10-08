@@ -729,7 +729,7 @@ def count_today_rows(svc, sid, sheet, today_iso):
     return sum(1 for v in vals if v and is_today_cell(v[0], today_iso))
 
 
-def phase_e_notify(svc, creds, new_sheet=None, removed=None, dry_run=True):
+def phase_e_notify(svc, creds, new_sheet=None, removed=None, dry_run=True, alerts=None):
     """Phase E: post a cardsV2 app card — header + one row per touched tab
     (live Drive spreadsheet name + tab, rows added today, Open button linking to
     that tab) + a housekeeping footer (tem refresh, removed tabs)."""
@@ -780,7 +780,12 @@ def phase_e_notify(svc, creds, new_sheet=None, removed=None, dry_run=True):
     house = [f"<b>tem</b> refreshed (F–L)"]
     if removed:
         house.append("<b>Removed older tabs:</b> " + ", ".join(removed))
-    sections = [
+    sections = []
+    if alerts:  # --alert: data-staleness / human-attention flags, shown first so nobody misses them
+        sections.append({"header": "⚠️ Needs attention", "widgets": [{"decoratedText": {
+            "startIcon": {"materialIcon": {"name": "warning"}},
+            "text": f'<font color="#d93025"><b>{a}</b></font>', "wrapText": True}} for a in alerts]})
+    sections += [
         {"header": "Source", "widgets": src_widgets},
         {"header": f"Monitoring sheets · +{total:,} rows today", "widgets": dest_widgets},
         {"header": "Housekeeping", "widgets": [{"textParagraph": {"text": "<br>".join(house)}}]},
@@ -898,6 +903,9 @@ def main():
                     help="Phase F: delete older SC_yymmdd / CaspiLM_yymmdd tabs (newest of each family kept; "
                          "a tab is only deleted if all its Review IDs are in master SC)")
     ap.add_argument("--removed", help="comma-separated tab names to list under 'Removed older tabs' in the notify card (auto-filled by --cleanup)")
+    ap.add_argument("--alert", action="append", default=[],
+                    help="with --notify: add a red line to a '⚠️ Needs attention' section at the top of "
+                         "the card (e.g. Caspi data staleness). Repeatable.")
     ap.add_argument("--commit", action="store_true", help="actually write (default: dry-run)")
     args = ap.parse_args()
     dry = not args.commit
@@ -918,7 +926,8 @@ def main():
 
     if args.notify:
         print("=== Phase E: notify ===")
-        phase_e_notify(svc, svc._creds, new_sheet=args.new_sheet, removed=removed, dry_run=dry)
+        phase_e_notify(svc, svc._creds, new_sheet=args.new_sheet, removed=removed, dry_run=dry,
+                       alerts=args.alert)
 
     if args.all_products:
         prods = [p for p, c in PRODUCTS.items() if not c.get("inactive")]
