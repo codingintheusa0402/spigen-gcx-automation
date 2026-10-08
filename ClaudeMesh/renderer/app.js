@@ -115,14 +115,15 @@ function renderPanel() {
   <div class="sec"><h3>Activity</h3><div class="log">${s.log.map(l => `<div class="${l.kind}"><time>${hhmm(l.t)}</time>${l.kind === 'tool' ? '⚙ ' : l.kind === 'you' ? '› ' : ''}${esc(l.text)}</div>`).join('') || '<div>No activity yet</div>'}</div></div>`;
   $('#pClose').onclick = () => select(null);
   const lg = box.querySelector('.log'); if (stick) lg.scrollTop = lg.scrollHeight; else if (logEl) lg.scrollTop = logEl.scrollTop;
-  drawSpark($('#spark'), s.spark, col);
+  drawSpark($('#spark'), s.spark, col, s.sparkPeak);
 }
 
-function drawSpark(c, data, col) {
+function drawSpark(c, data, col, peak) {
   const d = devicePixelRatio, w = c.clientWidth, h = c.clientHeight;
   c.width = w * d; c.height = h * d;
   const x = c.getContext('2d'); x.scale(d, d);
-  const max = Math.max(10, ...data);
+  // steady scale: a 'nice' ceiling over the last 15 min's peak, so past spikes keep their height
+  const top = Math.max(10, peak || 0, ...data), mag = Math.pow(10, Math.floor(Math.log10(top))), max = [1, 2, 2.5, 5, 10].map(k => k * mag).find(v => v >= top);
   x.strokeStyle = 'rgba(255,255,255,.06)'; x.beginPath(); x.moveTo(0, h - .5); x.lineTo(w, h - .5); x.stroke();
   const pts = data.map((v, i) => [i / (data.length - 1) * w, h - 4 - v / max * (h - 10)]);
   const g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, col + '66'); g.addColorStop(1, col + '00');

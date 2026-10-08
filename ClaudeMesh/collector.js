@@ -259,8 +259,8 @@ class Collector {
     }
     const dur = Math.max(0.3, (rec.end - rec.start) / 1000);
     if (ts > Date.now() - 15 * 60e3) {
-      if (!rec.ev) { rec.ev = { t: ts, out: 0, usd: 0, model: m.model, sub: t.isSub }; s.events.push(rec.ev); }
-      rec.ev.t = ts; rec.ev.out = out; rec.ev.usd = cost; rec.ev.dur = dur;
+      // one event per DELTA, stamped when those tokens arrived — so history never shifts as a reply keeps streaming
+      if (d.out > 0 || d.usd > 0) s.events.push({ t: ts, out: Math.max(0, d.out), usd: Math.max(0, d.usd), model: m.model, sub: t.isSub, dur, msg: id });
     }
     // does this session reach the 24/7 server? (ssh/scp/rsync to gcx-server / claude-server, Tailscale SSH,
     // the run-on-server skill or its scripts) — sticky per session, with the time of the latest use
@@ -322,12 +322,13 @@ class Collector {
       const win = s.events.filter(e => e.t > now - 60e3);
       const tps = win.reduce((a, e) => a + e.out, 0) / 60;
       const usdHr = s.events.filter(e => e.t > now - 300e3).reduce((a, e) => a + e.usd, 0) * 12;
-      const subActive = new Set(s.events.filter(e => e.sub && e.t > now - 90e3).map(e => e.t)).size;
-      const spark = [];
-      for (let i = 29; i >= 0; i--) {    // 30 bins × 10 s = last 5 minutes, tok/s per bin
-        const a = now - (i + 1) * 10e3, b = now - i * 10e3;
-        spark.push(s.events.filter(e => e.t > a && e.t <= b).reduce((x, e) => x + e.out, 0) / 10);
-      }
+      const subActive = new Set(s.events.filter(e => e.sub && e.t > now - 90e3).map(e => e.msg)).size;
+      // 30 bins × 10 s = last 5 min, tok/s per bin. Bins sit on fixed 10-s clock boundaries so a bin's height
+      // never changes once it's past; the newest (still-filling) bin is the only one that moves.
+      const spark = [], edge = Math.ceil(now / 10e3) * 10e3, bins = new Map();
+      for (const e of s.events) { const k = Math.ceil(e.t / 10e3) * 10e3; bins.set(k, (bins.get(k) || 0) + e.out); }
+      for (let i = 29; i >= 0; i--) spark.push((bins.get(edge - i * 10e3) || 0) / 10);
+      const sparkPeak = Math.max(0, ...[...bins.values()].map(v => v / 10));   // highest bin in the last 15 min → steady scale
       const err5 = s.errors.filter(t => t > now - 5 * 60e3).length;
       const sinceWrite = (now - (s.lastWriteAt || j.updatedAt || now)) / 1000;
       let health = j.status === 'busy' ? 'working' : 'idle';
@@ -352,7 +353,7 @@ class Collector {
         // activity frequency: replies over 24 h, recent ones weigh more (half-life 3 h)
         freq: s.turnTimes.reduce((a, x) => a + Math.pow(.5, (now - x) / 108e5), 0),
         subagents: subActive, errors5m: err5, errors1h: s.errors.length, lastError: s.lastError, serverUses: s.serverUses || 0, serverAt: s.serverAt || 0,
-        sinceWrite, spark, log: s.log.slice(-40), owner,
+        sinceWrite, spark, sparkPeak, log: s.log.slice(-40), owner,
       });
     }
     sessions.sort((a, b) => a.startedAt - b.startedAt);
