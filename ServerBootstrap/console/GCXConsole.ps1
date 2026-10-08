@@ -39,14 +39,18 @@ $tiles = @(
       </StackPanel>
     </DockPanel>
     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"><WrapPanel x:Name="Tiles"/></ScrollViewer>
-    <Border Grid.Row="2" Background="#121528" CornerRadius="12" Padding="18,12" Margin="4,16,4,0">
-      <TextBlock x:Name="Status" Foreground="#9AA2CC" FontSize="14" FontFamily="Cascadia Mono, Consolas" TextWrapping="Wrap"/>
-    </Border>
+    <StackPanel Grid.Row="2" Margin="4,14,4,0">
+      <DockPanel Margin="6,0,6,8">
+        <TextBlock x:Name="Checked" DockPanel.Dock="Right" Foreground="#5D648C" FontSize="12" FontFamily="Segoe UI"/>
+        <TextBlock Text="HEALTH &amp; STATUS" Foreground="#6F77A3" FontSize="13" FontFamily="Segoe UI Semibold"/>
+      </DockPanel>
+      <WrapPanel x:Name="Health"/>
+    </StackPanel>
   </Grid>
 </Window>
 "@
 $win = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $xaml))
-$wrap = $win.FindName("Tiles"); $status = $win.FindName("Status"); $clock = $win.FindName("Clock"); $sub = $win.FindName("Sub")
+$wrap = $win.FindName("Tiles"); $health = $win.FindName("Health"); $checked = $win.FindName("Checked"); $clock = $win.FindName("Clock"); $sub = $win.FindName("Sub")
 
 $bc = New-Object Windows.Media.BrushConverter
 foreach ($x in $tiles) {
@@ -63,14 +67,69 @@ foreach ($x in $tiles) {
   [void]$wrap.Children.Add($b)
 }
 
+$LABELS = [ordered]@{ power="Power"; net="Internet"; tailscale="Tailscale"; peers="Mac / iPhone"; remote="VNC · SSH";
+  wsl="Ubuntu (WSL)"; claude="Claude"; monitor="Ticket monitor"; cron="Scheduled jobs"; git="Git sync"; sheets="Google Sheets"; disk="Disk · Memory" }
+$COLORS = @{ ok = "#3DDC97"; warn = "#FFC857"; bad = "#FF5C7A"; na = "#5D648C" }
+
+function Card($key, $level, $text) {
+  $b = New-Object Windows.Controls.Border
+  $b.Width = 300; $b.Margin = "6"; $b.Padding = "14,10"; $b.CornerRadius = "10"
+  $b.Background = $bc.ConvertFromString("#121528")
+  $b.BorderBrush = $bc.ConvertFromString($(if ($level -eq "bad") { "#5A2233" } else { "#1F2448" })); $b.BorderThickness = "1"
+  $g = New-Object Windows.Controls.DockPanel
+  $dot = New-Object Windows.Shapes.Ellipse; $dot.Width = 12; $dot.Height = 12; $dot.Margin = "0,4,12,0"; $dot.VerticalAlignment = "Top"
+  $dot.Fill = $bc.ConvertFromString($COLORS[$level]); [Windows.Controls.DockPanel]::SetDock($dot, "Left")
+  $sp = New-Object Windows.Controls.StackPanel
+  $t1 = New-Object Windows.Controls.TextBlock; $t1.Text = $LABELS[$key]; $t1.FontSize = 14; $t1.FontFamily = "Segoe UI Semibold"; $t1.Foreground = $bc.ConvertFromString("#E4E6FF")
+  $t2 = New-Object Windows.Controls.TextBlock; $t2.Text = $text; $t2.FontSize = 12.5; $t2.TextWrapping = "Wrap"; $t2.Foreground = $bc.ConvertFromString("#8C93B8"); $t2.Margin = "0,2,0,0"
+  [void]$sp.Children.Add($t1); [void]$sp.Children.Add($t2); [void]$g.Children.Add($dot); [void]$g.Children.Add($sp); $b.Child = $g
+  return $b
+}
+
+$HealthJob = {
+  $r = @{}
+  # power
+  $bat = Get-CimInstance Win32_Battery -EA SilentlyContinue
+  if ($bat) { $pct = $bat.EstimatedChargeRemaining; $ac = $bat.BatteryStatus -ne 1
+    $r.power = if ($ac) { "ok|plugged in · battery $pct%" } elseif ($pct -le 25) { "bad|ON BATTERY $pct% — plug in!" } else { "warn|on battery $pct% — plug in" } }
+  else { $r.power = "ok|AC power" }
+  # internet
+  try { $q = [Net.WebRequest]::Create("https://www.google.com/generate_204"); $q.Timeout = 4000; $sw = [Diagnostics.Stopwatch]::StartNew()
+        $q.GetResponse().Close(); $r.net = "ok|online · $($sw.ElapsedMilliseconds) ms" } catch { $r.net = "bad|no internet" }
+  # tailscale
+  $ts = "C:\Program Files\Tailscale\tailscale.exe"
+  try { $j = & $ts status --json 2>$null | ConvertFrom-Json
+        $ip = ($j.Self.TailscaleIPs | ? { $_ -like "100.*" } | Select -First 1)
+        $r.tailscale = if ($j.BackendState -eq "Running") { "ok|connected · $ip" } else { "bad|$($j.BackendState)" }
+        $peers = $j.Peer.PSObject.Properties.Value
+        $mac = $peers | ? { $_.OS -eq "macOS" } | Select -First 1; $ph = $peers | ? { $_.OS -eq "iOS" } | Select -First 1
+        $f = { param($p, $n) if (-not $p) { "$n —" } elseif ($p.Online) { "$n online" } else { "$n offline" } }
+        $r.peers = "ok|" + (& $f $mac "Mac") + " · " + (& $f $ph "iPhone")
+  } catch { $r.tailscale = "bad|tailscale not responding"; $r.peers = "na|unknown" }
+  # remote access services
+  $v = (Get-Service tvnserver -EA SilentlyContinue).Status; $s = (Get-Service sshd -EA SilentlyContinue).Status
+  $r.remote = if ($v -eq "Running" -and $s -eq "Running") { "ok|VNC + SSH running" } else { "bad|VNC $v · SSH $s" }
+  # disk + memory
+  $c = Get-PSDrive C; $free = [math]::Round($c.Free / 1GB); $os = Get-CimInstance Win32_OperatingSystem
+  $mem = [math]::Round(100 - 100 * $os.FreePhysicalMemory / $os.TotalVisibleMemorySize)
+  $r.disk = "$(if ($free -lt 10) { 'bad' } elseif ($free -lt 25) { 'warn' } else { 'ok' })|C: $free GB free · RAM $mem% used"
+  # linux side
+  $lx = wsl.exe -d Ubuntu -u kevinkim -- bash -lc "~/gcx-health.sh" 2>$null
+  if ($lx) { foreach ($l in $lx) { $p = "$l".Split("|", 3); if ($p.Count -eq 3) { $r[$p[0]] = "$($p[1])|$($p[2])" } } }
+  else { $r.wsl = "bad|Ubuntu not responding" }
+  $r
+}
+
 function Refresh {
   $clock.Text = (Get-Date).ToString("yyyy-MM-dd  HH:mm")
-  try {
-    $ts = (& "C:\Program Files\Tailscale\tailscale.exe" ip -4 2>$null | Select-Object -First 1)
-    $sub.Text = "claude-server  ·  Tailscale $ts  ·  up $([int]((Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime).TotalHours) h"
-  } catch { }
-  $job = Start-Job { wsl.exe -d Ubuntu -u kevinkim -- bash -lc 'echo "SESSIONS  $(tmux list-windows -t gcx -F "#W" 2>/dev/null | tr "\n" " ")"; echo "JOBS      $(crontab -l 2>/dev/null | grep -cE "^[0-9*]") scheduled  ·  last: $(sudo -n journalctl -u cron -n 200 --no-pager 2>/dev/null | grep -oE "[0-9:]{8} .*CMD \(cd \$G/[^ ]+" | tail -1 | sed -E "s#.*\\\$G/##")"; echo "GIT SYNC  $(tail -1 ~/.gcx-autosync.log 2>/dev/null)"' 2>$null }
-  if (Wait-Job $job -Timeout 20) { $status.Text = ((Receive-Job $job) -join "`n") } ; Remove-Job $job -Force
+  try { $sub.Text = "claude-server  ·  up $([int]((Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime).TotalHours) h  ·  tap a tile to start" } catch { }
+  $job = Start-Job $HealthJob
+  if (Wait-Job $job -Timeout 25) {
+    $r = Receive-Job $job; $health.Children.Clear()
+    foreach ($k in $LABELS.Keys) { $v = $r[$k]; if (-not $v) { $v = "na|—" }; $lv, $tx = "$v".Split("|", 2); [void]$health.Children.Add((Card $k $lv $tx)) }
+    $checked.Text = "checked " + (Get-Date).ToString("HH:mm:ss") + "  ·  every 30 s  ·  F5 to refresh"
+  }
+  Remove-Job $job -Force
 }
 $timer = New-Object Windows.Threading.DispatcherTimer; $timer.Interval = [TimeSpan]::FromSeconds(30); $timer.Add_Tick({ Refresh }); $timer.Start()
 $win.Add_ContentRendered({ Refresh })

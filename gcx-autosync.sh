@@ -20,6 +20,7 @@ if ! mkdir "$LOCK" 2>/dev/null; then
 fi
 trap 'rm -rf "$LOCK"' EXIT
 cd "$REPO" || exit 0
+touch "$HOME/.gcx-autosync.heartbeat"   # read by the server console's health panel
 [ -d .git/rebase-merge ] || [ -d .git/rebase-apply ] || [ -f .git/MERGE_HEAD ] && { log "skip: merge/rebase in progress"; exit 0; }
 [ "$(git symbolic-ref --short HEAD 2>/dev/null)" = main ] || { log "skip: not on main"; exit 0; }
 
