@@ -3,13 +3,16 @@ name: sc-review-propagate
 description: >-
   After a new `SC_yymmdd` (SC scraper) or `CaspiLM_yymmdd` (Caspi fetch) tab is
   added to the source review spreadsheet, funnel it into the master `SC` sheet
-  (append minus header, dedupe by Review ID), propagate the new rows to the 7
+  (append minus header, dedupe by Review ID), propagate the new rows to the 8
   active product monitoring books via the `<Product> finalize` filter views
   (stamping Update 날짜, 키워드 =ai() and =dr() where each book expects them),
   restyle the Update 날짜 column (today = yellow+bold, older = plain), refresh
   the `tem` sheet, delete the older dated tabs (newest kept, only if all their
-  rows are in `SC`), and post the "Bad Review Monitoring Completed" cardsV2
-  card (per-sheet Open buttons) to the GCX Chat webhook. Trigger when the user says "propagate the SC sheet",
+  rows are in `SC`), post the "Bad Review Monitoring Completed" cardsV2
+  card (per-sheet Open buttons) to the GCX Chat webhook, and — as the LAST
+  step, always, regardless of source — live-check today's rows flagged
+  사진 유무=Y with an empty Image URL against the real Amazon review page and
+  backfill the URL if a photo genuinely exists (Phase G). Trigger when the user says "propagate the SC sheet",
   "cascade SC_yymmdd / CaspiLM_yymmdd downstream", "run the SC review
   propagation", "append to SC sheet and distribute", "do the job" after a
   scrape, or any close paraphrase — and offer it right after any SC scraper run
@@ -55,6 +58,7 @@ python3 propagate.py --new-sheet SC_260911 --commit     # Phase A
 python3 propagate.py --all-products                     # Phase B worklist (dry-run)
 python3 propagate.py --product GlxZ8 --commit           # Phase B+D, one product at a time
 python3 propagate.py --product Pixel11 --commit         #   append-at-bottom books first…
+python3 propagate.py --product iPh18 --commit
 python3 propagate.py --product SDA --commit
 python3 propagate.py --product Auto_Acc --commit
 python3 propagate.py --product Power_Acc --commit
@@ -63,6 +67,9 @@ python3 propagate.py --product 유지훈P --commit          #   …insert-at-row
 python3 propagate.py --refresh-tem --commit             # Phase C
 python3 propagate.py --all-products                     # must end at 0 pending everywhere
 python3 propagate.py --cleanup --notify --new-sheet SC_260911 --commit   # Phase F + E (see below)
+# Phase G (agent-run, no CLI flag — see below): live-check + backfill Image URL
+# on every sheet just touched, for rows dated today with 사진 유무=Y and empty
+# Image URL. ALWAYS run this last, every time, whichever source fed the run.
 ```
 
 Everything is dry-run without `--commit`. `--finish --product X --commit`
@@ -81,24 +88,25 @@ Power_Acc 1 · 전략폰 0). A quiet day can legitimately yield 0 at every stage
 **`SC` master** — real name `SC`, **gid `444769313`** (NOT the dated
 `SC_2609xx` tabs). Data cols `A:N` = `ASIN | Created 날짜 | 사진 유무 | Reviewer |
 Review Ratings | Review Title | 본문 | 국가 | Review Link | Image URL | Review ID
-| Order ID | Product Rating | Ratings Count`. Cols `O:W` (`Device`, `GlxZ8 Tab`,
+| Order ID | Product Rating | Ratings Count`. Cols `O:X` (`Device`, `GlxZ8 Tab`,
 `Pixel11 Tab`, `유지훈P Tab`, `AutoAcc Tab`, `PowerAcc Tab`, `SDA Tab`,
-`전략폰 Tab`, `GlxS26 Tab`) are `MAP`/`ARRAYFORMULA` helpers over open-ended
-ranges — **never write to `O:W`**, they auto-spill onto appended rows.
+`전략폰 Tab`, `GlxS26 Tab`, `iPh18 Tab`) are `MAP`/`ARRAYFORMULA` helpers over
+open-ended ranges — **never write to `O:X`**, they auto-spill onto appended rows.
 
 **`tem`** (gid `902775794`), header row 1, Review IDs row 2+:
 `A SDA | B iPh17 | C Auto Acc | D 전략폰 | E Power_Acc | F 유지훈P | G Pixel 10a |
-H Glx26 | I iPh17e | J GlxZ8 | K Pixel11`. Each `<Product> Tab` formula on `SC`
-is `COUNTIF(tem!<col>2:<col>, K2:K) > 0 ? "Updated" : "Update Needed"`
+H Glx26 | I iPh17e | J GlxZ8 | K Pixel11 | L iPh18`. Each `<Product> Tab` formula
+on `SC` is `COUNTIF(tem!<col>2:<col>, K2:K) > 0 ? "Updated" : "Update Needed"`
 (`GlxZ8→J`, `Pixel11→K`, `유지훈P→F`, `AutoAcc→C`, `PowerAcc→E`, `SDA→A`,
-`전략폰→D`, `GlxS26→H`).
+`전략폰→D`, `GlxS26→H`, `iPh18→L`).
 - **Cols A-E** are `={"hdr"; IMPORTRANGE(<book>, "…J2:J")}` — self-updating,
   **never write to A-E** (IMPORTRANGE is only used on the small books; the big
   ones hit mass-fetch errors).
-- **Cols F-K** are plain value lists that **Phase C rewrites every run** from
+- **Cols F-L** are plain value lists that **Phase C rewrites every run** from
   each product's `1-5점` Review-ID col **K** (유지훈P has no `1-5점` → its `1-3점`
   col K). Source books: 유지훈P `1dlY6q8t…`, Pixel 10a `1BpeGq5g…`, Glx26
-  `1fpv9TEDP…`, iPh17e `16xRJHH7…`, GlxZ8 `19Ohswgl…`, Pixel11 `12I6z_FFm…`.
+  `1fpv9TEDP…`, iPh17e `16xRJHH7…`, GlxZ8 `19Ohswgl…`, Pixel11 `12I6z_FFm…`,
+  iPh18 `1aYxZRm7…` (added 2026-09-21).
 
 **Filter views on `SC`** — the per-product selection logic. Read them live
 (`spreadsheets.get(fields=sheets.filterViews)`), never hardcode. As of
@@ -114,12 +122,13 @@ is `COUNTIF(tem!<col>2:<col>, K2:K) > 0 ? "Updated" : "Update Needed"`
 | `PowerAcc finalize` | col4 ∈ {1,2,3} · col7 ∉ {US} · col14 `Device` = `PowerAcc` · col19 `PowerAcc Tab` = `Update Needed` |
 | `전략폰 finalize` | col4 ∈ {1,2,3} · col7 ∉ {US,JP,IT} · col14 `Device` ∋ `전략폰` · col21 `전략폰 Tab` = `Update Needed` *(fixed via API 2026-09-10; it used to hide only blank)* |
 | `GlxS26 finalize` | inactive — Galaxy S26 is past its monitoring period |
+| `iPh18 finalize` | col1 `Created 날짜` DATE_AFTER 2026-09-17 (user-narrowed 2026-09-21, was 2026-09-10) · col14 `Device` ∋ `iPh18` · col23 `iPh18 Tab` has no active condition (harmless — Phase B's own dest-dedup still prevents re-pasting) |
 
 ## Destination books (verified 2026-09-10/11)
 
 | Book | Paste into | Paste cols | Review ID | Also stamp | `=dr()` |
 |---|---|---|---|---|---|
-| **GlxZ8** `19Ohswgl…`, **Pixel11** `12I6z_FFm…` | `1-5점` (append at bottom) | `A:K` | col K, **pasted raw** (the CX team relies on it) | `L` 키워드 `=ai(…,G{n})` · `P` Update 날짜 | on `1-3점` col **M** (see Phase D) |
+| **GlxZ8** `19Ohswgl…`, **Pixel11** `12I6z_FFm…`, **iPh18** `1aYxZRm7…` | `1-5점` (append at bottom) | `A:K` | col K, **pasted raw** (the CX team relies on it) | `L` 키워드 `=ai(…,G{n})` · `P` Update 날짜 | on `1-3점` col **M** (see Phase D) |
 | **유지훈P** `1dlY6q8t…` | `1-3점` only — **insert at row 2** | `A:J` | col K, **auto** (REGEXEXTRACT of Review Link) — not pasted | `M` Update 날짜 | col **L** on the inserted rows |
 | **SDA** `1sxapIqJg…`, **Auto_Acc** `1mEYb1b9…`, **Power_Acc** `1QC8Is6U…`, **전략폰** `1yo8CbLh…` | `1-3점` only (append at bottom) | `A:I` | col J, **auto** from Review Url (I) — not pasted | `N`/`M`/`M`/`M` Update 날짜 (`Exported Date` on Auto_Acc) | **none** — CX agents type 인입사유 by hand |
 | ~~Glx26 `1fpv9TEDP…`~~ | inactive (config kept, skipped by `--all-products`) | | | | |
@@ -165,10 +174,10 @@ Rewrite cols **F-K only** from the source books above; clear residue below
 it is the full `tem`↔reality sync that turns stale `Update Needed` rows back to
 `Updated` so the filter views stop over-selecting.
 
-### Phase D — `=dr()` on 인입사유(AI) — GlxZ8 / Pixel11 / 유지훈P only
+### Phase D — `=dr()` on 인입사유(AI) — GlxZ8 / Pixel11 / iPh18 / 유지훈P only
 Set `=dr(G{n}, S{n})` (본문, 대분류) on rows whose `Update 날짜` == today and
 whose 인입사유(AI) is empty — the same rule `Master.js` uses, hence idempotent.
-- **GlxZ8 / Pixel11**: `1-3점` A:L is `=FILTER('1-5점'!A2:L, '1-5점'!E2:E<=3)`
+- **GlxZ8 / Pixel11 / iPh18**: `1-3점` A:L is `=FILTER('1-5점'!A2:L, '1-5점'!E2:E<=3)`
   **anchored at A2** (a row-1 formula scan misses it). **Never paste into
   `1-3점`** — the new ≤3★ rows appear by themselves, in `1-5점` order, and col O
   (`Update 날짜`) is a matching FILTER. Only col **M** gets the per-row `=dr()`.
@@ -203,6 +212,81 @@ Layout (verified against the cardsV2 notes in memory `gchat_cardsv2_schema_refer
 - **Housekeeping**: `tem` refreshed, `Removed older tabs: …`.
 - Spreadsheet names come from `drive.files.get` at send time — never hardcoded. `--notify` without `--commit` prints the JSON and does not send. First card sent 2026-09-14.
 
+### Phase G — Image URL backfill (user rule 2026-09-29, MANDATORY LAST STEP)
+**Always runs after Phase E, every single propagate run, regardless of whether
+the source was `SC_yymmdd` (scraper) or `CaspiLM_yymmdd` (Caspi).** This is
+**agent-run** (Claude driving `mcp__claude-in-chrome__*` tools) — not a
+`propagate.py` flag — because it needs a real rendered browser page, which the
+Sheets/Drive-API-only script can't do.
+
+**Why it exists**: CaspiLM's `AMAZON_REVIEW_PHOTOS` table (and, separately, the
+SC Scraper's own image-fetch pass) both under-report — many rows land in a
+destination sheet flagged `사진 유무=Y` with an **empty** Image URL even though
+the review genuinely has a customer photo. Verified repeatedly this session at
+38–100% hit rates (see memory `caspilm_review_fetch_workflow` and the
+`SC_vs_CaspiLM_ImageURL_*` comparison sheet) — this is a real, recurring gap,
+not a one-off.
+
+**Scope**: for every destination sheet this run's Phase B touched (i.e., every
+active product's `1-5점` if it has one, else `1-3점`), find rows where
+**`Update 날짜` == today AND `사진 유무` == 'Y' AND `Image URL` is empty**.
+Resolve the `사진 유무` / `Image URL` / `Update 날짜` / `Review Link` / `Review ID`
+column letters **dynamically per sheet via header lookup** (`find_col`-style,
+exact match on header text) — never hardcode a column letter, since it differs
+per book (`1-5점` A:V vs `1-3점` A:V vs the has-Image-URL-at-different-position
+`SDA`/`Auto_Acc`/`Power_Acc`/`전략폰` layout — check the live header first).
+Only today's rows — **not** the whole historical sheet (that's a separate,
+occasional user-requested backlog sweep, e.g. the 2026-09-29 유지훈P `1-3점`
+K2:K168 and iPh18 `1-5점` J536:J604 one-off cleanups — do those only when asked).
+
+**On the GCX server (Linux / WSL `gcx-server`) there is no claude-in-chrome** — run the script
+version instead of the steps below (same rules: today's rows only, header lookup, amazon.es skipped,
+re-check before write, `|`-joined):
+```bash
+cd ~/Desktop/GCX/Scrapers/SC_Master_Propagate
+python3 phase_g.py            # dry run — shows what it would fill
+python3 phase_g.py --commit   # write
+```
+It opens a headed Chrome with profile `~/.chrome-phaseg-profile`. **Amazon review pages need a
+signed-in customer account** (anonymous visits redirect to /ap/signin). If the summary shows
+"sign-in or captcha page", tell the user to open the laptop desktop shortcut
+**"Amazon logins (photo check)"** and sign in on each Amazon tab once, then re-run `--commit`.
+Books without a 사진 유무 column (Auto_Acc, Power_Acc, 전략폰) are reported as "not checked" — same as the Mac flow.
+
+**Procedure per candidate row**:
+1. Read the row's `Review Link` (already in the sheet — don't reconstruct it).
+2. Group all candidates across all touched sheets by domain (`www.amazon.<tld>`)
+   so same-domain rows can run in one `browser_batch` call — **`browser_batch`
+   refuses cross-domain navigation mid-batch**, so batch per domain, not globally.
+3. For each: `navigate` to the Review Link, then run this exact extraction JS
+   (proven this session, handles multi-image reviews and dedupes CDN resize
+   variants of the same photo):
+   ```js
+   const rid='<REVIEW_ID>';
+   const el=document.getElementById(rid)||document.querySelector('[data-hook="review"]');
+   if(!el){JSON.stringify({found:false});}else{
+     const imgs=Array.from(el.querySelectorAll('img')).map(i=>i.src)
+       .filter(s=>s.includes('/images/I/')&&!s.includes('avatars')&&!s.includes('/sash/'));
+     const map={};
+     imgs.forEach(u=>{const fn=u.split('/').pop();const base=fn.split('.')[0];
+       if(!map[base]||!u.includes('_SY500_')){map[base]=u;}});
+     JSON.stringify({found:true, imgs:Object.values(map)});
+   }
+   ```
+4. **`amazon.es` needs a customer sign-in** in this Chrome profile — it wasn't
+   logged in as of 2026-09-23/29 (unlike `.com`/`.de`/`.it`/`.in`/`.co.uk`/`.fr`
+   which all work directly). **Never log in yourself.** Skip `.es` rows, report
+   them as "needs amazon.es login" in the summary, and if the user says they've
+   authed, retry just those rows.
+5. **Safety check immediately before writing**: re-read the row's Image URL +
+   Review ID cells and confirm Image URL is still empty and Review ID still
+   matches, in case something else wrote to the sheet in between. Then join
+   found URLs with `|` (matches the SC-scraper/CaspiLM multi-image convention)
+   and write only that cell — never touch other columns.
+6. Report a short summary: candidates found, filled, and any skipped (login-
+   walled domain, or genuinely no image found on the live page — expected to
+   be rare/zero based on every check run so far).
+
 ## Lessons
 
 - **2026-09-11 — off-by-one overwrote a live row.** `last_data_row` returned the
@@ -229,7 +313,7 @@ Layout (verified against the cardsV2 notes in memory `gchat_cardsv2_schema_refer
 ## Decisions log (all from the user)
 
 1. Glx26 (`1fpv9TEDP…`, has 1-5점 + 1-3점) is past its monitoring period →
-   `inactive`. 7 active products.
+   `inactive`. 8 active products (added iPh18 2026-09-21).
 2. No `=dr()` on SDA / Auto_Acc / Power_Acc / 전략폰 — agents type 인입사유.
 3. `전략폰 finalize` must show only `Update Needed` (view fixed).
 4. J-col books paste `A:I` only; 유지훈P `A:J` only. Everything past is
@@ -240,3 +324,8 @@ Layout (verified against the cardsV2 notes in memory `gchat_cardsv2_schema_refer
 7. **Still open:** should `scrape_sc_reviews.py` call Phase A itself at the end
    of its upload, or does it stay a separate step run by Claude? (Currently
    separate.)
+8. **Phase G (Image URL backfill) is now a permanent, mandatory last step**
+   (2026-09-29) — runs after every Phase E, on every run, no matter the source.
+   Not a `propagate.py` flag; agent-run via `mcp__claude-in-chrome__*`. See its
+   own section above for the full procedure, the proven extraction JS, and the
+   `amazon.es`-needs-login caveat.
