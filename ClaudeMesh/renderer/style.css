@@ -351,3 +351,8 @@ body.pixel .sc-row, body.pixel .sc-edit { border-radius: 0; }
 .hrow .pin.on { opacity: 1; filter: none; } .hrow.pinned .t { color: #ffe9a6; }
 .hrow.dragging { opacity: .35; } .hrow[draggable=true] { cursor: grab; }
 .rs-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; margin: 6px 0 4px; } .rs-list label { font-size: 13px; }
+
+/* resizable sidebar */
+#sideHandle { width: 5px; flex: none; cursor: col-resize; background: transparent; margin-left: -3px; z-index: 3; }
+#sideHandle:hover, body.side-resizing #sideHandle { background: rgba(160,175,255,.35); }
+body.side-resizing { cursor: col-resize; user-select: none; }

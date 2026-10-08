@@ -395,3 +395,19 @@ function notifyTransitions() {
     prevHealth.set(s.sid, s.health);
   }
 }
+
+// ---------------- resizable sidebar (drag its right edge; double-click to reset) ----------------
+{
+  const side = $('#side'), h = $('#sideHandle'), MIN = 200, MAX = 560, DEF = 250;
+  const apply = w => { side.style.width = Math.max(MIN, Math.min(MAX, w)) + 'px'; };
+  apply(store.get('sideW', DEF));
+  h.addEventListener('mousedown', e => {
+    e.preventDefault(); const x0 = e.clientX, w0 = side.getBoundingClientRect().width;
+    document.body.classList.add('side-resizing');
+    const mv = ev => { apply(w0 + ev.clientX - x0); viz.resize(); fitAll && fitAll(); };
+    const up = () => { removeEventListener('mousemove', mv); removeEventListener('mouseup', up); document.body.classList.remove('side-resizing');
+      store.set('sideW', side.getBoundingClientRect().width); viz.resize(); };
+    addEventListener('mousemove', mv); addEventListener('mouseup', up);
+  });
+  h.addEventListener('dblclick', () => { apply(DEF); store.set('sideW', DEF); viz.resize(); });
+}
