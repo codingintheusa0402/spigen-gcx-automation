@@ -6,7 +6,7 @@ export PATH=$HOME/.local/bin:$PATH
 ( crontab -l 2>/dev/null | grep -v tmux_start; echo "@reboot sleep 30 && bash ~/tmux_start.sh" ) | crontab -
 tmux has-session -t gcx 2>/dev/null && exit 0
 cd ~/Desktop/GCX
-tmux new-session -d -s gcx -n main -x 200 -y 50
+tmux new-session -d -s gcx -n main -x 200 -y 50 "cd ~/Desktop/GCX && export PATH=$HOME/.local/bin:$PATH DISPLAY=:0 WAYLAND_DISPLAY=wayland-0; claude --remote-control gcx-main; exec bash"
 tmux set -g -t gcx mouse on
 tmux set -g -t gcx status-right ' #H | %Y-%m-%d %H:%M '
 tmux set -g -t gcx history-limit 50000
