@@ -22,7 +22,6 @@ $tiles = @(
   @{ t = "Ubuntu Terminal";         s = "shell on gcx-server";               i = [char]0xE756; a = { Start-Process $WT -ArgumentList "wsl.exe -d Ubuntu -u kevinkim --cd ~/Desktop/GCX" } },
   @{ t = "GCX Repo Files";          s = "~/Desktop/GCX (git, auto-synced)";  i = [char]0xE8B7; a = { Start-Process "explorer.exe" -ArgumentList "\\wsl.localhost\Ubuntu\home\kevinkim\Desktop\GCX" } },
   @{ t = "Windows Desktop";         s = "normal Windows (until sign-out)";   i = [char]0xE7F8; a = { Start-Process "explorer.exe" } },
-  @{ t = "Lock Now";                s = "dashboard lock · Windows password";  i = [char]0xE72E; a = { ShowLock } },
   @{ t = "Restart Server";          s = "asks first";                         i = [char]0xE777; a = {
         if ([System.Windows.MessageBox]::Show("Restart the server now? Jobs and sessions stop for ~2 minutes.", "GCX Server", "YesNo", "Warning") -eq "Yes") { shutdown /r /t 5 } } }
 )
@@ -177,7 +176,7 @@ function Refresh {
     foreach ($k in $LABELS.Keys) { $v = $r[$k]; if (-not $v) { $v = "na|—" }; $lv, $tx = "$v".Split("|", 2); [void]$health.Children.Add((Card $k $lv $tx)) }
     $lvls = @($LABELS.Keys | % { "$($r[$_])".Split("|")[0] })
     SetBeacon $(if ($lvls -contains "bad") { "bad" } elseif ($lvls -contains "warn") { "warn" } else { "ok" })
-    $checked.Text = "checked " + (Get-Date).ToString("HH:mm:ss") + "  ·  every 30 s  ·  F5 to refresh"
+    $checked.Text = "checked " + (Get-Date).ToString("HH:mm:ss") + "  ·  every 30 s  ·  F5 refresh · Ctrl+L lock"
   } else { Log "health refresh timed out" }
   Remove-Job $job -Force
 }
@@ -205,9 +204,12 @@ function RefreshSchedule {
 $timer = New-Object Windows.Threading.DispatcherTimer; $timer.Interval = [TimeSpan]::FromSeconds(30); $timer.Add_Tick({ Refresh }); $timer.Start()
 $timer2 = New-Object Windows.Threading.DispatcherTimer; $timer2.Interval = [TimeSpan]::FromSeconds(60); $timer2.Add_Tick({ RefreshSchedule }); $timer2.Start()
 $win.Add_ContentRendered({ Refresh; RefreshSchedule })
-$win.Add_KeyDown({ if ($_.Key -eq "F5") { Refresh; RefreshSchedule } })
+$win.Add_KeyDown({
+  if ($_.Key -eq "F5") { Refresh; RefreshSchedule }
+  if ($_.Key -eq "L" -and ([Windows.Input.Keyboard]::Modifiers -band [Windows.Input.ModifierKeys]::Control)) { ShowLock }   # Ctrl+L = lock now
+})
 
-# ---------------- dashboard lock (10 min idle, or "Lock Now") ----------------
+# ---------------- dashboard lock (10 min idle, or Ctrl+L on the dashboard) ----------------
 # Not the Windows lock: a full-screen GCX lock window on top of everything. Unlocks with the Windows
 # password of account "user", verified by Windows (LogonUser) — no extra password is stored anywhere.
 Add-Type -Namespace GCX -Name Native -MemberDefinition @"
