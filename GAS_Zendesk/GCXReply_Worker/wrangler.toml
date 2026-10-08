@@ -9,7 +9,7 @@ GAS_URL = "https://script.google.com/macros/s/AKfycbw2Vdwk197LXB6oUAzuHS8sKamD5u
 # KV namespace id filled in by `wrangler kv namespace create GCX_KV`
 [[kv_namespaces]]
 binding = "GCX_KV"
-id = "__KV_ID__"
+id = "5ce267a034b74400b2998556d2af762f"
 
 [observability]
 enabled = true
