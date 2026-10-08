@@ -219,6 +219,13 @@ Add-Type -Namespace GCX -Name Native -MemberDefinition @"
 public static extern bool LogonUser(string u, string d, string p, int type, int prov, out System.IntPtr tok);
 [DllImport("kernel32.dll")] public static extern bool CloseHandle(System.IntPtr h);
 public static uint IdleMs() { var i = new LASTINPUTINFO(); i.cbSize = (uint)Marshal.SizeOf(i); GetLastInputInfo(ref i); return (uint)System.Environment.TickCount - i.dwTime; }
+[StructLayout(LayoutKind.Sequential)] public struct RECT { public int L; public int T; public int R; public int B; }
+[DllImport("user32.dll")] public static extern bool ClipCursor(ref RECT r);
+[DllImport("user32.dll", EntryPoint="ClipCursor")] public static extern bool UnclipCursor(System.IntPtr none);
+[DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+[DllImport("user32.dll")] public static extern int GetSystemMetrics(int i);
+public static void PinCursor() { int x = GetSystemMetrics(0) / 2, y = GetSystemMetrics(1) - 2; SetCursorPos(x, y); var r = new RECT { L = x, T = y, R = x + 1, B = y + 1 }; ClipCursor(ref r); }
+public static void FreeCursor() { UnclipCursor(System.IntPtr.Zero); }
 public static bool CheckPassword(string pw) { System.IntPtr t; bool ok = LogonUser("user", ".", pw, 2, 0, out t); if (ok) CloseHandle(t); return ok; }
 "@
 $LOCK_AFTER_MS = 10 * 60 * 1000
@@ -227,7 +234,7 @@ $global:gcxLock = $null
 function TryUnlock {
   $pw = $global:gcxPw; $msg = $global:gcxMsg
   if ([GCX.Native]::CheckPassword($pw.Password)) {
-    $pw.Clear(); $w = $global:gcxLock; $global:gcxLock = $null; $w.Close(); Log "dashboard unlocked"
+    $pw.Clear(); $w = $global:gcxLock; $global:gcxLock = $null; try { [GCX.Native]::FreeCursor() } catch { }; $w.Close(); Log "dashboard unlocked"
   } else {
     $global:gcxFails++; $pw.Clear(); $msg.Text = "Wrong password"; Log "dashboard unlock: wrong password"
     if ($global:gcxFails -ge 3) {
@@ -242,7 +249,7 @@ function ShowLock {
   if ($global:gcxLock) { return }
   [xml]$lx = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="GCX Server - locked" WindowStyle="None" WindowState="Maximized" ResizeMode="NoResize" Topmost="True" ShowInTaskbar="False" AllowsTransparency="True" Background="#8C070912">
+        Title="GCX Server - locked" WindowStyle="None" WindowState="Maximized" ResizeMode="NoResize" Topmost="True" ShowInTaskbar="False" AllowsTransparency="True" Background="#8C070912" Cursor="None" ForceCursor="True">
   <Grid>
     <Border HorizontalAlignment="Center" VerticalAlignment="Center" Background="#E00B0D1F" BorderBrush="#2A3060" BorderThickness="1" CornerRadius="20" Padding="40,30">
     <StackPanel Width="420">
@@ -257,7 +264,7 @@ function ShowLock {
       <PasswordBox x:Name="LPw" FontSize="20" Padding="12,10" Background="#161A33" Foreground="#EEF0FF" BorderBrush="#2A3060" CaretBrush="#EEF0FF"/>
       <Button x:Name="LBtn" Content="Unlock" FontSize="17" Padding="10" Margin="0,12,0,0" Background="#5B6CFF" Foreground="White" BorderThickness="0" Cursor="Hand"/>
       <TextBlock x:Name="LMsg" Foreground="#FF5C7A" FontSize="14" HorizontalAlignment="Center" Margin="0,12,0,0"/>
-      <TextBlock Text="Windows password of the server" Foreground="#4A5078" FontSize="12" HorizontalAlignment="Center" Margin="0,18,0,0"/>
+      <TextBlock Text="Windows password of the server · Enter to unlock" Foreground="#4A5078" FontSize="12" HorizontalAlignment="Center" Margin="0,18,0,0"/>
     </StackPanel>
     </Border>
   </Grid>
@@ -278,9 +285,10 @@ function ShowLock {
   $lw.Add_Closing({ if ($global:gcxLock) { $_.Cancel = $true } })          # can't be closed except by unlocking
   # stay on top of every other window while locked
   $keep = New-Object Windows.Threading.DispatcherTimer; $keep.Interval = [TimeSpan]::FromSeconds(2)
-  $keep.Add_Tick({ if ($global:gcxLock) { $global:gcxLW.Topmost = $true; [void]$global:gcxLW.Activate(); $global:gcxClk.Text = (Get-Date).ToString("yyyy-MM-dd  HH:mm") } else { $this.Stop() } })
+  $keep.Add_Tick({ if ($global:gcxLock) { $global:gcxLW.Topmost = $true; [void]$global:gcxLW.Activate(); [void]$global:gcxPw.Focus(); try { [GCX.Native]::PinCursor() } catch { }; $global:gcxClk.Text = (Get-Date).ToString("yyyy-MM-dd  HH:mm") } else { $this.Stop() } })
   $keep.Start()
   $global:gcxLock = $lw; $lw.Show(); [void]$lw.Activate(); [void]$global:gcxPw.Focus()
+  try { [GCX.Native]::PinCursor() } catch { }                     # mouse frozen + hidden: keys only
   Log "dashboard locked"
 }
 
