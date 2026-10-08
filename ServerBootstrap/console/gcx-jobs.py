@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Running + upcoming jobs on gcx-server for the GCX console. Prints: run|name|detail  and  next|name|detail"""
-import datetime as dt, os, re, subprocess
+import datetime as dt, json, os, re, subprocess
 from zoneinfo import ZoneInfo
 from croniter import croniter
 
@@ -28,19 +28,40 @@ def name_of(cmd):
 
 now = dt.datetime.now(KST)
 
-# running: job processes + Claude loop sessions
-ps = subprocess.run(["ps", "-eo", "etimes=,args="], capture_output=True, text=True).stdout.splitlines()
+# running: only real job processes (python/bash actually executing the job script) —
+# not Claude sessions whose prompt merely mentions a script name
+ps = subprocess.run(["ps", "-eo", "pid=,etimes=,args="], capture_output=True, text=True).stdout.splitlines()
 seen = set()
 for line in ps:
-    secs, _, args = line.strip().partition(" ")
-    if "python3" not in args and "bash" not in args:
+    pid, secs, args = (line.strip().split(None, 2) + ["", ""])[:3]
+    argv = args.split()
+    if not argv or os.path.basename(argv[0]) not in ("python3", "python", "bash", "sh"):
         continue
-    n = name_of(args)
-    if n and n not in seen and "ps -eo" not in args:
+    script = next((a for a in argv[1:] if not a.startswith("-")), "")      # first non-flag arg = the script
+    n = name_of(script) if script.endswith((".py", ".sh")) else None
+    if n and n not in seen:
         seen.add(n); m = int(secs) // 60
-        print(f"run|{n}|running {m // 60}h {m % 60}m" if m >= 60 else f"run|{n}|running {m}m")
-if any(re.search(r"^\S*claude --remote-control gcx-ticket-monitor", l.strip().partition(" ")[2]) for l in ps):
-    print("run|Ticket monitor (Claude loop)|checks Zendesk every minute")
+        print(f"run|{n}|running {m // 60}h {m % 60}m" if m >= 60 else f"run|{n}|running {max(m, 0)}m")
+
+# Claude task sessions: listed only while actually working (status busy); the ticket monitor is a standing loop
+cmd = {l.strip().split(None, 2)[0]: l.strip().split(None, 2)[2] for l in ps if len(l.split(None, 2)) == 3}
+sess_dir = os.path.expanduser("~/.claude/sessions")
+for f in os.listdir(sess_dir) if os.path.isdir(sess_dir) else []:
+    if not f.endswith(".json"):
+        continue
+    try:
+        d = json.load(open(os.path.join(sess_dir, f)))
+    except Exception:
+        continue
+    pid = str(d.get("pid") or f[:-5]); args = cmd.get(pid, "")
+    if not args.startswith("claude"):
+        continue                                   # process gone
+    m = re.search(r"--remote-control (gcx-[\w-]+)", args)
+    label = m.group(1)[4:] if m else (d.get("name") or "session")
+    if "ticket-monitor" in label:
+        print("run|Ticket monitor (Claude loop)|" + ("checking now" if d.get("status") == "busy" else "watching · every minute"))
+    elif d.get("status") == "busy":
+        print(f"run|Claude: {label}|working")
 
 # upcoming: next fire time of each cron line
 cron = subprocess.run(["crontab", "-l"], capture_output=True, text=True).stdout.splitlines()
