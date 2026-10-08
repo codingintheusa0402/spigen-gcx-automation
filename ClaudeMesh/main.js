@@ -482,6 +482,23 @@ ipcMain.handle('phone:set', (_e, v) => { phone.setEnabled(v); return phone.statu
 ipcMain.handle('phone:regen', () => { phone.regenerate(); return phone.status(); });
 ipcMain.handle('phone:qr', (_e, url) => require('qrcode').toDataURL(url, { margin: 1, width: 360, color: { dark: '#0a0826', light: '#ffffff' } }));
 
+// ---------------- reopen last sessions ----------------
+// While running, the in-app Claude sessions are recorded to userData/last-sessions.json. On the next
+// launch the window asks whether to reopen them; recording resumes only after that answer, so a fresh
+// (empty) app never overwrites the list before you've been asked.
+const LAST_FILE = () => path.join(app.getPath('userData'), 'last-sessions.json');
+let restorePending = null, restoreAnswered = false, quitting = false, lastSaved = '';
+function readLastSessions() { try { const d = JSON.parse(fs.readFileSync(LAST_FILE(), 'utf8')); return Array.isArray(d.sessions) ? d : null; } catch { return null; } }
+function recordSessions(snap) {
+  if (quitting || !restoreAnswered) return;
+  const list = snap.sessions.filter(s => s.owner).map(s => ({ sid: s.sid, cwd: s.cwd, name: s.name, model: s.model || '' }));
+  const key = JSON.stringify(list); if (key === lastSaved) return; lastSaved = key;
+  try { fs.writeFileSync(LAST_FILE(), JSON.stringify({ at: Date.now(), sessions: list })); } catch { }
+}
+ipcMain.handle('restore:get', () => { if (restorePending === null) restorePending = readLastSessions() || { sessions: [] }; return restorePending; });
+ipcMain.handle('restore:done', () => { restoreAnswered = true; return true; });
+app.on('before-quit', () => { quitting = true; });
+
 // ---------------- telemetry loop ----------------
 async function loop() {
   try {
@@ -493,7 +510,7 @@ async function loop() {
       snap.usage = usage; refreshUsage();
       snap.ptys = [...ptys].map(([id, p]) => ({ id, pid: p.proc.pid, title: p.title, kind: p.kind, cwd: p.cwd }));
       win.webContents.send('telemetry', snap);
-      lastSnap = snap; if (phone) phone.broadcast(snap);
+      lastSnap = snap; if (phone) phone.broadcast(snap); recordSessions(snap);
     }
   } catch (e) { console.error(e); }
   setTimeout(loop, 1000);
@@ -507,6 +524,7 @@ app.whenReady().then(() => {
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 });
 app.on('window-all-closed', () => {
+  quitting = true;                                   // keep last-sessions.json as it was at quit
   for (const p of ptys.values()) try { p.proc.kill(); } catch { }
   app.quit();
 });

@@ -350,3 +350,4 @@ body.pixel .sc-row, body.pixel .sc-edit { border-radius: 0; }
 .hrow .pin { padding: 0 3px; font-size: 11px; opacity: 0; filter: grayscale(1); cursor: pointer; } .hrow:hover .pin { opacity: .55; }
 .hrow .pin.on { opacity: 1; filter: none; } .hrow.pinned .t { color: #ffe9a6; }
 .hrow.dragging { opacity: .35; } .hrow[draggable=true] { cursor: grab; }
+.rs-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; margin: 6px 0 4px; } .rs-list label { font-size: 13px; }

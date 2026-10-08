@@ -240,3 +240,28 @@ async function openPhone() {
   const rg = $('#phRegen'); if (rg) rg.onclick = async () => { await window.api.phone.regen(); toast('New key — paired phones must scan again'); openPhone(); };
 }
 $('#phoneBtn').onclick = openPhone;
+
+// ---------------- on launch: reopen the sessions that were running last time? ----------------
+(async () => {
+  const d = await window.api.restore.get();
+  for (let i = 0; i < 240 && !snap.ready; i++) await new Promise(r => setTimeout(r, 250));   // wait (≤60 s) for the first live snapshot
+  const live = new Set(snap.sessions.map(s => s.sid));
+  const list = (d.sessions || []).filter(x => !live.has(x.sid));              // skip ones already running elsewhere
+  if (!list.length) return window.api.restore.done();
+  modal(`<h2>Reopen last sessions?</h2>
+    <div style="color:var(--dim);font-size:13px;margin-bottom:8px">${list.length} session${list.length > 1 ? 's were' : ' was'} running in GCX Mesh when it last closed${d.at ? ' (' + new Date(d.at).toLocaleString() + ')' : ''}.</div>
+    <div class="rs-list">${list.map((x, i) => `<label class="chk"><input type="checkbox" data-rs="${i}" checked> <b>${esc(x.name || x.sid.slice(0, 8))}</b> <span style="color:var(--dim)">${esc((x.model || '').replace('claude-', ''))} · ${esc((x.cwd || '').replace(/^\/Users\/[^/]+/, '~'))}</span></label>`).join('')}</div>
+    <div class="btns" style="justify-content:flex-end"><button id="rsNo">No</button><button class="primary" id="rsYes">Yes, reopen</button></div>`);
+  const finish = () => { closeModal(); window.api.restore.done(); };
+  $('#rsNo').onclick = finish;
+  $('#rsYes').onclick = async () => {
+    const pick = list.filter((_, i) => document.querySelector(`[data-rs="${i}"]`).checked); finish();
+    if (document.body.dataset.view === 'mesh') setView('split');
+    for (const x of pick) {
+      const id = await newTerm({ kind: 'claude', cwd: x.cwd, flags: `${RESUME_FLAGS} --resume ${x.sid}`, title: (x.name || '').slice(0, 40) });
+      autoTrust.set(id, { until: Date.now() + 20000, buf: '' });
+      await new Promise(r => setTimeout(r, 600));                              // stagger the starts
+    }
+    toast(`Reopened ${pick.length} session${pick.length > 1 ? 's' : ''}`);
+  };
+})();
