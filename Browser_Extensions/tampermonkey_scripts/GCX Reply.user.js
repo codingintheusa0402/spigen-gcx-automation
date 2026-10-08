@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GCX Reply
 // @namespace    https://spigen.com/gcx
-// @version      3.8.0
+// @version      3.7.3
 // @description  Amazon order data via GAS web app + Spigen product info + Zendesk auto-fill
 // @author       Spigen GCX
 // @updateURL    https://raw.githubusercontent.com/codingintheusa0402/spigen-gcx-automation/main/Browser_Extensions/tampermonkey_scripts/GCX%20Reply.user.js
@@ -97,7 +97,7 @@
   // Keep CURRENT_VERSION in sync with the @version header above, and add a
   // CHANGELOG_ entry, every time the version is bumped. Empty/missing entries
   // are skipped silently (no popup shown).
-  const CURRENT_VERSION = '3.8.0';
+  const CURRENT_VERSION = '3.7.3';
   // Stale per-version entries pruned — CHANGELOG_[CURRENT_VERSION] is the
   // only access pattern, so every past entry becomes dead weight the moment
   // its version is superseded. Add a fresh '<version>': [...] entry here on
@@ -221,196 +221,6 @@
         onerror: () => reject(new Error('network')),
         ontimeout: () => reject(new Error('timeout')),
       });
-    });
-  }
-
-  // ── Fast data path (v3.8.0) ──────────────────────────────────────────────
-  // Order + product lookups go to the GCX Reply Cloudflare Worker first
-  // (GAS_Zendesk/GCXReply_Worker — same JSON as GAS ?orderId= / ?asin=, ~0.3-1 s
-  // vs GAS's 2-7 s platform overhead). GAS stays the fallback for everything:
-  // no Worker key, Worker error / non-200 / {error} / HTML, or no answer within
-  // WORKER_HEDGE_MS → the GAS request fires and whichever valid answer lands
-  // first wins. Every caller keeps its own GM_xmlhttpRequest-style handlers
-  // (onload/onerror/ontimeout), so the response-handling code is unchanged.
-  // ABM relay / claims / inferReason / MCF still talk to GAS directly.
-  //
-  // The Worker key is NOT in this (public) file: it's read from a Zendesk
-  // dynamic-content item that only signed-in agents can fetch, then kept in
-  // GM storage. 401 from the Worker → key dropped and re-read next time.
-  const WORKER_URL       = '__WORKER_URL__';
-  const WORKER_KEY_DC_ID = '__DC_ITEM_ID__';
-  const WORKER_HEDGE_MS  = 3500;
-  const ORDER_CLIENT_TTL = 5 * 60 * 1000; // reopened ticket within 5 min → instant (Lookup button = fresh)
-  const _backendCache    = new Map(); // query → { res, ts }
-  const _backendInflight = new Map(); // query → [opts, ...]
-  let _workerKeyFetching = false;
-
-  function workerKey_() {
-    let k = null;
-    try { k = GM_getValue('gcx_worker_key', null); } catch (_) {}
-    if (!k && !_workerKeyFetching && WORKER_KEY_DC_ID.indexOf('__') !== 0) {
-      _workerKeyFetching = true;
-      gmRequest_({ method: 'GET', url: `https://spigenhelp.zendesk.com/api/v2/dynamic_content/items/${WORKER_KEY_DC_ID}.json`, timeout: 10000 })
-        .then(res => {
-          if (res.status !== 200) return;
-          const item = JSON.parse(res.responseText).item || {};
-          const v = (item.variants || []).find(x => x.default) || (item.variants || [])[0];
-          const key = v && String(v.content || '').trim();
-          if (key && /^[A-Za-z0-9_-]{24,}$/.test(key)) GM_setValue('gcx_worker_key', key);
-        })
-        .catch(() => {})
-        .finally(() => { _workerKeyFetching = false; });
-    }
-    return k;
-  }
-
-  function isGoodJsonRes_(res) {
-    if (!res || res.status !== 200) return false;
-    const t = res.responseText || '';
-    if (!t || t.trimStart().startsWith('<')) return false;
-    try { return !JSON.parse(t).error; } catch (_) { return false; }
-  }
-
-  // query: 'orderId=…' / 'asin=…'. opts: GM_xmlhttpRequest-style (timeout,
-  // onload, onerror, ontimeout). o.cacheTtl: keep good answers client-side;
-  // o.fresh: skip client cache + in-flight sharing and ask the Worker for a
-  // fresh (non-cached) answer.
-  function backendRequest_(query, opts, o) {
-    o = o || {};
-    const now = Date.now();
-    if (!o.fresh) {
-      const hit = _backendCache.get(query);
-      if (hit && now - hit.ts < (o.cacheTtl || 0)) { setTimeout(() => opts.onload && opts.onload(hit.res), 0); return; }
-      const waiting = _backendInflight.get(query);
-      if (waiting) { waiting.push(opts); return; }
-    }
-    const waiters = [opts];
-    if (!o.fresh) _backendInflight.set(query, waiters);
-
-    let settled = false, gasFired = false, pending = 0, lastBad = null, hedgeT = null;
-    const deliver = (kind, res) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(hedgeT);
-      if (!o.fresh && _backendInflight.get(query) === waiters) _backendInflight.delete(query);
-      if (kind === 'load' && o.cacheTtl && isGoodJsonRes_(res)) _backendCache.set(query, { res, ts: Date.now() });
-      waiters.forEach(w => {
-        try {
-          if (kind === 'load') w.onload && w.onload(res);
-          else if (kind === 'timeout') w.ontimeout && w.ontimeout();
-          else w.onerror && w.onerror(res);
-        } catch (e) { console.error('[GCX] backend handler', e); }
-      });
-    };
-    const maybeFinishBad = () => { if (!pending && !settled && gasFired) deliver(lastBad ? lastBad.kind : 'error', lastBad && lastBad.res); };
-
-    const fireGas = () => {
-      if (gasFired || settled) return;
-      gasFired = true; pending++;
-      GM_xmlhttpRequest({
-        method: 'GET', url: `${GAS_URL}?${query}`, redirect: 'follow', timeout: opts.timeout || 15000,
-        onload(res)   { pending--; if (isGoodJsonRes_(res) || !pending) deliver('load', res); else { lastBad = { kind: 'load', res }; } },
-        onerror(e)    { pending--; lastBad = lastBad || { kind: 'error', res: e }; maybeFinishBad(); },
-        ontimeout()   { pending--; lastBad = lastBad || { kind: 'timeout' }; maybeFinishBad(); },
-      });
-    };
-
-    const key = WORKER_URL.indexOf('__') === 0 ? null : workerKey_();
-    if (!key) { fireGas(); return; }
-    pending++;
-    GM_xmlhttpRequest({
-      method: 'GET', url: `${WORKER_URL}/?${query}${o.fresh ? '&fresh=1' : ''}`,
-      headers: { 'x-gcx-key': key }, timeout: Math.min(opts.timeout || 15000, 12000),
-      onload(res) {
-        pending--;
-        if (isGoodJsonRes_(res)) { deliver('load', res); return; }
-        if (res.status === 401) { try { GM_setValue('gcx_worker_key', null); } catch (_) {} }
-        if (!gasFired) fireGas(); else if (lastBad && !pending) deliver(lastBad.kind, lastBad.res);
-      },
-      onerror()   { pending--; if (!gasFired) fireGas(); else maybeFinishBad(); },
-      ontimeout() { pending--; if (!gasFired) fireGas(); else maybeFinishBad(); },
-    });
-    hedgeT = setTimeout(fireGas, WORKER_HEDGE_MS);
-  }
-
-  // ── Seller Central request sharing (v3.8.0) ──────────────────────────────
-  // The same /orders-api/order/{id} response used to be fetched 2-3 times per
-  // ticket (Seller SKU lookup, buyer stats, refund check), each only after GAS
-  // returned. scRequest_ shares one in-flight request per URL and keeps clean
-  // JSON answers for 60 s. Prefetch: as soon as a ticket's order ID is known,
-  // the SC order call starts on the SC domain previously seen for that order-ID
-  // prefix (learned from real results), in parallel with the backend lookup.
-  // Wrong guess = one unused request; the real call path is unchanged.
-  const SC_SHARE_TTL   = 60 * 1000;
-  const _scShareCache  = new Map();
-  const _scShareFlight = new Map();
-  function scRequest_(opts) {
-    const url = opts.url;
-    const hit = _scShareCache.get(url);
-    if (hit && Date.now() - hit.ts < SC_SHARE_TTL) { setTimeout(() => opts.onload && opts.onload(hit.res), 0); return; }
-    const waiting = _scShareFlight.get(url);
-    if (waiting) { waiting.push(opts); return; }
-    const waiters = [opts];
-    _scShareFlight.set(url, waiters);
-    const done = (kind, res) => {
-      if (_scShareFlight.get(url) === waiters) _scShareFlight.delete(url);
-      waiters.forEach(w => {
-        try {
-          if (kind === 'load') w.onload && w.onload(res);
-          else if (kind === 'timeout') w.ontimeout && w.ontimeout();
-          else w.onerror && w.onerror(res);
-        } catch (e) { console.error('[GCX] sc handler', e); }
-      });
-    };
-    GM_xmlhttpRequest({
-      method: 'GET', url, redirect: 'follow',
-      headers: opts.headers || { 'Accept': 'application/json' },
-      timeout: Math.max(...waiters.map(w => w.timeout || 15000)),
-      onload(res) {
-        const t = res.responseText || '';
-        if (res.status === 200 && !res.finalUrl?.includes('/ap/signin') && !t.trimStart().startsWith('<')) {
-          _scShareCache.set(url, { res, ts: Date.now() });
-        }
-        done('load', res);
-      },
-      onerror(e) { done('error', e); },
-      ontimeout() { done('timeout'); },
-    });
-  }
-  function scBaseFromResult_(orderId, salesChannel, countryCode) {
-    const u = sellerCentralUrl(orderId, salesChannel, countryCode);
-    return u ? u.match(/^https:\/\/[^/]+/)[0] : null;
-  }
-  function learnScBase_(orderId, base) {
-    if (!orderId || !base) return;
-    try {
-      const m = GM_getValue('gcx_sc_base_by_prefix', {}) || {};
-      const p = orderId.slice(0, 3);
-      if (m[p] !== base) { m[p] = base; GM_setValue('gcx_sc_base_by_prefix', m); }
-    } catch (_) {}
-  }
-  function prefetchScOrder_(orderId) {
-    let base = null;
-    try { base = (GM_getValue('gcx_sc_base_by_prefix', {}) || {})[orderId.slice(0, 3)] || null; } catch (_) {}
-    if (base) scRequest_({ url: `${base}/orders-api/order/${orderId}`, timeout: 15000, onload() {}, onerror() {}, ontimeout() {} });
-  }
-
-  // Started right after a ticket switch (the panel's own render flow still
-  // runs on its usual schedule — it simply finds these answers ready or in
-  // flight). Only the Zendesk API is used here, never the page DOM, which may
-  // still show the previous ticket at this point.
-  function prefetchTicketData_() {
-    if (!/\/tickets\/\d+/.test(location.pathname)) return;
-    getTicketFields((orderId, asin) => {
-      try {
-        if (orderId) {
-          backendRequest_(`orderId=${encodeURIComponent(orderId)}`, { timeout: 15000, onload() {}, onerror() {}, ontimeout() {} }, { cacheTtl: ORDER_CLIENT_TTL });
-          prefetchScOrder_(orderId);
-        }
-        if (asin && getDataFetchPrefs().fetchProduct) {
-          gasProductRequest_(asin, { method: 'GET', url: `${GAS_URL}?asin=${encodeURIComponent(asin)}`, redirect: 'follow', timeout: 30000, onload() {}, onerror() {} });
-        }
-      } catch (e) { console.error('[GCX] prefetch', e); }
     });
   }
 
@@ -3537,7 +3347,7 @@
       return;
     }
     const onload = opts.onload;
-    backendRequest_(`asin=${encodeURIComponent(asin)}`, Object.assign({}, opts, {
+    GM_xmlhttpRequest(Object.assign({}, opts, {
       onload(res) {
         try {
           const txt = res.responseText || '';
@@ -4784,7 +4594,7 @@
     // Cache hit: skip the /orders-api/order/{id} call entirely
     if (_scEmailCache_[orderId]) { countByEmail_(_scEmailCache_[orderId]); return; }
 
-    scRequest_({
+    GM_xmlhttpRequest({
       method: 'GET',
       url: `${base}/orders-api/order/${orderId}`,
       redirect: 'follow',
@@ -4912,7 +4722,7 @@
         let pending = batch.length;
         const batchDone_ = () => { if (--pending === 0) runNextBatch_(); };
         batch.forEach(oid => {
-          scRequest_({
+          GM_xmlhttpRequest({
             method: 'GET',
             url: `${base}/orders-api/order/${oid}`,
             redirect: 'follow',
@@ -4992,7 +4802,7 @@
     }
 
     function tryUrl(url, onFail) {
-      scRequest_({
+      GM_xmlhttpRequest({
         method:  'GET',
         url,
         headers: { 'Accept': 'application/json' },
@@ -5035,13 +4845,15 @@
   }
 
   // ── Fetch order via GAS ───────────────────────────────────────────────────
-  function fetchOrder(orderId, _retries, _fresh) {
+  function fetchOrder(orderId, _retries) {
     _retries = _retries || 0;
     const _session = _panelSession;
     setStatus('Fetching order data…', true);
     if (!_retries) logStep_(`Fetching order ${orderId}…`);
-    if (!_retries) prefetchScOrder_(orderId); // SC order call in parallel (v3.8.0)
-    backendRequest_(`orderId=${encodeURIComponent(orderId)}`, {
+    GM_xmlhttpRequest({
+      method:   'GET',
+      url:      `${GAS_URL}?orderId=${encodeURIComponent(orderId)}`,
+      redirect: 'follow',
       timeout:  15000,
       onload(res) {
         if (_panelSession !== _session) return;
@@ -5064,7 +4876,6 @@
 
           // Store for auto-fill
           lastOrderData = data;
-          learnScBase_(orderId, scBaseFromResult_(orderId, data.order?.SalesChannel, data.address?.CountryCode));
           logStep_(`Order loaded — ${data.order?.SalesChannel || data.region || 'unknown'} | 구매이력: ${data.totalPurchases != null ? `구매 ${data.totalPurchases}건 / 환불 ${data.totalRefunds}건` : 'N/A'}`);
           window.__gcxRefreshNrnState && window.__gcxRefreshNrnState();
           window.__gcxAutoCorrectLanguage && window.__gcxAutoCorrectLanguage();
@@ -5247,7 +5058,7 @@
           logStep_('Order fetch: timed out after 2 retries');
         }
       },
-    }, { cacheTtl: ORDER_CLIENT_TTL, fresh: !!_fresh && !_retries });
+    });
   }
 
   function setStatus(msg, isLoading = false) {
@@ -6091,7 +5902,7 @@
 
     panel.querySelector('#sp-lookup-btn').onclick = () => {
       const id = orderInput.value.trim();
-      if (id) fetchOrder(id, 0, true); // manual Lookup = always fresh data
+      if (id) fetchOrder(id);
     };
     orderInput.addEventListener('keydown', e => { if (e.key === 'Enter') panel.querySelector('#sp-lookup-btn').click(); });
 
@@ -6515,7 +6326,6 @@
         if (newId !== lastTicketId) {
           lastTicketId = newId;
           resetPanel();
-          prefetchTicketData_(); // v3.8.0: network starts now; render flow below unchanged
           _dockFailedAt = null; // restart the 2s floating-fallback timer for the new ticket
           clearTimeout(navTimer);
           navTimer = setTimeout(() => { autoDetectAll(); collapseRawAbmComments_(); }, 1500);
@@ -6558,7 +6368,6 @@
     });
     observer.observe(document.body, { childList: true, subtree: true });
 
-    if (isTicketPage_()) prefetchTicketData_();
     if (isTicketPage_()) setTimeout(() => { autoDetectAll(); collapseRawAbmComments_(); }, 1500);
 
     showUpdatePopupIfNeeded_();
