@@ -218,7 +218,7 @@ public static extern bool LogonUser(string u, string d, string p, int type, int 
 [DllImport("kernel32.dll")] public static extern bool CloseHandle(System.IntPtr h);
 public static uint IdleMs() { var i = new LASTINPUTINFO(); i.cbSize = (uint)Marshal.SizeOf(i); GetLastInputInfo(ref i); return (uint)System.Environment.TickCount - i.dwTime; }
 public static bool CheckPassword(string pw) { System.IntPtr t; bool ok = LogonUser("user", ".", pw, 2, 0, out t); if (ok) CloseHandle(t); return ok; }
-"@ -UsingNamespace System.Runtime.InteropServices
+"@
 $LOCK_AFTER_MS = 10 * 60 * 1000
 $global:gcxLock = $null
 
