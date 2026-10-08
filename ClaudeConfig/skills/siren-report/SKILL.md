@@ -91,6 +91,12 @@ reusing the original session-gated URL.
   `spigen-slides.md`) instead of the usual black header fill — user request 2026-09-21 to
   visually distinguish the one Global/cross-market metric from the other three
   Zendesk-sourced counts.
+- **Global 리뷰 평점 value (user rule 2026-10-08)** = the star rating on the Amazon page the 제품명 cell hyperlinks to
+  (`amazon.de/dp/<product.asin>`, the `#acrPopover` average next to the title), written as `4.5(DE)`. If amazon.de shows no
+  rating (out of stock / not sold there / blocked), try amazon.com → amazon.co.uk → amazon.co.jp and label with that country
+  (`(US)`/`(UK)`/`(JP)`); none → `N/A`. Auto-filled by `amazon_rating.global_rating()` when `overview.global_rating` is empty or
+  `-`. Check one by hand: `python3 amazon_rating.py <ASIN>`. To backfill an existing deck, edit only the value cell (row 1,
+  col 3) of the table whose header has `Global 리뷰 평점` on slide 2 — don't rebuild.
 - Table 3 (4×(1+N countries)) at (35, 252): row0 `국가별 인입 채널 | <countries>`, row1
   `배드 리뷰 수 | ...`, row2 `고객 클레임 수(Zendesk) | ...`, row3 `Total | ...`.
   Country columns = only countries that actually have data (fallback to the full
@@ -163,7 +169,7 @@ python3 build_siren_slides.py --data siren_case.json [--dry-run]
   },
   "overview": {
     "total_count": 0, "bad_review_count": 0, "zendesk_count": 0,
-    "global_rating": "-",                    // e.g. "4.3\n(DE 기준)" or "-" if unknown
+    "global_rating": "",                     // leave empty -> auto: Amazon rating of the linked ASIN, e.g. "4.5(DE)" / "N/A"
     "by_country_bad_review": {"DE": 2, ...}, // omit countries with 0/no data
     "by_country_zendesk": {"UK": 1, ...}
   },

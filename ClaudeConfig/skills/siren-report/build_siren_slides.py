@@ -380,6 +380,17 @@ def lookup_manufacturer(skus):
     return " / ".join(found) or None
 
 
+def _global_rating(p: dict, ov: dict) -> str:
+    """Global 리뷰 평점 (user rule 2026-10-08): the star rating on the Amazon page the 제품명 cell links to
+    (amazon.de/dp/<asin>), falling back to .com / .co.uk / .co.jp -> e.g. '4.5(DE)'; 'N/A' if none shows one.
+    An explicit overview.global_rating other than '-'/'' is kept as given."""
+    given = str(ov.get("global_rating") or "").strip()
+    if given and given != "-":
+        return given
+    from amazon_rating import global_rating
+    return global_rating(p.get("asin", ""))
+
+
 def build_overview_slide(b: DeckBuilder, data: dict):
     sid = b.new_slide()
     p = data["product"]
@@ -439,7 +450,7 @@ def build_overview_slide(b: DeckBuilder, data: dict):
     b.add_table(sid, 35, t2_y, 650, t2_h, [
         ["총 인입건 수", "전체 배드 리뷰 수", "전체 클레임 수(Zendesk)", "Global 리뷰 평점"],
         [str(ov.get("total_count", 0)), str(ov.get("bad_review_count", 0)),
-         str(ov.get("zendesk_count", 0)), ov.get("global_rating", "-")],
+         str(ov.get("zendesk_count", 0)), _global_rating(p, ov)],
     ], cell_fills={(0, 3): ACCENT_ORANGE})
 
     by_review = ov.get("by_country_bad_review", {})
