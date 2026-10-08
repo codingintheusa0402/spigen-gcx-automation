@@ -14,3 +14,17 @@ GAS_ReviewAutomation/Apify/apify-amazon-dp-scraper/
 .idea/
 GAS_Operations/BadReview_ChatReport/logs/
 GAS_Operations/DiscolorationReport/logs/
+
+# machine-local runtime state, logs, backups and scratch data — never synced between Mac and server
+**/state/
+**/logs/
+*.log
+*.flag
+**/last_run.json
+*.bak-*
+*.clasp.json.disabled
+_scratch*/
+/*.csv
+/*.tsv
+/*.xlsx
+/*.har

@@ -1,0 +1,64 @@
+{
+  "manifest_version": 3,
+  "name": "GCX Reply",
+  "version": "3.0.1",
+  "description": "Zendesk ticket panel: Amazon order data + Spigen product info lookup, one-click Auto-Fill, MCF handoff, NRN case resolve.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": [
+    "https://spigenhelp.zendesk.com/*",
+    "https://script.google.com/*",
+    "https://script.googleusercontent.com/*",
+
+    "https://*.amazon.com/*",
+    "https://sellercentral.amazon.com/*",
+    "https://sellercentral.amazon.co.uk/*",
+    "https://sellercentral.amazon.de/*",
+    "https://sellercentral.amazon.fr/*",
+    "https://sellercentral.amazon.it/*",
+    "https://sellercentral.amazon.es/*",
+    "https://sellercentral.amazon.co.jp/*",
+    "https://sellercentral.amazon.in/*",
+    "https://sellercentral.amazon.com.sg/*",
+    "https://sellercentral.amazon.com.au/*",
+    "https://sellercentral.amazon.ca/*",
+    "https://sellercentral.amazon.com.mx/*",
+    "https://sellercentral.amazon.com.tr/*",
+    "https://sellercentral-europe.amazon.com/*",
+
+    "https://www.amazon.com/*",
+    "https://www.amazon.co.uk/*",
+    "https://www.amazon.de/*",
+    "https://www.amazon.fr/*",
+    "https://www.amazon.it/*",
+    "https://www.amazon.es/*",
+    "https://www.amazon.nl/*",
+    "https://www.amazon.pl/*",
+    "https://www.amazon.se/*",
+    "https://www.amazon.be/*",
+    "https://www.amazon.co.jp/*",
+    "https://www.amazon.in/*",
+    "https://www.amazon.com.sg/*",
+    "https://www.amazon.com.au/*",
+    "https://www.amazon.ca/*",
+    "https://www.amazon.com.mx/*",
+    "https://www.amazon.com.tr/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://spigenhelp.zendesk.com/agent/tickets/*",
+        "https://spigenhelp.zendesk.com/agent/filters",
+        "https://spigenhelp.zendesk.com/agent/filters/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

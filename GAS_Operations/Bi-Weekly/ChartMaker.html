@@ -1,0 +1,312 @@
+<style>
+  body {
+    font-family: 'Google Sans', Roboto, Arial, sans-serif;
+    font-size: 13px;
+    color: #202124;
+    padding: 12px;
+  }
+  h2 {
+    font-size: 15px;
+    margin: 0 0 4px;
+  }
+  p.hint {
+    color: #5f6368;
+    margin: 0 0 16px;
+    line-height: 1.4;
+  }
+  label {
+    display: block;
+    font-weight: 600;
+    margin: 14px 0 4px;
+  }
+  select, input[type="text"], input[type="number"] {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+  #deviceFilter {
+    margin-bottom: 6px;
+  }
+  #deviceList {
+    max-height: 160px;
+    overflow-y: auto;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    padding: 6px 8px;
+  }
+  #deviceList label {
+    font-weight: normal;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 0;
+  }
+  #deviceList label input {
+    margin: 0;
+  }
+  .row-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .row-actions button {
+    flex: 1;
+    background: none;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    padding: 4px 0;
+    font-size: 12px;
+    color: #5f6368;
+    cursor: pointer;
+  }
+  .field-hint {
+    color: #80868b;
+    font-size: 11px;
+    margin-top: 3px;
+  }
+  #generateBtn {
+    width: 100%;
+    margin-top: 20px;
+    padding: 9px 0;
+    background: #1a73e8;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  #generateBtn:disabled {
+    background: #a8c7fa;
+    cursor: default;
+  }
+  #status {
+    margin-top: 14px;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.5;
+    display: none;
+    white-space: pre-wrap;
+  }
+  #status.ok {
+    display: block;
+    background: #e6f4ea;
+    color: #137333;
+  }
+  #status.err {
+    display: block;
+    background: #fce8e6;
+    color: #c5221f;
+  }
+  #status.loading {
+    display: block;
+    background: #f1f3f4;
+    color: #5f6368;
+  }
+</style>
+
+<h2>Custom Chart Maker</h2>
+<p class="hint">
+  Generates the 모델별 TOP3 / 인입사유별 TOP3 chart grid — same arc-chart colors,
+  card background, fonts, and layout as the template — scoped to whatever
+  filters you pick below. Source: 26년 전체문의.
+</p>
+
+<label for="dataSource">Data Source</label>
+<select id="dataSource">
+  <option value="zendesk">Zendesk Claims (26년 전체문의)</option>
+  <option value="badReview:glxZ8">Bad Reviews — Amazon 1~3점 (GlxZ8)</option>
+  <option value="badReview:pixel11">Bad Reviews — Amazon 1~3점 (Pixel 11)</option>
+</select>
+<div class="field-hint">
+  Bad Reviews has no Category column (already scoped to 1~3점) and filters
+  Device by 기종명 instead.
+</div>
+
+<div id="categoryField">
+  <label for="category">Category</label>
+  <select id="category"></select>
+</div>
+
+<label>Device <span style="font-weight:normal;color:#80868b;">(none checked = all devices)</span></label>
+<input type="text" id="deviceFilter" placeholder="Filter device list...">
+<div id="deviceList">Loading...</div>
+<div class="row-actions">
+  <button type="button" id="selectAllBtn">Select all</button>
+  <button type="button" id="clearAllBtn">Clear</button>
+</div>
+
+<label for="products">Product Name contains <span style="font-weight:normal;color:#80868b;">(optional)</span></label>
+<input type="text" id="products" placeholder="e.g. Ultra Hybrid, Tough Armor">
+<div class="field-hint">Comma-separated. A row matches if Product Name contains ANY of these.</div>
+
+<label for="topN">Number of TOP cards</label>
+<input type="number" id="topN" min="1" max="10" value="3">
+
+<label style="display:flex;align-items:center;gap:6px;font-weight:600;margin-top:16px;">
+  <input type="checkbox" id="newSlideMode" checked style="margin:0;">
+  Insert as a new slide (recommended)
+</label>
+<div class="field-hint">
+  Draws a brand-new slide with the full chart grid — no manual slide prep needed.
+  Uncheck to instead fill {{Defect_Model_Chart_N}}-style placeholders on the
+  <strong>currently selected slide</strong> (legacy mode; requires a slide with
+  those placeholders already present).
+</div>
+
+<div id="suffixField">
+  <label for="suffix">Placeholder suffix <span style="font-weight:normal;color:#80868b;">(optional)</span></label>
+  <input type="text" id="suffix" placeholder="e.g. Fold8">
+  <div class="field-hint">
+    Legacy mode only. Blank = fill the base {{Defect_Model_Chart_N}} cards. To
+    keep a custom chart alongside the default one, duplicate a chart-card
+    slide, rename its placeholders to e.g. {{Defect_Model_Chart_Fold8_1}},
+    then type "Fold8" here.
+  </div>
+</div>
+
+<button id="generateBtn">Generate Charts</button>
+
+<div id="status"></div>
+
+<script>
+  var allDevices = [];
+
+  function renderDeviceList(filterText) {
+    var listEl = document.getElementById('deviceList');
+    var q = (filterText || '').toLowerCase();
+    var checkedSet = getCheckedDevices();
+    listEl.innerHTML = '';
+    var shown = allDevices.filter(function(d) { return d.toLowerCase().indexOf(q) !== -1; });
+    if (!shown.length) {
+      listEl.textContent = '(no matches)';
+      return;
+    }
+    shown.forEach(function(d) {
+      var lbl = document.createElement('label');
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = d;
+      cb.checked = checkedSet.indexOf(d) !== -1;
+      lbl.appendChild(cb);
+      lbl.appendChild(document.createTextNode(d));
+      listEl.appendChild(lbl);
+    });
+  }
+
+  function getCheckedDevices() {
+    return Array.prototype.slice.call(document.querySelectorAll('#deviceList input:checked'))
+      .map(function(cb) { return cb.value; });
+  }
+
+  function populateFilters(opts) {
+    var isBadReview = document.getElementById('dataSource').value.indexOf('badReview:') === 0;
+    document.getElementById('categoryField').style.display = isBadReview ? 'none' : 'block';
+
+    var catSel = document.getElementById('category');
+    catSel.innerHTML = '';
+    var allOpt = document.createElement('option');
+    allOpt.value = '__ALL__';
+    allOpt.textContent = '(전체 - no category filter)';
+    catSel.appendChild(allOpt);
+    opts.categories.forEach(function(c) {
+      var o = document.createElement('option');
+      o.value = c;
+      o.textContent = c;
+      catSel.appendChild(o);
+    });
+    if (opts.categories.indexOf('4. Product Issue') !== -1) {
+      catSel.value = '4. Product Issue';
+    }
+
+    allDevices = opts.devices;
+    renderDeviceList('');
+  }
+
+  function loadFilterOptions() {
+    showStatus('loading', 'Loading filter options...');
+    google.script.run
+      .withSuccessHandler(function(opts) {
+        populateFilters(opts);
+        document.getElementById('status').className = '';
+      })
+      .withFailureHandler(onGenerateError)
+      .getSidebarFilterOptions(document.getElementById('dataSource').value);
+  }
+
+  function showStatus(cls, text) {
+    var el = document.getElementById('status');
+    el.className = cls;
+    el.textContent = text;
+  }
+
+  function onGenerateSuccess(result) {
+    document.getElementById('generateBtn').disabled = false;
+    var lines = [];
+    if (result.slideIndex) {
+      lines.push('Created slide ' + result.slideIndex + '.');
+      lines.push('');
+    }
+    lines.push('모델별 TOP3:');
+    (result.productCards.length ? result.productCards : ['(no matching rows)']).forEach(function(l) {
+      lines.push('  • ' + l);
+    });
+    lines.push('');
+    lines.push('인입사유별 TOP3:');
+    (result.reasonCards.length ? result.reasonCards : ['(no matching rows)']).forEach(function(l) {
+      lines.push('  • ' + l);
+    });
+    showStatus('ok', lines.join('\n'));
+  }
+
+  function onGenerateError(err) {
+    document.getElementById('generateBtn').disabled = false;
+    showStatus('err', err.message || String(err));
+  }
+
+  document.getElementById('deviceFilter').addEventListener('input', function(e) {
+    renderDeviceList(e.target.value);
+  });
+
+  document.getElementById('selectAllBtn').addEventListener('click', function() {
+    document.querySelectorAll('#deviceList input').forEach(function(cb) { cb.checked = true; });
+  });
+  document.getElementById('clearAllBtn').addEventListener('click', function() {
+    document.querySelectorAll('#deviceList input').forEach(function(cb) { cb.checked = false; });
+  });
+
+  function updateSuffixFieldVisibility() {
+    var newSlideMode = document.getElementById('newSlideMode').checked;
+    document.getElementById('suffixField').style.display = newSlideMode ? 'none' : 'block';
+  }
+  document.getElementById('newSlideMode').addEventListener('change', updateSuffixFieldVisibility);
+  updateSuffixFieldVisibility();
+
+  document.getElementById('dataSource').addEventListener('change', loadFilterOptions);
+
+  document.getElementById('generateBtn').addEventListener('click', function() {
+    var opts = {
+      dataSource: document.getElementById('dataSource').value,
+      category: document.getElementById('category').value,
+      devices: getCheckedDevices(),
+      products: document.getElementById('products').value
+        .split(',').map(function(s) { return s.trim(); }).filter(Boolean),
+      suffix: document.getElementById('suffix').value.trim(),
+      topN: Number(document.getElementById('topN').value) || 3,
+      insertAsNewSlide: document.getElementById('newSlideMode').checked
+    };
+    document.getElementById('generateBtn').disabled = true;
+    showStatus('loading', 'Generating...');
+    google.script.run
+      .withSuccessHandler(onGenerateSuccess)
+      .withFailureHandler(onGenerateError)
+      .generateCustomCharts(opts);
+  });
+
+  loadFilterOptions();
+</script>
