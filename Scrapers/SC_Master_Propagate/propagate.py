@@ -624,7 +624,17 @@ def stamp_dr_on_filtered_13(svc, product, cfg, payload=None, dry_run=False):
     dest_id, s13 = cfg["dest_id"], cfg["one_three_sheet"] or cfg["dest_sheet"]
     hdr13 = header_row(svc, dest_id, s13)
     ai_i = find_col(hdr13, contains=cfg["dr_col_header_contains"])
+    if ai_i is None:
+        # The 인입사유(AI) header is an accuracy formula that renders #ERROR! when any
+        # cell below it errors (seen on Pixel11 2026-10-08) — it always sits just
+        # left of 인입사유(tag).
+        tag_i = find_col(hdr13, want_exact="인입사유(tag)")
+        if tag_i and str(hdr13[tag_i - 2]).startswith("#"):
+            ai_i = tag_i - 1
+            print(f"[{product}] {s13}: 인입사유(AI) header shows {hdr13[ai_i-1]!r} — using col {idx_to_a1_col(ai_i)}")
     upd_i = find_col(hdr13, want_exact="Update 날짜") or find_col(hdr13, want_exact="Exported Date")
+    if ai_i is None or upd_i is None:
+        raise SystemExit(f"[{product}] {s13}: cannot locate 인입사유(AI)/Update 날짜 columns in header {hdr13}")
     ai13 = idx_to_a1_col(ai_i)
     g = idx_to_a1_col(find_col(hdr13, want_exact=cfg["dr_body_header"]))
     s = idx_to_a1_col(find_col(hdr13, want_exact=cfg["dr_category_header"]))

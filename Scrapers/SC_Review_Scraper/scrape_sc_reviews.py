@@ -194,6 +194,10 @@ HEADLESS = os.environ.get("SC_SCRAPER_HEADLESS", "0") == "1"
 #                   Chrome must be fully closed before running in headless mode.
 
 SCRAPER_PROFILE_DIR = os.path.expanduser("~/.chrome-scraper-profile")
+# GCX server: reuse the server's signed-in Chrome profile (Amazon customer logins, shared with
+# sc-review-propagate Phase G — laptop shortcut "Amazon logins (photo check)"). Mac unchanged.
+if sys.platform.startswith("linux"):
+    SCRAPER_PROFILE_DIR = os.environ.get("SC_SCRAPER_PROFILE_DIR", os.path.expanduser("~/.chrome-phaseg-profile"))
 # Dedicated Chrome profile for scraping. SC login sessions are saved here between runs.
 # First run: Chrome opens → log in to all SC accounts → sessions persist automatically.
 # Subsequent runs: Chrome opens with saved sessions → scraping starts after Enter.
@@ -1555,6 +1559,11 @@ async def main():
             if _use_per_domain_profiles:
                 _profile_dir = f"{SCRAPER_PROFILE_DIR}_{_label}"
                 print(f"  [{_label}] profile: {_profile_dir}")
+                if not os.path.exists(_profile_dir) and os.path.isdir(SCRAPER_PROFILE_DIR):
+                    # first run: start from the base profile so its saved Amazon logins carry over
+                    shutil.copytree(SCRAPER_PROFILE_DIR, _profile_dir, symlinks=True,
+                                    ignore=shutil.ignore_patterns("Singleton*", "*.lock", "Cache", "Code Cache", "GPUCache"))
+                    print(f"  [{_label}] seeded from {SCRAPER_PROFILE_DIR}")
                 os.makedirs(_profile_dir, exist_ok=True)
                 _ctx = await pw.chromium.launch_persistent_context(_profile_dir, channel="chrome", headless=HEADLESS)
                 _p = _ctx.pages[0] if _ctx.pages else await _ctx.new_page()
