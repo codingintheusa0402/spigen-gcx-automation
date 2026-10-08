@@ -60,7 +60,7 @@ for l in cron:
 best = {}
 for t, n in sorted(ups):
     best.setdefault(n, t)
-for n, t in sorted(best.items(), key=lambda x: x[1])[:6]:
+for n, t in sorted(best.items(), key=lambda x: x[1])[:30]:
     mins = int((t - now).total_seconds() // 60)
     left = f"in {mins // 60}h {mins % 60}m" if mins >= 60 else f"in {mins}m"
     day = "" if t.date() == now.date() else ("tomorrow " if (t.date() - now.date()).days == 1 else t.strftime("%a "))

@@ -49,10 +49,10 @@ $tiles = @(
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
         <Border Grid.Column="0" Background="#121528" CornerRadius="10" Padding="16,12">
           <StackPanel><TextBlock Text="RUNNING NOW" Foreground="#6F77A3" FontSize="13" FontFamily="Segoe UI Semibold" Margin="0,0,0,6"/>
-            <StackPanel x:Name="Running"/></StackPanel></Border>
+            <ScrollViewer MaxHeight="172" VerticalScrollBarVisibility="Auto" PanningMode="VerticalOnly"><StackPanel x:Name="Running" Margin="0,0,8,0"/></ScrollViewer></StackPanel></Border>
         <Border Grid.Column="2" Background="#121528" CornerRadius="10" Padding="16,12">
           <StackPanel><TextBlock Text="UP NEXT" Foreground="#6F77A3" FontSize="13" FontFamily="Segoe UI Semibold" Margin="0,0,0,6"/>
-            <StackPanel x:Name="Upnext"/></StackPanel></Border>
+            <ScrollViewer MaxHeight="172" VerticalScrollBarVisibility="Auto" PanningMode="VerticalOnly"><StackPanel x:Name="Upnext" Margin="0,0,8,0"/></ScrollViewer></StackPanel></Border>
       </Grid>
     </StackPanel>
   </Grid>
