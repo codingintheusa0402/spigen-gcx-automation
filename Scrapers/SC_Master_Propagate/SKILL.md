@@ -197,6 +197,7 @@ live in master `SC`). Rules the script enforces:
   are missing it is kept and reported — run `--new-sheet <that tab> --commit`
   first (that is exactly what happened 2026-09-14: `SC_260907` and two
   CaspiLM tabs had 1/1/7 never-funneled rows; funnel → then cleanup).
+- Malformed rows (header/caption rows failing `REVIEW_ID_RE`) are ignored in that check, same as Phase A (fixed 2026-10-08: `CaspiLM_260907`'s caption row 1 made its real header count as 1 missing ID).
 - First live run 2026-09-14 removed 8 tabs (`SC_260831`, `SC_260907`,
   `SC_260908`–`11`, `CaspiLM_260827_asof0830`, `CaspiLM_260905`).
 
@@ -210,6 +211,7 @@ Layout (verified against the cardsV2 notes in memory `gchat_cardsv2_schema_refer
 - **Source** section: `SC_yymmdd` (reviews scraped) and master `SC` (rows total), each a `decoratedText` with an **Open** button (`openLink` → `…/edit#gid=<tab gid>`).
 - **Monitoring sheets · +N rows today** section: one `decoratedText` per touched tab — topLabel = product, text = `<b>live Drive spreadsheet name</b> · tab`, bottomLabel = `+N rows added today` (N = rows whose `Update 날짜`/`Exported Date` is today, by any pipeline), **Open** button to that tab. Has15 books list `1-5점` and its `1-3점` mirror; the section total counts only the paste tabs.
 - **Housekeeping**: `tem` refreshed, `Removed older tabs: …`.
+- `--alert "<text>"` (repeatable, added 2026-10-08) puts a red **⚠️ Needs attention** section at the top of the card — use it for Caspi data staleness (newest review > 2 days old / LOAD_TS > 24h) or anything a human must act on.
 - Spreadsheet names come from `drive.files.get` at send time — never hardcoded. `--notify` without `--commit` prints the JSON and does not send. First card sent 2026-09-14.
 
 ### Phase G — Image URL backfill (user rule 2026-09-29, MANDATORY LAST STEP)

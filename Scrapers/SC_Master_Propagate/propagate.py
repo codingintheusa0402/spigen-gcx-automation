@@ -836,8 +836,12 @@ def phase_f_cleanup(svc, dry_run=True):
             if d >= newest:
                 kept.append(f"{title} (newest)")
                 continue
-            ids = [r[0] for r in svc.spreadsheets().values().get(
-                spreadsheetId=SRC, range=f"'{title}'!K2:K").execute().get("values", []) if r and r[0]]
+            # Same validity rule as Phase A: a stray header/description row (e.g. a
+            # caption in row 1 pushing the real header to row 2 — CaspiLM_260907) is
+            # never funneled, so it must not count as "missing from SC" either.
+            ids = [r[0].strip() for r in svc.spreadsheets().values().get(
+                spreadsheetId=SRC, range=f"'{title}'!K2:K").execute().get("values", [])
+                if r and r[0] and REVIEW_ID_RE.match(r[0].strip())]
             missing = [x for x in ids if x not in sc_ids]
             if missing:
                 kept.append(f"{title} (KEPT: {len(missing)}/{len(ids)} Review IDs not in SC)")
