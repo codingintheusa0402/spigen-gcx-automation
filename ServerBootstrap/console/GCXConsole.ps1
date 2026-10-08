@@ -34,7 +34,16 @@ $tiles = @(
     <DockPanel Grid.Row="0" Margin="4,0,4,22">
       <TextBlock x:Name="Clock" DockPanel.Dock="Right" Foreground="#8C93B8" FontSize="22" FontFamily="Segoe UI Light" VerticalAlignment="Bottom"/>
       <StackPanel>
-        <TextBlock Text="GCX SERVER" Foreground="#E9EAFF" FontSize="34" FontFamily="Segoe UI Semibold"/>
+        <StackPanel Orientation="Horizontal">
+          <TextBlock Text="GCX SERVER" Foreground="#E9EAFF" FontSize="34" FontFamily="Segoe UI Semibold"/>
+          <Grid Width="34" Height="34" Margin="18,6,6,0" VerticalAlignment="Center">
+            <Ellipse x:Name="LiveRing" Width="14" Height="14" Fill="#3DDC97" Opacity="0.55" RenderTransformOrigin="0.5,0.5">
+              <Ellipse.RenderTransform><ScaleTransform x:Name="LiveScale" ScaleX="1" ScaleY="1"/></Ellipse.RenderTransform>
+            </Ellipse>
+            <Ellipse x:Name="LiveDot" Width="14" Height="14" Fill="#3DDC97"/>
+          </Grid>
+          <TextBlock x:Name="LiveText" Text="LIVE" Foreground="#3DDC97" FontSize="14" FontFamily="Segoe UI Semibold" VerticalAlignment="Center" Margin="0,8,0,0"/>
+        </StackPanel>
         <TextBlock x:Name="Sub" Foreground="#6F77A3" FontSize="15" FontFamily="Segoe UI" Margin="2,2,0,0"/>
       </StackPanel>
     </DockPanel>
@@ -60,6 +69,24 @@ $tiles = @(
 "@
 $win = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $xaml))
 $wrap = $win.FindName("Tiles"); $health = $win.FindName("Health"); $running = $win.FindName("Running"); $upnext = $win.FindName("Upnext"); $runTitle = $win.FindName("RunTitle"); $nextTitle = $win.FindName("NextTitle"); $checked = $win.FindName("Checked"); $clock = $win.FindName("Clock"); $sub = $win.FindName("Sub")
+$liveRing = $win.FindName("LiveRing"); $liveDot = $win.FindName("LiveDot"); $liveText = $win.FindName("LiveText"); $liveScale = $win.FindName("LiveScale")
+function Anim($from, $to, $sec, $reverse) {
+  $a = New-Object Windows.Media.Animation.DoubleAnimation($from, $to, (New-Object Windows.Duration([TimeSpan]::FromSeconds($sec))))
+  $a.RepeatBehavior = [Windows.Media.Animation.RepeatBehavior]::Forever; $a.AutoReverse = $reverse
+  $a.EasingFunction = New-Object Windows.Media.Animation.SineEase; return $a
+}
+# LIVE beacon: a ring radiating from the dot every 2 s (ring grows ×2.6 while fading out)
+try {
+  if (-not $liveScale) { $liveScale = $liveRing.RenderTransform }
+  $liveScale.BeginAnimation([Windows.Media.ScaleTransform]::ScaleXProperty, (Anim 1.0 2.6 2.0 $false))
+  $liveScale.BeginAnimation([Windows.Media.ScaleTransform]::ScaleYProperty, (Anim 1.0 2.6 2.0 $false))
+  $liveRing.BeginAnimation([Windows.UIElement]::OpacityProperty, (Anim 0.55 0.0 2.0 $false))
+} catch { try { Add-Content C:\GCX-Setup\console\console.log ("[" + (Get-Date).ToString("MM-dd HH:mm:ss") + "] beacon animation: " + $_.Exception.Message) } catch { } }
+function SetBeacon($level) {
+  if (-not $liveDot) { return }
+  $c = @{ ok = "#3DDC97"; warn = "#FFC857"; bad = "#FF5C7A" }[$level]; $t = @{ ok = "LIVE"; warn = "LIVE · CHECK"; bad = "LIVE · ISSUE" }[$level]
+  $b = $bc.ConvertFromString($c); $liveRing.Fill = $b; $liveDot.Fill = $b; $liveText.Foreground = $b; $liveText.Text = $t
+}
 
 $bc = New-Object Windows.Media.BrushConverter
 foreach ($x in $tiles) {
@@ -134,6 +161,7 @@ function JobRow($name, $detail, $color) {
   $d = New-Object Windows.Controls.DockPanel; $d.Margin = "0,4,0,4"
   $dot = New-Object Windows.Shapes.Ellipse; $dot.Width = 9; $dot.Height = 9; $dot.Margin = "0,0,10,0"; $dot.Fill = $bc.ConvertFromString($color)
   [Windows.Controls.DockPanel]::SetDock($dot, "Left")
+  if ($color -eq "#3DDC97") { try { $dot.BeginAnimation([Windows.UIElement]::OpacityProperty, (Anim 1.0 0.25 0.9 $true)) } catch { } }   # running → breathing dot
   $t2 = New-Object Windows.Controls.TextBlock; $t2.Text = $detail; $t2.FontSize = 13; $t2.Foreground = $bc.ConvertFromString("#8C93B8"); [Windows.Controls.DockPanel]::SetDock($t2, "Right")
   $t1 = New-Object Windows.Controls.TextBlock; $t1.Text = $name; $t1.FontSize = 14; $t1.Foreground = $bc.ConvertFromString("#E4E6FF")
   [void]$d.Children.Add($dot); [void]$d.Children.Add($t2); [void]$d.Children.Add($t1); return $d
@@ -146,6 +174,8 @@ function Refresh {
   if (Wait-Job $job -Timeout 25) {
     $r = Receive-Job $job; $health.Children.Clear()
     foreach ($k in $LABELS.Keys) { $v = $r[$k]; if (-not $v) { $v = "na|—" }; $lv, $tx = "$v".Split("|", 2); [void]$health.Children.Add((Card $k $lv $tx)) }
+    $lvls = @($LABELS.Keys | % { "$($r[$_])".Split("|")[0] })
+    SetBeacon $(if ($lvls -contains "bad") { "bad" } elseif ($lvls -contains "warn") { "warn" } else { "ok" })
     $checked.Text = "checked " + (Get-Date).ToString("HH:mm:ss") + "  ·  every 30 s  ·  F5 to refresh"
   } else { Log "health refresh timed out" }
   Remove-Job $job -Force
