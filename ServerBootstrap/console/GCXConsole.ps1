@@ -22,6 +22,7 @@ $tiles = @(
   @{ t = "Ubuntu Terminal";         s = "shell on gcx-server";               i = [char]0xE756; a = { Start-Process $WT -ArgumentList "wsl.exe -d Ubuntu -u kevinkim --cd ~/Desktop/GCX" } },
   @{ t = "GCX Repo Files";          s = "~/Desktop/GCX (git, auto-synced)";  i = [char]0xE8B7; a = { Start-Process "explorer.exe" -ArgumentList "\\wsl.localhost\Ubuntu\home\kevinkim\Desktop\GCX" } },
   @{ t = "Windows Desktop";         s = "normal Windows (until sign-out)";   i = [char]0xE7F8; a = { Start-Process "explorer.exe" } },
+  @{ t = "Lock Now";                s = "dashboard lock · Windows password";  i = [char]0xE72E; a = { ShowLock } },
   @{ t = "Restart Server";          s = "asks first";                         i = [char]0xE777; a = {
         if ([System.Windows.MessageBox]::Show("Restart the server now? Jobs and sessions stop for ~2 minutes.", "GCX Server", "YesNo", "Warning") -eq "Yes") { shutdown /r /t 5 } } }
 )
@@ -205,4 +206,81 @@ $timer = New-Object Windows.Threading.DispatcherTimer; $timer.Interval = [TimeSp
 $timer2 = New-Object Windows.Threading.DispatcherTimer; $timer2.Interval = [TimeSpan]::FromSeconds(60); $timer2.Add_Tick({ RefreshSchedule }); $timer2.Start()
 $win.Add_ContentRendered({ Refresh; RefreshSchedule })
 $win.Add_KeyDown({ if ($_.Key -eq "F5") { Refresh; RefreshSchedule } })
+
+# ---------------- dashboard lock (10 min idle, or "Lock Now") ----------------
+# Not the Windows lock: a full-screen GCX lock window on top of everything. Unlocks with the Windows
+# password of account "user", verified by Windows (LogonUser) — no extra password is stored anywhere.
+Add-Type -Namespace GCX -Name Native -MemberDefinition @"
+[StructLayout(LayoutKind.Sequential)] public struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+[DllImport("user32.dll")] public static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+[DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+public static extern bool LogonUser(string u, string d, string p, int type, int prov, out System.IntPtr tok);
+[DllImport("kernel32.dll")] public static extern bool CloseHandle(System.IntPtr h);
+public static uint IdleMs() { var i = new LASTINPUTINFO(); i.cbSize = (uint)Marshal.SizeOf(i); GetLastInputInfo(ref i); return (uint)System.Environment.TickCount - i.dwTime; }
+public static bool CheckPassword(string pw) { System.IntPtr t; bool ok = LogonUser("user", ".", pw, 2, 0, out t); if (ok) CloseHandle(t); return ok; }
+"@ -UsingNamespace System.Runtime.InteropServices
+$LOCK_AFTER_MS = 10 * 60 * 1000
+$global:gcxLock = $null
+
+function TryUnlock {
+  $pw = $global:gcxPw; $msg = $global:gcxMsg
+  if ([GCX.Native]::CheckPassword($pw.Password)) {
+    $pw.Clear(); $w = $global:gcxLock; $global:gcxLock = $null; $w.Close(); Log "dashboard unlocked"
+  } else {
+    $global:gcxFails++; $pw.Clear(); $msg.Text = "Wrong password"; Log "dashboard unlock: wrong password"
+    if ($global:gcxFails -ge 3) {
+      $msg.Text = "Wrong password - wait 30 s"; $pw.IsEnabled = $false
+      $t = New-Object Windows.Threading.DispatcherTimer; $t.Interval = [TimeSpan]::FromSeconds(30)
+      $t.Add_Tick({ $global:gcxPw.IsEnabled = $true; $global:gcxMsg.Text = ""; $global:gcxFails = 0; $this.Stop() }); $t.Start()
+    }
+  }
+}
+
+function ShowLock {
+  if ($global:gcxLock) { return }
+  [xml]$lx = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="GCX Server - locked" WindowStyle="None" WindowState="Maximized" ResizeMode="NoResize" Topmost="True" ShowInTaskbar="False" Background="#070912">
+  <Grid>
+    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="420">
+      <Grid Width="70" Height="70" HorizontalAlignment="Center" Margin="0,0,0,18">
+        <Ellipse x:Name="LRing" Width="22" Height="22" Fill="#8FA2FF" Opacity="0.5" RenderTransformOrigin="0.5,0.5">
+          <Ellipse.RenderTransform><ScaleTransform/></Ellipse.RenderTransform></Ellipse>
+        <Ellipse Width="22" Height="22" Fill="#8FA2FF"/>
+      </Grid>
+      <TextBlock Text="GCX SERVER" Foreground="#E9EAFF" FontSize="34" FontFamily="Segoe UI Semibold" HorizontalAlignment="Center"/>
+      <TextBlock x:Name="LClock" Foreground="#8C93B8" FontSize="18" FontFamily="Segoe UI Light" HorizontalAlignment="Center" Margin="0,4,0,6"/>
+      <TextBlock Text="Locked · everything keeps running" Foreground="#5D648C" FontSize="14" HorizontalAlignment="Center" Margin="0,0,0,26"/>
+      <PasswordBox x:Name="LPw" FontSize="20" Padding="12,10" Background="#161A33" Foreground="#EEF0FF" BorderBrush="#2A3060" CaretBrush="#EEF0FF"/>
+      <Button x:Name="LBtn" Content="Unlock" FontSize="17" Padding="10" Margin="0,12,0,0" Background="#5B6CFF" Foreground="White" BorderThickness="0" Cursor="Hand"/>
+      <TextBlock x:Name="LMsg" Foreground="#FF5C7A" FontSize="14" HorizontalAlignment="Center" Margin="0,12,0,0"/>
+      <TextBlock Text="Windows password of the server" Foreground="#4A5078" FontSize="12" HorizontalAlignment="Center" Margin="0,18,0,0"/>
+    </StackPanel>
+  </Grid>
+</Window>
+"@
+  $lw = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $lx))
+  $global:gcxLW = $lw; $global:gcxPw = $lw.FindName("LPw"); $global:gcxMsg = $lw.FindName("LMsg"); $global:gcxClk = $lw.FindName("LClock"); $ring = $lw.FindName("LRing")
+  try {
+    $st = $ring.RenderTransform
+    $st.BeginAnimation([Windows.Media.ScaleTransform]::ScaleXProperty, (Anim 1.0 2.4 2.4 $false))
+    $st.BeginAnimation([Windows.Media.ScaleTransform]::ScaleYProperty, (Anim 1.0 2.4 2.4 $false))
+    $ring.BeginAnimation([Windows.UIElement]::OpacityProperty, (Anim 0.5 0.0 2.4 $false))
+  } catch { }
+  $global:gcxClk.Text = (Get-Date).ToString("yyyy-MM-dd  HH:mm")
+  $global:gcxFails = 0
+  $lw.FindName("LBtn").Add_Click({ TryUnlock })
+  $global:gcxPw.Add_KeyDown({ if ($_.Key -eq "Return") { TryUnlock } })
+  $lw.Add_Closing({ if ($global:gcxLock) { $_.Cancel = $true } })          # can't be closed except by unlocking
+  # stay on top of every other window while locked
+  $keep = New-Object Windows.Threading.DispatcherTimer; $keep.Interval = [TimeSpan]::FromSeconds(2)
+  $keep.Add_Tick({ if ($global:gcxLock) { $global:gcxLW.Topmost = $true; [void]$global:gcxLW.Activate(); $global:gcxClk.Text = (Get-Date).ToString("yyyy-MM-dd  HH:mm") } else { $this.Stop() } })
+  $keep.Start()
+  $global:gcxLock = $lw; $lw.Show(); [void]$lw.Activate(); [void]$global:gcxPw.Focus()
+  Log "dashboard locked"
+}
+
+$idle = New-Object Windows.Threading.DispatcherTimer; $idle.Interval = [TimeSpan]::FromSeconds(5)
+$idle.Add_Tick({ try { if (-not $global:gcxLock -and [GCX.Native]::IdleMs() -ge $LOCK_AFTER_MS) { ShowLock } } catch { Log ("idle check: " + $_.Exception.Message) } })
+$idle.Start()
 [void]$win.ShowDialog()
