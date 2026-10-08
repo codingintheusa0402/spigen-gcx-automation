@@ -260,7 +260,7 @@ function ShowLock {
       </Grid>
       <TextBlock Text="GCX SERVER" Foreground="#E9EAFF" FontSize="34" FontFamily="Segoe UI Semibold" HorizontalAlignment="Center"/>
       <TextBlock x:Name="LClock" Foreground="#8C93B8" FontSize="18" FontFamily="Segoe UI Light" HorizontalAlignment="Center" Margin="0,4,0,6"/>
-      <TextBlock Text="Locked · everything keeps running" Foreground="#5D648C" FontSize="14" HorizontalAlignment="Center" Margin="0,0,0,26"/>
+      <TextBlock Text="Locked · Server Live" Foreground="#5D648C" FontSize="14" HorizontalAlignment="Center" Margin="0,0,0,26"/>
       <PasswordBox x:Name="LPw" FontSize="20" Padding="12,10" Background="#161A33" Foreground="#EEF0FF" BorderBrush="#2A3060" CaretBrush="#EEF0FF"/>
       <Button x:Name="LBtn" Content="Unlock" FontSize="17" Padding="10" Margin="0,12,0,0" Background="#5B6CFF" Foreground="White" BorderThickness="0" Cursor="Hand"/>
       <TextBlock x:Name="LMsg" Foreground="#FF5C7A" FontSize="14" HorizontalAlignment="Center" Margin="0,12,0,0"/>
