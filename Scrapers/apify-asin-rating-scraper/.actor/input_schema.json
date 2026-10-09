@@ -1,0 +1,73 @@
+{
+  "title": "Amazon ASIN Rating Scraper input",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "asins": {
+      "title": "ASINs",
+      "type": "array",
+      "editor": "stringList",
+      "description": "Amazon ASINs (10 chars) or product URLs.",
+      "prefill": [
+        "B0CHX1W1XY"
+      ]
+    },
+    "marketplace": {
+      "title": "Marketplace",
+      "type": "string",
+      "editor": "select",
+      "default": "com",
+      "enum": [
+        "com",
+        "co.uk",
+        "de",
+        "fr",
+        "it",
+        "es",
+        "co.jp",
+        "in",
+        "ca",
+        "com.au",
+        "com.mx",
+        "nl",
+        "se",
+        "pl",
+        "ae",
+        "sa",
+        "sg",
+        "com.br",
+        "com.tr"
+      ],
+      "description": "Amazon domain suffix (amazon.<marketplace>)."
+    },
+    "maxConcurrency": {
+      "title": "Max concurrency",
+      "type": "integer",
+      "default": 5,
+      "minimum": 1,
+      "maximum": 20,
+      "description": "Parallel ASIN requests."
+    },
+    "proxyConfiguration": {
+      "title": "Proxy",
+      "type": "object",
+      "editor": "proxy",
+      "prefill": {
+        "useApifyProxy": true,
+        "apifyProxyGroups": [
+          "RESIDENTIAL"
+        ]
+      },
+      "default": {
+        "useApifyProxy": true,
+        "apifyProxyGroups": [
+          "RESIDENTIAL"
+        ]
+      },
+      "description": "Residential proxies strongly recommended for Amazon."
+    }
+  },
+  "required": [
+    "asins"
+  ]
+}
