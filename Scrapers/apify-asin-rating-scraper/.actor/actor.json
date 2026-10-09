@@ -2,9 +2,13 @@
   "actorSpecification": 1,
   "name": "amazon-asin-rating-scraper",
   "title": "Amazon ASIN Rating & Review Count Scraper",
-  "description": "Get star rating, total ratings count and 5→1 star breakdown for any list of Amazon ASINs across marketplaces.",
+  "description": "Get star rating, total ratings count and 5\u21921 star breakdown for any list of Amazon ASINs across marketplaces.",
   "version": "0.1",
   "buildTag": "latest",
   "input": "./input_schema.json",
-  "dockerfile": "../Dockerfile"
+  "dockerfile": "../Dockerfile",
+  "storages": {
+    "dataset": "./dataset_schema.json"
+  },
+  "output": "./output_schema.json"
 }

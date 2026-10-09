@@ -9,7 +9,12 @@
       "editor": "stringList",
       "description": "Amazon ASINs (10 chars) or product URLs.",
       "prefill": [
-        "B0CHX1W1XY"
+        "B0G7RYP439",
+        "B0G7QZ7RMD"
+      ],
+      "default": [
+        "B0G7RYP439",
+        "B0G7QZ7RMD"
       ]
     },
     "marketplace": {
@@ -65,6 +70,12 @@
         ]
       },
       "description": "Residential proxies strongly recommended for Amazon."
+    },
+    "debugHtml": {
+      "title": "Save HTML (debug)",
+      "type": "boolean",
+      "default": false,
+      "description": "Store fetched pages in the key-value store for troubleshooting."
     }
   },
   "required": [
