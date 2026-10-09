@@ -26,7 +26,8 @@ spigen-gcx-automation/
 │   ├── SC_Master_Propagate/             # SC_/CaspiLM_ tab → master SC sheet → 8 product monitoring books + Chat card
 │   ├── Zendesk_Inquiry_Sync/            # Caspi Solved tickets → '26년 전체문의' sheet, scheduled (skill zendesk-inquiry-sync)
 │   ├── amazon_dp_scraper/               # Amazon /dp/ product detail scraper (Playwright, async)
-│   └── amazon_child_asin_scraper/       # Amazon parent→child ASIN resolver + rating/review scraper
+│   ├── amazon_child_asin_scraper/       # Amazon parent→child ASIN resolver + rating/review scraper
+│   └── apify-asin-rating-scraper/       # Public Apify Store actor: ASIN → rating + ratings count (pay-per-event)
 │
 ├── GAS_ReviewAutomation/                # GAS — review scraping & distribution
 │   ├── MasterTrigger/                   # Daily review distribution job (all products)
@@ -112,6 +113,7 @@ Category indexes: [Scrapers](Scrapers/README.md) · [GAS_ReviewAutomation](GAS_R
 | [Scrapers/Zendesk_Inquiry_Sync](Scrapers/Zendesk_Inquiry_Sync/) | `sync.py` (skill `zendesk-inquiry-sync`): appends new Solved/Closed Zendesk tickets from Caspi to `26년 전체문의` (A:AD, dedupe by Ticket ID, formulas AE~ extended) on a per-user launchd / Windows Task Scheduler schedule, with an optional Chat notice. | [README](Scrapers/Zendesk_Inquiry_Sync/README.md) |
 | [Scrapers/amazon_dp_scraper](Scrapers/amazon_dp_scraper/) | Async Playwright scraper for Amazon `/dp/` pages — rating, review count, title, spec table. Up to 8 domains simultaneously, dual-sheet Excel output (English + local-language). | [README](Scrapers/amazon_dp_scraper/README.md) |
 | [Scrapers/amazon_child_asin_scraper](Scrapers/amazon_child_asin_scraper/) | Selenium scraper that resolves parent ASINs into child variants and extracts per-child rating/review counts. Detects shared variation review pools. | [README](Scrapers/amazon_child_asin_scraper/README.md) |
+| [Scrapers/apify-asin-rating-scraper](Scrapers/apify-asin-rating-scraper/) | Public pay-per-event Apify Store actor — ASIN list → star rating + ratings count across 19 Amazon marketplaces. Daily launchd health check guards against Apify's automated-test maintenance flag. | [README](Scrapers/apify-asin-rating-scraper/README.md) |
 
 ### Google Apps Script — Review automation
 

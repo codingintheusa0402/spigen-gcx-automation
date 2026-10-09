@@ -12,8 +12,8 @@ ok=$(echo "$items" | python3 -c "import sys,json
 try: d=json.load(sys.stdin)
 except Exception: print(0); sys.exit()
 print(sum(1 for r in d if isinstance(r,dict) and r.get('found') and r.get('rating') and r.get('ratingsCount')))")
-status=$(curl -s "https://api.apify.com/v2/acts/$ACTOR?token=$TOKEN" | python3 -c "import sys,json
+actor_state=$(curl -s "https://api.apify.com/v2/acts/$ACTOR?token=$TOKEN" | python3 -c "import sys,json
 d=json.load(sys.stdin)['data']; print('maintenance' if d.get('isUnderMaintenance') or d.get('notice') not in (None,'NONE') else 'ok', d.get('isPublic'))")
-echo "$(date '+%F %T') valid_items=$ok actor=$status" >> $LOG
+echo "$(date '+%F %T') valid_items=$ok actor=$actor_state" >> $LOG
 if [[ "$ok" -lt 2 ]]; then alert "Test run FAILED ($ok/2 valid items) — check $LOG"; fi
-if [[ "$status" == maintenance* ]]; then alert "Apify flagged the actor (under maintenance) — fix before it is hidden"; fi
+if [[ "$actor_state" == maintenance* ]]; then alert "Apify flagged the actor (under maintenance) — fix before it is hidden"; fi
