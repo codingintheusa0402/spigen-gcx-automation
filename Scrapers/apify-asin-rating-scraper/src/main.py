@@ -9,6 +9,7 @@ from parsel import Selector
 
 ASIN_RE = re.compile(r'(?:/dp/|/gp/product/|^)([A-Z0-9]{10})(?:[/?#]|$)', re.I)
 MAX_ATTEMPTS = 6
+DATACENTER_ATTEMPTS = 2
 
 
 def to_asin(s: str) -> str | None:
@@ -74,7 +75,12 @@ async def main() -> None:
         if not asins:
             await Actor.fail(status_message='No valid ASINs in input')
             return
-        proxy = await Actor.create_proxy_configuration(actor_proxy_input=inp.get('proxyConfiguration'))
+        proxy_input = inp.get('proxyConfiguration') or {'useApifyProxy': True}
+        proxy = await Actor.create_proxy_configuration(actor_proxy_input=proxy_input)
+        # Cheap datacenter IPs first; escalate to residential only for ASINs that keep getting blocked.
+        fallback = None
+        if proxy_input.get('useApifyProxy') and not proxy_input.get('apifyProxyGroups'):
+            fallback = await Actor.create_proxy_configuration(groups=['RESIDENTIAL'])
         sem = asyncio.Semaphore(inp.get('maxConcurrency', 5))
         done = 0
 
@@ -83,7 +89,8 @@ async def main() -> None:
             async with sem:
                 result = None
                 for attempt in range(MAX_ATTEMPTS):
-                    proxy_url = await proxy.new_url(session_id=f'{asin}_{attempt}') if proxy else None
+                    cfg = fallback if fallback and attempt >= DATACENTER_ATTEMPTS else proxy
+                    proxy_url = await cfg.new_url(session_id=f'{asin}_{attempt}') if cfg else None
                     try:
                         async with AsyncSession(impersonate='chrome', proxy=proxy_url, timeout=40) as s:
                             r = await fetch_dp(s, asin, domain)

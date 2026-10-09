@@ -24,4 +24,4 @@ Get the **star rating** and **total ratings count** for any list of Amazon ASINs
 Track your own and competitors' ratings over time, monitor rating drops after a product change, build catalog dashboards, schedule daily/weekly snapshots.
 
 ## How it works
-Fetches each product page through rotating residential proxies with a real-browser TLS fingerprint, passes Amazon's "continue shopping" interstitial, and retries blocked requests on a fresh IP (up to 6 times).
+Fetches each product page through Apify datacenter proxies (auto-escalating to residential for blocked ASINs) with a real-browser TLS fingerprint, passes Amazon's "continue shopping" interstitial, and retries blocked requests on a fresh IP (up to 6 times).

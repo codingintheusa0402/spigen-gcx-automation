@@ -58,18 +58,12 @@
       "type": "object",
       "editor": "proxy",
       "prefill": {
-        "useApifyProxy": true,
-        "apifyProxyGroups": [
-          "RESIDENTIAL"
-        ]
+        "useApifyProxy": true
       },
       "default": {
-        "useApifyProxy": true,
-        "apifyProxyGroups": [
-          "RESIDENTIAL"
-        ]
+        "useApifyProxy": true
       },
-      "description": "Residential proxies strongly recommended for Amazon."
+      "description": "Default: Apify datacenter proxy, automatically escalating to residential for ASINs that get blocked. Pick a proxy group to force it for every request."
     },
     "debugHtml": {
       "title": "Save HTML (debug)",
