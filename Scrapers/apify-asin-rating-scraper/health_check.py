@@ -105,7 +105,7 @@ def autofix(problems):
     env = dict(os.environ, PATH=f"{os.path.expanduser('~/.venvs/apify-asin/bin')}:{os.path.expanduser('~/.local/bin')}:/usr/local/bin:/usr/bin:/bin")
     try:
         r = subprocess.run(['claude', '-p', FIX_PROMPT.format(actor=ACTOR, problems='\n'.join(f'- {p}' for p in problems)),
-                            '--dangerously-skip-permissions'], cwd=HERE, env=env, capture_output=True, text=True, timeout=2700)
+                            '--dangerously-skip-permissions'], cwd=HERE, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=2700)
         out = (r.stdout or r.stderr).strip()
     except subprocess.TimeoutExpired:
         out = 'Claude autofix session timed out after 45 min'
