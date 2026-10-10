@@ -113,7 +113,7 @@ Category indexes: [Scrapers](Scrapers/README.md) · [GAS_ReviewAutomation](GAS_R
 | [Scrapers/Zendesk_Inquiry_Sync](Scrapers/Zendesk_Inquiry_Sync/) | `sync.py` (skill `zendesk-inquiry-sync`): appends new Solved/Closed Zendesk tickets from Caspi to `26년 전체문의` (A:AD, dedupe by Ticket ID, formulas AE~ extended) on a per-user launchd / Windows Task Scheduler schedule, with an optional Chat notice. | [README](Scrapers/Zendesk_Inquiry_Sync/README.md) |
 | [Scrapers/amazon_dp_scraper](Scrapers/amazon_dp_scraper/) | Async Playwright scraper for Amazon `/dp/` pages — rating, review count, title, spec table. Up to 8 domains simultaneously, dual-sheet Excel output (English + local-language). | [README](Scrapers/amazon_dp_scraper/README.md) |
 | [Scrapers/amazon_child_asin_scraper](Scrapers/amazon_child_asin_scraper/) | Selenium scraper that resolves parent ASINs into child variants and extracts per-child rating/review counts. Detects shared variation review pools. | [README](Scrapers/amazon_child_asin_scraper/README.md) |
-| [Scrapers/apify-asin-rating-scraper](Scrapers/apify-asin-rating-scraper/) | Public pay-per-event Apify Store actor — ASIN list → star rating + ratings count across 19 Amazon marketplaces. Daily launchd health check guards against Apify's automated-test maintenance flag. | [README](Scrapers/apify-asin-rating-scraper/README.md) |
+| [Scrapers/apify-asin-rating-scraper](Scrapers/apify-asin-rating-scraper/) | Public pay-per-event Apify Store actor — ASIN list → star rating + ratings count across 19 Amazon marketplaces. Daily server-side health check (auto-fix + redeploy) guards against Apify's automated-test maintenance flag. | [README](Scrapers/apify-asin-rating-scraper/README.md) |
 
 ### Google Apps Script — Review automation
 
