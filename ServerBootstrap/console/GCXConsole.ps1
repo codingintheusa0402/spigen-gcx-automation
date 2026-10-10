@@ -203,7 +203,11 @@ function RefreshSchedule {
 }
 $timer = New-Object Windows.Threading.DispatcherTimer; $timer.Interval = [TimeSpan]::FromSeconds(30); $timer.Add_Tick({ Refresh }); $timer.Start()
 $timer2 = New-Object Windows.Threading.DispatcherTimer; $timer2.Interval = [TimeSpan]::FromSeconds(60); $timer2.Add_Tick({ RefreshSchedule }); $timer2.Start()
-$win.Add_ContentRendered({ Refresh; RefreshSchedule })
+$win.Add_ContentRendered({
+  Refresh; RefreshSchedule
+  # started right after a Windows boot (auto sign-in) → lock straight away
+  try { if (((Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime).TotalMinutes -lt 10) { ShowLock } } catch { }
+})
 $win.Add_KeyDown({
   if ($_.Key -eq "F5") { Refresh; RefreshSchedule }
   if ($_.Key -eq "L" -and ([Windows.Input.Keyboard]::Modifiers -band [Windows.Input.ModifierKeys]::Control)) { ShowLock }   # Ctrl+L = lock now
