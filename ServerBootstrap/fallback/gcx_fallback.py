@@ -2,8 +2,9 @@
 """Mac fallback for the gcx-server scheduled jobs — Mac launchd com.spigen.gcx.server-fallback, every 5 min.
 
 When the server misses its heartbeat (sheet, every 2 min) for > 7 min AND can't be reached over Tailscale
-on 2 checks in a row, the Mac takes over: it runs the server's jobs below on the same schedule until the
-heartbeat comes back, then hands back. Takeover / hand-back are posted to the GCX Server room.
+on 2 checks in a row, the Mac takes over: it runs the server's jobs below on the same schedule, plus the AI Trader
+engine and the Zendesk ticket monitor (gcx_fallback_services.py), until the heartbeat comes back, then hands
+everything back. Takeover / hand-back are posted to the GCX Server room.
 
 Double sends are prevented by the shared run ledger (gcx_ledger.py): every job records its real runs there,
 and the Mac only takes over once the server's heartbeat says its jobs use it ("ledger:1").
@@ -18,6 +19,7 @@ G = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(G, "ServerBootstrap", "watchdog"))
 import gcx_ledger  # noqa: E402
+import gcx_fallback_services as S  # noqa: E402
 
 STATE = os.path.expanduser("~/.gcx-fallback.json")
 RUN_DIR = os.path.expanduser("~/.gcx-fallback")            # pid files + per-job logs
@@ -30,7 +32,7 @@ SSH = [["ssh", "-o", "ConnectTimeout=8", "-o", "BatchMode=yes", "kevinkim@gcx-se
         "-o", "BatchMode=yes", "user@claude-server", "echo ok"]]
 
 # Same jobs + times as the server crontab (ServerBootstrap/crontab.txt). NOT here on purpose: git-autosync
-# (the Mac has its own), watchdog/heartbeat (server-only), mock-trader (real-money trading engine).
+# (the Mac has its own), watchdog/heartbeat (server-only). AI Trader + ticket monitor are always-on services → gcx_fallback_services.py.
 JOBS = [
     ("BadReview broadcast",         "30 10 * * 1-5", "GAS_Operations/BadReview_ChatReport", ["auto_broadcast.py"]),
     ("BadReview retry (11:30)",     "30 11 * * 1-5", "GAS_Operations/BadReview_ChatReport", ["auto_broadcast.py", "--retry-if-held"]),
@@ -133,29 +135,46 @@ def main():
     st["streak"] = st.get("streak", 0) + 1 if down else 0
     st["heartbeat_age_min"] = round(age_min, 1)
 
-    if st["mode"] == "normal" and st["streak"] >= STREAK:
+    lines = []
+    if not st.get("outage") and st["streak"] >= STREAK:
+        st["outage"] = now.isoformat(timespec="minutes")
+        log("server down → taking over")
         if armed:
-            st.update(mode="fallback", since=now.isoformat(timespec="minutes"), ran=[], last_tick=(now - datetime.timedelta(minutes=5)).isoformat())
-            log("server down → taking over")
-            alert("Server down — Mac took over the scheduled jobs",
-                  f"No heartbeat from gcx-server for <b>{age_min:.0f} min</b> and it can't be reached over Tailscale.<br>"
-                  f"Until it's back, this Mac runs: {', '.join(j[0] for j in JOBS)}.<br>"
-                  "Nothing is sent twice — every run is checked against the shared run ledger.", "warn")
-        elif not st.get("unarmed_alerted"):
-            st["unarmed_alerted"] = True
-            alert("Server down — Mac fallback NOT armed",
-                  "The server is unreachable, but it hasn't yet run the version of the jobs that records runs in the "
-                  "shared ledger, so the Mac won't take over (it could double-send). It arms itself automatically "
-                  "the next time the server is online for a few minutes.", "bad")
-    elif st["mode"] == "fallback" and age_min <= DOWN_AFTER_MIN:
-        ran = st.get("ran", [])
-        log("server back → handing back")
-        alert("Server back — Mac handed the jobs back",
-              f"Mac covered from {st.get('since', '?')[-5:]} to {now:%H:%M}. "
-              + (f"Runs started on the Mac: {', '.join(ran[-20:])}." if ran else "No job was due in that time."), "ok")
-        st.update(mode="normal", ran=[])
-    if armed:
-        st.pop("unarmed_alerted", None)
+            st.update(mode="fallback", since=st["outage"], ran=[], last_tick=(now - datetime.timedelta(minutes=5)).isoformat())
+            lines.append(f"Scheduled jobs: running on the Mac — {', '.join(j[0] for j in JOBS)}. Nothing is sent twice "
+                         "(every run is checked against the shared run ledger).")
+        else:
+            lines.append("Scheduled jobs: NOT taken over — the server hasn't run the job code that records runs in the "
+                         "shared ledger yet, so the Mac could double-send. Arms itself the next time the server is online.")
+        for svc in S.SERVICES:
+            lines.append(S.takeover(svc, st, log))
+        took = any("running on the Mac" in l for l in lines)
+        alert("Server down — Mac took over" if took else "Server down — Mac fallback not armed yet",
+              f"No heartbeat from gcx-server for <b>{age_min:.0f} min</b> and it can't be reached over Tailscale.<br>• "
+              + "<br>• ".join(lines) + "<br>The Mac checks the server every 5 min and hands everything back when it recovers.", "warn" if took else "bad")
+    elif st.get("outage") and age_min <= DOWN_AFTER_MIN:
+        if st["mode"] == "fallback":
+            ran = st.get("ran", [])
+            lines.append(f"Scheduled jobs: back on the server. " + (f"Runs started on the Mac: {', '.join(ran[-20:])}." if ran else "No job was due meanwhile."))
+            st.update(mode="normal", ran=[])
+        pending = False
+        for svc in S.SERVICES:
+            if st.get("svc", {}).get(svc, {}).get("active"):
+                r = S.handback(svc, st, log)
+                if r:
+                    lines.append(r)
+                if st["svc"][svc].get("active"):
+                    pending = True
+        if lines:
+            alert("Server back — Mac handed back", f"Mac covered from {st['outage'][-5:]} to {now:%H:%M}.<br>• " + "<br>• ".join(lines), "ok")
+        if not pending:
+            st.pop("outage", None)
+    for svc in S.SERVICES:
+        if st.get("svc", {}).get(svc, {}).get("active"):
+            S.keep(svc, st, log)
+    if not st.get("outage") and age_min <= DOWN_AFTER_MIN:
+        S.mirror(st)
+        S.ensure_gates(st, log)
 
     if st["mode"] == "fallback":
         last = datetime.datetime.fromisoformat(st.get("last_tick") or now.isoformat())
