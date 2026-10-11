@@ -184,3 +184,13 @@ function needReauth_(err) {
   MailApp.sendEmail(Session.getEffectiveUser().getEmail(), 'GCX KakaoRelay: reconnect KakaoTalk',
     'KakaoTalk alerts stopped: ' + err.message + '\n\nReconnect (one click): ' + url);
 }
+
+// Run once from the editor if the relay logs "insufficient authentication scopes": asks Google for every scope in
+// appsscript.json (granular consent lets single scopes be skipped — tick them all), then re-arms the trigger.
+function authorize() {
+  ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL);
+  installTrigger();
+  const r = UrlFetchApp.fetch('https://chat.googleapis.com/v1/' + SPACE + '/messages?pageSize=1',
+    { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+  Logger.log('Chat read check: ' + r.getResponseCode() + (r.getResponseCode() === 200 ? ' OK' : ' ' + r.getContentText().slice(0, 200)));
+}
