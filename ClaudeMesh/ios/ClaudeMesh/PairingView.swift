@@ -9,17 +9,17 @@ struct PairingView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Color(red: 0.10, green: 0.09, blue: 0.31), Color(red: 0.02, green: 0.02, blue: 0.10)], startPoint: .top, endPoint: .bottom).ignoresSafeArea()
+            Color.black.ignoresSafeArea()
             VStack(spacing: 22) {
                 Image("AppIconImage").resizable().frame(width: 84, height: 84).clipShape(RoundedRectangle(cornerRadius: 20))
-                    .shadow(color: .blue.opacity(0.5), radius: 18)
-                Text("G C X   M E S H").font(.system(size: 17, weight: .light)).foregroundStyle(.white)
+                    
+                Text("GCX Mesh").font(.system(size: 22, weight: .semibold)).foregroundStyle(Color(red: 0.925, green: 0.922, blue: 0.902))
                 Text("On your Mac open GCX Mesh, click 📱, turn on phone access, then scan the QR code.\nUse the Tailscale code to connect from anywhere.")
                     .font(.footnote).multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.65)).padding(.horizontal, 28)
                 Button { scanning = true } label: {
                     Label("Scan QR code", systemImage: "qrcode.viewfinder").font(.headline).padding(.horizontal, 26).padding(.vertical, 13)
-                        .background(Capsule().fill(Color(red: 0.435, green: 0.608, blue: 1)))
-                        .foregroundStyle(Color(red: 0.03, green: 0.06, blue: 0.23))
+                        .background(Capsule().fill(Color(red: 0.929, green: 0.902, blue: 0.839)))
+                        .foregroundStyle(Color(red: 0.078, green: 0.067, blue: 0.043))
                 }
                 VStack(spacing: 8) {
                     TextField("…or paste the pairing link", text: $pasted).textInputAutocapitalization(.never).autocorrectionDisabled()

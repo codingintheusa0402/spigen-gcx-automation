@@ -178,14 +178,14 @@ Object.assign(Mesh.prototype, {
     const name = s.name.length > 30 ? s.name.slice(0, 29) + '…' : s.name;
     const l2 = `${(s.model || '—').replace('claude-', '')}  ·  $${s.todayUsd.toFixed(2)}`;
     const l3 = (work ? `working · ${Math.round(s.tps)} tok/s` : s.health) + (s.owner ? '  ·  in-app' : '') + (s.serverUses ? '  ·  ⇄ server' : '');
-    ctx.font = '600 12px system-ui, "Apple SD Gothic Neo"'; const w1 = ctx.measureText(name).width;
-    ctx.font = '400 10.5px system-ui'; const pw = Math.max(w1, ctx.measureText(l2).width, ctx.measureText(l3).width) + 22;
+    ctx.font = '600 12px -apple-system, system-ui, sans-serif, "Apple SD Gothic Neo"'; const w1 = ctx.measureText(name).width;
+    ctx.font = '400 10.5px -apple-system, system-ui, sans-serif'; const pw = Math.max(w1, ctx.measureText(l2).width, ctx.measureText(l3).width) + 22;
     const py = n.y + R + 22, ph = 46; n.labelW = pw;
     ctx.fillStyle = 'rgba(0,0,0,.72)'; ctx.strokeStyle = hexA(mix(P.rim, .3), .3 + .25 * n.swell); ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(n.x - pw / 2, py, pw, ph, 8); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
-    ctx.font = '600 12px system-ui, "Apple SD Gothic Neo"'; ctx.fillStyle = '#f2f3ff'; ctx.fillText(name, n.x, py + 15);
-    ctx.font = '400 10.5px system-ui'; ctx.fillStyle = hexA(mix(col, .4), .95); ctx.fillText(l2, n.x, py + 29);
+    ctx.font = '600 12px -apple-system, system-ui, sans-serif, "Apple SD Gothic Neo"'; ctx.fillStyle = '#f2f3ff'; ctx.fillText(name, n.x, py + 15);
+    ctx.font = '400 10.5px -apple-system, system-ui, sans-serif'; ctx.fillStyle = hexA(mix(col, .4), .95); ctx.fillText(l2, n.x, py + 29);
     ctx.fillStyle = HEALTH_COLOR[s.health] || '#9fb4d8'; ctx.fillText(l3, n.x, py + 41);
     ctx.globalAlpha = 1;
   },

@@ -316,11 +316,11 @@ class Mesh {
     ctx.strokeStyle = 'rgba(220,240,255,.8)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(h.x, h.y, R, 0, 6.29); ctx.stroke();
     if (this.hover === 'hub') { ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.setLineDash([2, 5]); ctx.beginPath(); ctx.arc(h.x, h.y, R + 10, t, t + 6.283); ctx.stroke(); ctx.setLineDash([]); }
     ctx.textAlign = 'center'; ctx.fillStyle = '#0a1240';
-    ctx.font = '600 15px system-ui'; ctx.fillText(`${Math.round(h.tps)}`, h.x, h.y + 1);
-    ctx.font = '500 9px system-ui'; ctx.fillText('tok/s', h.x, h.y + 12);
-    ctx.fillStyle = 'rgba(220,230,255,.9)'; ctx.font = '300 13px system-ui';
+    ctx.font = '600 15px -apple-system, system-ui, sans-serif'; ctx.fillText(`${Math.round(h.tps)}`, h.x, h.y + 1);
+    ctx.font = '500 9px -apple-system, system-ui, sans-serif'; ctx.fillText('tok/s', h.x, h.y + 12);
+    ctx.fillStyle = 'rgba(220,230,255,.9)'; ctx.font = '300 13px -apple-system, system-ui, sans-serif';
     ctx.fillText(`$${(h.usd || 0).toFixed(2)}  today`, h.x, h.y + R + 44);
-    ctx.fillStyle = 'rgba(160,170,220,.75)'; ctx.font = '300 11px system-ui';
+    ctx.fillStyle = 'rgba(160,170,220,.75)'; ctx.font = '300 11px -apple-system, system-ui, sans-serif';
     ctx.fillText(`${h.working || 0} / ${h.count}  active`.split('').join(String.fromCharCode(8202)), h.x, h.y + R + 60);
   }
 
@@ -397,14 +397,14 @@ class Mesh {
     const name = s.name.length > 30 ? s.name.slice(0, 29) + '…' : s.name;
     const l2 = `${(s.model || '—').replace('claude-', '')}  ·  $${s.todayUsd.toFixed(2)}`;
     const l3 = (s.health === 'working' ? `working · ${Math.round(s.tps)} tok/s` : s.health) + (s.owner ? '  ·  in-app' : '');
-    ctx.font = '600 12px system-ui, "Apple SD Gothic Neo"'; const w1 = ctx.measureText(name).width;
-    ctx.font = '400 10.5px system-ui'; const pw = Math.max(w1, ctx.measureText(l2).width, ctx.measureText(l3).width) + 22;
+    ctx.font = '600 12px -apple-system, system-ui, sans-serif, "Apple SD Gothic Neo"'; const w1 = ctx.measureText(name).width;
+    ctx.font = '400 10.5px -apple-system, system-ui, sans-serif'; const pw = Math.max(w1, ctx.measureText(l2).width, ctx.measureText(l3).width) + 22;
     const py = n.y + R + 20, ph = 46;
     ctx.fillStyle = 'rgba(12,12,40,.72)'; ctx.strokeStyle = hexA(mix(col, .3), .35 + .25 * n.swell); ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(n.x - pw / 2, py, pw, ph, 8); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
-    ctx.font = '600 12px system-ui, "Apple SD Gothic Neo"'; ctx.fillStyle = '#f2f3ff'; ctx.fillText(name, n.x, py + 15);
-    ctx.font = '400 10.5px system-ui'; ctx.fillStyle = hexA(mix(col, .35), .95); ctx.fillText(l2, n.x, py + 29);
+    ctx.font = '600 12px -apple-system, system-ui, sans-serif, "Apple SD Gothic Neo"'; ctx.fillStyle = '#f2f3ff'; ctx.fillText(name, n.x, py + 15);
+    ctx.font = '400 10.5px -apple-system, system-ui, sans-serif'; ctx.fillStyle = hexA(mix(col, .35), .95); ctx.fillText(l2, n.x, py + 29);
     ctx.fillStyle = HEALTH_COLOR[s.health] || '#9fb4d8'; ctx.fillText(l3, n.x, py + 41);
     ctx.globalAlpha = 1;
   }
@@ -421,13 +421,13 @@ class Mesh {
       if (f.kind === 'ko') {              // a rival was absorbed
         const k = f.t / 1.6; ctx.strokeStyle = hexA(f.color, (1 - k) * .9); ctx.lineWidth = 2;
         for (let i = 0; i < 2; i++) { ctx.beginPath(); ctx.arc(f.x, f.y, 10 + k * (70 + i * 40), 0, 6.29); ctx.stroke(); }
-        ctx.fillStyle = hexA(f.color, 1 - k); ctx.font = '500 12px system-ui'; ctx.textAlign = 'center';
+        ctx.fillStyle = hexA(f.color, 1 - k); ctx.font = '500 12px -apple-system, system-ui, sans-serif'; ctx.textAlign = 'center';
         ctx.fillText(f.by === 'you' ? `${f.name} absorbed!` : `${f.by} ate ${f.name}`, f.x, f.y - 20 - k * 16); return k < 1;
       }
       if (f.kind === 'eaten') {           // the cursor mote was swallowed
         const k = f.t / 1.2; ctx.strokeStyle = `rgba(255,92,108,${(1 - k) * .8})`; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(f.x, f.y, 6 + k * 50, 0, 6.29); ctx.stroke();
-        ctx.fillStyle = `rgba(255,170,180,${1 - k})`; ctx.font = '300 11px system-ui'; ctx.textAlign = 'center';
+        ctx.fillStyle = `rgba(255,170,180,${1 - k})`; ctx.font = '300 11px -apple-system, system-ui, sans-serif'; ctx.textAlign = 'center';
         ctx.fillText('A B S O R B E D', f.x, f.y - 16 - k * 10); return k < 1;
       }
       if (f.kind === 'wave') {            // ejection shockwave

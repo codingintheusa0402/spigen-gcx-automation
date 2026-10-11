@@ -140,7 +140,7 @@ Object.assign(Mesh.prototype, {
     const ctx = this.ctx, h = this.hub, R = this.motherRadius();
     const below = this.drawLimits(ctx, h.x, h.y + R * 1.22 + 8);
     ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(236,235,230,.85)'; ctx.font = '300 13px system-ui';
+    ctx.fillStyle = 'rgba(236,235,230,.85)'; ctx.font = '300 13px -apple-system, system-ui, sans-serif';
     ctx.fillText(`$${(h.usd || 0).toFixed(2)}  today  ·  ${h.working || 0} / ${h.count} active`, h.x, below + 17);
   },
 
@@ -152,15 +152,15 @@ Object.assign(Mesh.prototype, {
     ctx.fillStyle = 'rgba(0,0,0,.78)'; ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(x, y, W, H, 12); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(236,235,230,.6)';
-    ctx.font = '600 10.5px system-ui'; ctx.fillText('Usage left', cx, y + 14);
-    if (!L.length) { ctx.fillStyle = 'rgba(220,225,255,.7)'; ctx.font = '300 11px system-ui'; ctx.fillText('loading…', cx, y + 34); ctx.restore(); return y + H; }
+    ctx.font = '600 10.5px -apple-system, system-ui, sans-serif'; ctx.fillText('Usage left', cx, y + 14);
+    if (!L.length) { ctx.fillStyle = 'rgba(220,225,255,.7)'; ctx.font = '300 11px -apple-system, system-ui, sans-serif'; ctx.fillText('loading…', cx, y + 34); ctx.restore(); return y + H; }
     L.forEach((l, i) => {
       const left = Math.max(0, 100 - l.used), ry = y + 20 + i * RH, col = limitColor(left);
-      ctx.textAlign = 'left'; ctx.fillStyle = '#eef0ff'; ctx.font = `${l.active ? 600 : 400} 11.5px system-ui`;
+      ctx.textAlign = 'left'; ctx.fillStyle = '#eef0ff'; ctx.font = `${l.active ? 600 : 400} 11.5px -apple-system, system-ui, sans-serif`;
       ctx.fillText(l.label, x + 12, ry + 11);
-      ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(155,154,163,.9)'; ctx.font = '300 9.5px system-ui';
+      ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(155,154,163,.9)'; ctx.font = '300 9.5px -apple-system, system-ui, sans-serif';
       ctx.fillText(fmtReset(l.resetsAt), x + W - 50, ry + 11);
-      ctx.fillStyle = col; ctx.font = '600 11.5px system-ui'; ctx.fillText(Math.round(left) + '%', x + W - 12, ry + 11);
+      ctx.fillStyle = col; ctx.font = '600 11.5px -apple-system, system-ui, sans-serif'; ctx.fillText(Math.round(left) + '%', x + W - 12, ry + 11);
       ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 12, ry + 16, W - 24, 2.5);
       ctx.fillStyle = col; ctx.fillRect(x + 12, ry + 16, (W - 24) * left / 100, 2.5);
     });

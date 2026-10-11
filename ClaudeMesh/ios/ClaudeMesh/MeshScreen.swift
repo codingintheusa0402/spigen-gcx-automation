@@ -12,7 +12,7 @@ struct MeshScreen: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.02, green: 0.016, blue: 0.10).ignoresSafeArea()
+            Color.black.ignoresSafeArea()
             MeshWebView(urls: pairing.urls, attempt: attempt, failed: $failed).ignoresSafeArea()
             if failed {
                 VStack(spacing: 14) {
@@ -22,7 +22,7 @@ struct MeshScreen: View {
                         .font(.footnote).multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.65))
                     HStack { Button("Retry") { failed = false; attempt += 1 }.buttonStyle(.borderedProminent)
                              Button("Re-pair") { pairing.reset() }.buttonStyle(.bordered) }
-                }.padding(30).background(RoundedRectangle(cornerRadius: 24).fill(Color(red: 0.08, green: 0.07, blue: 0.25).opacity(0.95)))
+                }.padding(30).background(RoundedRectangle(cornerRadius: 16).fill(Color(white: 0.06)).overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.14))))
             }
         }
         .onChange(of: phase) { _, p in if p == .active && failed { failed = false; attempt += 1 } }
@@ -45,7 +45,7 @@ struct MeshWebView: UIViewRepresentable {
         cfg.allowsInlineMediaPlayback = true
         cfg.websiteDataStore = .default()                       // keeps the pairing key + saved orbits
         let wv = WKWebView(frame: .zero, configuration: cfg)
-        wv.isOpaque = false; wv.backgroundColor = UIColor(red: 0.02, green: 0.016, blue: 0.10, alpha: 1)
+        wv.isOpaque = false; wv.backgroundColor = UIColor.black
         wv.scrollView.bounces = false; wv.scrollView.contentInsetAdjustmentBehavior = .never
         wv.allowsBackForwardNavigationGestures = false
         wv.navigationDelegate = context.coordinator; wv.uiDelegate = context.coordinator
