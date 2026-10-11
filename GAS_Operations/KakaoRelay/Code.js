@@ -90,9 +90,16 @@ function accessToken_() {
 }
 
 /* ---------------- send to KakaoTalk (나에게 보내기) ---------------- */
+// KakaoTalk's in-app browser can't hand chat.google.com links to the Google Chat app (it shows an "install the app"
+// page), so Chat links go through a tiny page (public repo codingintheusa0402/gcx-links, domain registered in the Kakao
+// app) that asks KakaoTalk to open the link in Safari → iOS opens the Chat app.
+const CHAT_OPENER = 'https://codingintheusa0402.github.io/gcx-links/';
+const viaOpener_ = u => /^https:\/\/chat\.google\.com\//.test(u) ? CHAT_OPENER + '?p=' + encodeURIComponent(u.replace('https://chat.google.com', '')) : u;
+
 function kakaoSend_(text, url, title) {
+  const link = viaOpener_(url || ROOM_URL);
   const tpl = { object_type: 'text', text: text.length > 200 ? text.slice(0, 199) + '…' : text,
-    link: { web_url: url || ROOM_URL, mobile_web_url: url || ROOM_URL }, button_title: title || 'Chat에서 보기' };
+    link: { web_url: link, mobile_web_url: link }, button_title: title || 'Chat에서 보기' };
   const go = () => UrlFetchApp.fetch('https://kapi.kakao.com/v2/api/talk/memo/default/send', {
     method: 'post', headers: { Authorization: 'Bearer ' + accessToken_() },
     payload: { template_object: JSON.stringify(tpl) }, muteHttpExceptions: true });
