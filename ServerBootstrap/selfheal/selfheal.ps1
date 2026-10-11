@@ -10,7 +10,7 @@ $fixed = @()
 foreach ($s in "sshd", "Tailscale", "tvnserver") {
   $x = Get-Service $s
   if ($x -and $x.Status -ne "Running") { Start-Service $s; Start-Sleep 3; $ok = (Get-Service $s).Status -eq "Running"
-    $fixed += "$s service" + $(if ($ok) { "" } else { " (restart FAILED)" }); L "service $s → $((Get-Service $s).Status)" }
+    $fixed += "$s service" + $(if ($ok) { "" } else { " (restart FAILED)" }); L "service $s -> $((Get-Service $s).Status)" }
 }
 # GCX dashboard: the shell.ps1 loop relaunches GCXConsole; if the loop itself is gone, start it again
 $ps = Get-CimInstance Win32_Process -Filter "Name='powershell.exe'"
@@ -29,7 +29,7 @@ wsl.exe -d Ubuntu -u kevinkim -e bash -lc "bash ~/Desktop/GCX/ServerBootstrap/se
 if ($fixed.Count) {
   try {
     $hook = (Get-Content "C:\GCX-Setup\alerts\webhook.txt" -Raw).Trim()
-    $body = @{ cardsV2 = @(@{ cardId = "selfheal"; card = @{ header = @{ title = "🟢 Self-heal: restarted what had stopped"; subtitle = "GCX Server · Windows · $(Get-Date -f 'MM-dd HH:mm')" };
+    $body = @{ cardsV2 = @(@{ cardId = "selfheal"; card = @{ header = @{ title = "$([char]::ConvertFromUtf32(0x1F7E2)) Self-heal: restarted what had stopped"; subtitle = "GCX Server · Windows · $(Get-Date -f 'MM-dd HH:mm')" };
       sections = @(@{ widgets = @(@{ textParagraph = @{ text = (($fixed | ForEach-Object { "• restarted: $_" }) -join "<br>") } }) }) } }) } | ConvertTo-Json -Depth 12
     Invoke-RestMethod -Uri $hook -Method Post -ContentType "application/json; charset=UTF-8" -Body ([Text.Encoding]::UTF8.GetBytes($body)) | Out-Null
   } catch { L "alert failed: $_" }

@@ -25,3 +25,5 @@ G=/home/kevinkim/Desktop/GCX
 # the Mac (launchd com.spigen.gcx.server-fallback, ServerBootstrap/fallback/gcx_fallback.py) runs the badreview,
 # backfill, discoloration and apify-health jobs above until it's back. Keep its JOBS list in step with this file.
 # Double sends are blocked by the shared run ledger (fallback/gcx_ledger.py, tab `ledger` of the heartbeat sheet).
+# Self-heal (2026-10-11): */2 gcx_selfheal.sh (# mesh:selfheal, adds itself) + Windows task GCX-SelfHeal (selfheal/selfheal.ps1)
+# restart whatever stopped. Mac fallback also covers the AI Trader engine + ticket monitor (fallback/gcx_owner.py).
