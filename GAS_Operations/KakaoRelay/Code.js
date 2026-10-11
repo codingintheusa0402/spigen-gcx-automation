@@ -65,7 +65,7 @@ function status() {
 }
 
 const redirectUri_ = () => P.getProperty('REDIRECT_URI') || ScriptApp.getService().getUrl();
-const authUrl_ = () => 'https://kauth.kakao.com/oauth/authorize?response_type=code&scope=talk_message'
+const authUrl_ = () => 'https://kauth.kakao.com/oauth/authorize?response_type=code&scope=talk_message&prompt=consent'   // always show the consent screen (talk_message is optional — must be ticked)
   + '&client_id=' + encodeURIComponent(P.getProperty('KAKAO_REST_KEY') || '')
   + '&redirect_uri=' + encodeURIComponent(redirectUri_());
 
