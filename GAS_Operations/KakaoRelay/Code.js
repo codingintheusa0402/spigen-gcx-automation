@@ -128,7 +128,9 @@ function relay() {
         // survives the 200-char cut and can be tapped; the button still opens the Chat thread (registered domain)
         const act = actionUrl_(m);
         const body = act ? ((/otp/i.test(act) ? '🔐 OTP 입력: ' : '🔑 로그인: ') + act + '\n' + text.replace(act, '').trim()) : text;
-        try { kakaoSend_(body, threadUrl_(m)); }
+        // links on a domain registered in the Kakao app (trycloudflare.com = SC scraper OTP page) → the button opens them
+        const direct = act && /^https:\/\/[^\/]*trycloudflare\.com\//.test(act);
+        try { direct ? kakaoSend_(body, act, /otp/i.test(act) ? 'OTP 입력하기' : '열기') : kakaoSend_(body, threadUrl_(m)); }
         catch (err) { if (/token|401|invalid_grant|not connected/i.test(err.message)) { needReauth_(err); return; } throw err; }
       }
       since = m.createTime; P.setProperty('LAST_CREATE', since);
