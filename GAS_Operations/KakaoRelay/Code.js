@@ -124,9 +124,11 @@ function relay() {
       const isBot = m.sender && m.sender.type === 'BOT';
       const text = messageText_(m);
       if (isBot && text && text.indexOf(RELAY_TAG) < 0) {
-        // a message that asks for something (OTP page, re-login page) → the Kakao button opens THAT page
+        // a message that asks for something (OTP page, re-login page): put that link at the TOP of the Kakao text so it
+        // survives the 200-char cut and can be tapped; the button still opens the Chat thread (registered domain)
         const act = actionUrl_(m);
-        try { act ? kakaoSend_(text, act, /otp/i.test(act) ? 'OTP 입력하기' : '로그인 / 열기') : kakaoSend_(text, threadUrl_(m)); }
+        const body = act ? ((/otp/i.test(act) ? '🔐 OTP 입력: ' : '🔑 로그인: ') + act + '\n' + text.replace(act, '').trim()) : text;
+        try { kakaoSend_(body, threadUrl_(m)); }
         catch (err) { if (/token|401|invalid_grant|not connected/i.test(err.message)) { needReauth_(err); return; } throw err; }
       }
       since = m.createTime; P.setProperty('LAST_CREATE', since);

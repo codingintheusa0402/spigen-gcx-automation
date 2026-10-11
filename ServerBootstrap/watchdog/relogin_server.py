@@ -10,7 +10,7 @@ lives only in memory for the duration of the sign-in.
 Targets:  amazon:<tld>          Amazon customer account (photo check / scraper image fetch)
           sellercentral:<US|EU|JP|IN>   Seller Central (SC scraper)
 """
-import asyncio, html, json, os, subprocess, time
+import sys, asyncio, html, json, os, subprocess, time
 from aiohttp import web
 
 TOKENS = os.path.expanduser("~/.gcx-relogin/tokens.json")
@@ -53,6 +53,25 @@ def profile_and_url(target):
         per = f"{BASE_PROFILE}_{arg}"
         return (per if os.path.isdir(per) else BASE_PROFILE), SC_URL[arg]
     raise ValueError(target)
+
+
+TLD_DOMAIN = {"com": "US", "ca": "CA", "com.mx": "MX", "co.uk": "UK", "de": "DE", "fr": "FR", "it": "IT", "es": "ES",
+              "nl": "NL", "se": "SE", "pl": "PL", "com.be": "BE", "co.jp": "JP", "in": "IN"}
+
+
+def saved_login(target):
+    """Email/password for target from the SC scraper's credentials file on this server (typed there by the user) —
+    so the page can be left blank and only the authenticator code is needed."""
+    try:
+        sys.path.insert(0, os.path.expanduser("~/Desktop/GCX/Scrapers/SC_Review_Scraper"))
+        from sc_auth import load_credentials, credential_group
+        creds = load_credentials("~/.config/sc_scraper/credentials.txt")
+        kind, _, arg = target.partition(":")
+        dom = TLD_DOMAIN.get(arg, arg.upper()) if kind == "amazon" else arg.upper()
+        c = creds.get(credential_group(dom)) or creds.get(dom) or {}
+        return c.get("email", ""), c.get("password", "")
+    except Exception:
+        return "", ""
 
 
 async def do_login(tok, target, email, password):
@@ -111,10 +130,12 @@ async def get_form(req):
     if not target:
         return page('<p class="bad">This link has expired or was already used.</p>')
     return page(f'<p>Sign in again: <b>{html.escape(target)}</b></p>'
-                f'<form method="post"><label class="m">Email</label><input name="email" type="email" autocomplete="username" required>'
-                f'<label class="m">Password</label><input name="password" type="password" autocomplete="current-password" required>'
+                f'<form method="post"><label class="m">Email (leave blank to use the account saved on the server)</label>'
+                f'<input name="email" type="email" autocomplete="username">'
+                f'<label class="m">Password (leave blank to use the saved one)</label>'
+                f'<input name="password" type="password" autocomplete="current-password">'
                 f'<button>Sign in on the server</button></form>'
-                f'<p class="m">Used once for this sign-in, never saved. If Amazon asks for a code, this page will ask you for it.</p>')
+                f'<p class="m">Typed values are used once for this sign-in, never saved. If Amazon asks for a code, this page will ask you for it.</p>')
 
 
 async def post_form(req):
@@ -123,7 +144,11 @@ async def post_form(req):
         raise web.HTTPFound(f"/r/{tok}/status" if tok in jobs else f"/r/{tok}")
     d = await req.post()
     jobs[tok] = {"state": "working", "msg": "opening Chrome on the server…", "otp_event": asyncio.Event(), "otp": None}
-    asyncio.create_task(do_login(tok, target, str(d.get("email", "")).strip(), str(d.get("password", ""))))
+    email, password = str(d.get("email", "")).strip(), str(d.get("password", ""))
+    if not email or not password:                         # left blank → use the account saved on the server
+        se, sp = saved_login(target)
+        email, password = email or se, password or sp
+    asyncio.create_task(do_login(tok, target, email, password))
     raise web.HTTPFound(f"/r/{tok}/status")
 
 
