@@ -12,7 +12,7 @@ let lastSnap = null, phone = null;
 
 const HOME = os.homedir();
 // renamed Claude Mesh → GCX Mesh: keep using the original data folder so pairing, caches and saved orbits survive
-app.setPath('userData', path.join(app.getPath('appData'), 'Claude Mesh'));
+app.setPath('userData', process.env.MESH_USERDATA || path.join(app.getPath('appData'), 'Claude Mesh'));   // MESH_USERDATA: isolated test runs
 const collector = new Collector();
 const ptys = new Map();          // id -> { proc, title, kind, cwd }
 let win = null;
@@ -20,11 +20,12 @@ let nextId = 1;
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1680, height: 1020, minWidth: 1100, minHeight: 700,
+    width: 1680, height: 1020, minWidth: 340, minHeight: 240,
     backgroundColor: '#05060a', title: 'GCX Mesh',
     titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 },
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: true },
   });
+  if (process.env.MESH_SIZE) { const [w, h] = process.env.MESH_SIZE.split('x').map(Number); win.setSize(w, h); }   // test runs
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.on('closed', () => { win = null; });
   // tell the renderer when nobody can see the window so it stops drawing (telemetry keeps flowing)

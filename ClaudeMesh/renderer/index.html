@@ -9,7 +9,9 @@
 </head>
 <body data-view="split">
 <header id="top">
-  <div class="brand"><img class="logo" src="icon.png" alt="">GCX Mesh</div>
+  <button id="drawerBtn" class="icon-btn on" title="Sessions (⌘0)">☰</button>
+  <div class="brand"><img class="logo" src="icon.png" alt=""><span class="bname">GCX Mesh</span></div>
+  <div id="miniUsage" class="mini-usage" title="Plan usage left"></div>
   <div id="models" class="models"></div>
   <div class="spacer"></div>
   <div id="health" class="health"></div>
@@ -49,6 +51,7 @@
       <div id="tabs"></div>
       <div id="terms"><div id="noTerms"><div>No in-app terminals yet. <b>+ New</b> starts a Claude session or shell here.<br>Sessions already running in Terminal.app appear in the mesh and can be controlled from their panel.</div></div></div>
     </section>
+    <nav id="rail" aria-label="Sessions"></nav>
   </main>
 
   <aside id="panel" class="hidden">

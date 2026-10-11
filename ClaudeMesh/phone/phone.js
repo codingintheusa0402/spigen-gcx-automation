@@ -21,7 +21,7 @@ function offline(msg) { const o = $('#offline'); if (msg) { o.innerHTML = msg; o
 const realDPR = window.devicePixelRatio || 1;
 Object.defineProperty(window, 'devicePixelRatio', { get: () => Math.min(2, realDPR) });
 let snap = { sessions: [], models: [], agents: [] }, selected = null, openTab = 'mesh';
-const viz = new Mesh($('#mesh'), { onSelect: sid => sid && openSession(sid), onHub: () => openBroadcast() });
+const viz = new Mesh($('#mesh'), { onSelect: sid => sid && tapSession(sid), onHub: () => openBroadcast() });
 viz.wheelZoom = e => e.preventDefault();
 if (innerWidth < 700) { viz.cam.ts = viz.cam.s = .66; viz.clampCam(); viz.cam.tx = viz.cam.ttx; viz.cam.ty = viz.cam.tty; }
 setTimeout(() => { $('#hint').style.opacity = 0; }, 6000);
@@ -69,7 +69,7 @@ cv.addEventListener('touchend', e => {
   if (T.held && !T.moved) { if (e.touches.length === 0) T = null; return; }
   if (T.mode === 'drag') { viz.dragEnd(); toast('Orbit saved on this phone'); }
   else if (!T.moved && e.touches.length === 0) {
-    if (T.hit === 'hub') openBroadcast(); else if (T.hit) openSession(T.hit);
+    if (T.hit === 'hub') openBroadcast(); else if (T.hit) tapSession(T.hit);
   }
   if (e.touches.length === 0) T = null;
 }, { passive: false });
@@ -98,7 +98,9 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && (!
 
 function render() {
   $('#today').textContent = fmt$(snap.todayUsd || 0) + ' today';
-  if (openTab === 'sessions') renderSessions();
+  if (sheetKind === 'sessions') renderSessions();
+  if (view === 'split') renderSplit();
+  if (view === 'grid') renderGrid();
   if (selected && !$('#sheet').classList.contains('hidden') && sheetKind === 'session') renderSession();
 }
 
@@ -109,7 +111,11 @@ function sheet(kind, html, full) {
   $('#sheet').classList.toggle('full', !!full); $('#sheet').classList.remove('hidden');
   const x = $('#sheetBody .x'); if (x) x.onclick = closeSheet;
 }
-function closeSheet() { $('#sheet').classList.add('hidden'); sheetKind = null; selected = null; viz.selected = null; setTab('mesh', true); }
+function closeSheet() {
+  const wasTerm = sheetKind === 'term';
+  $('#sheet').classList.add('hidden'); sheetKind = null; selected = null; viz.selected = view === 'split' ? splitSid : null; setTab(view, true);
+  if (wasTerm && view === 'split') renderSplit(true);               // the pane gets the live terminal back
+}
 // swipe the sheet down to close
 { let y0 = null; const sh = $('#sheet');
   sh.addEventListener('touchstart', e => { y0 = $('#sheetBody').scrollTop <= 0 ? e.touches[0].clientY : null; }, { passive: true });
@@ -119,7 +125,7 @@ function setTab(t, quiet) {
   openTab = t;
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   if (quiet) return;
-  if (t === 'mesh') closeSheet();
+  if (t === 'mesh' || t === 'split' || t === 'grid') { if (sheetKind) closeSheet(); setView(t); }
   if (t === 'sessions') renderSessions(true);
   if (t === 'history') openHistory();
   if (t === 'term' && termId) openTerminal(termId);
@@ -223,31 +229,158 @@ async function openHistory() {
   $('#hq').oninput = draw; draw();
 }
 
-// ---------- terminal of an in-app session ----------
+// ---------- terminal of an in-app session (one live stream at a time: full-screen sheet or the Split pane) ----------
 let termId = null, term = null, tes = null;
-function openTerminal(id) {
-  termId = id; $('#termTab').classList.remove('hidden'); setTab('term', true);
-  sheet('term', `<div id="termWrap"><div class="sh-h"><h2>Terminal</h2><button class="x">×</button></div><div id="xt"></div>
-    <div class="keys">${[['Esc', '\x1b'], ['Tab', '\t'], ['↑', '\x1b[A'], ['↓', '\x1b[B'], ['←', '\x1b[D'], ['→', '\x1b[C'], ['⏎', '\r'], ['^C', '\x03'], ['⇧Tab', '\x1b[Z']].map(([l, k]) => `<button data-k="${encodeURIComponent(k)}">${l}</button>`).join('')}</div>
-    <div class="tin"><input id="tIn" placeholder="Type, then Send (adds Enter)" autocapitalize="off" autocorrect="off"><button class="primary" id="tGo">Send</button></div></div>`, true);
-  tes && tes.close(); term && term.dispose();
-  const W = $('#xt').clientWidth - 8;
+const KEYS = [['Esc', '\x1b'], ['Tab', '\t'], ['↑', '\x1b[A'], ['↓', '\x1b[B'], ['←', '\x1b[D'], ['→', '\x1b[C'], ['⏎', '\r'], ['^C', '\x03'], ['⇧Tab', '\x1b[Z']];
+const termControls = () => `<div class="keys">${KEYS.map(([l, k]) => `<button data-k="${encodeURIComponent(k)}">${l}</button>`).join('')}</div>
+    <div class="tin"><input class="tIn" placeholder="Type, then Send (adds Enter)" autocapitalize="off" autocorrect="off" enterkeyhint="send"><button class="primary tGo">Send</button></div>`;
+function mountTerm(host, id, box) {
+  termId = id; tes && tes.close(); term && term.dispose();
+  const W = host.clientWidth - 8;
   term = new Terminal({ fontFamily: 'Menlo, monospace', fontSize: 9, convertEol: false, disableStdin: false, scrollback: 5000,
-    theme: { background: '#06051a', foreground: '#e6e9f2', cursor: '#a78bfa' } });
-  term.open($('#xt'));
+    theme: { background: '#000000', foreground: '#e6e9f2', cursor: '#ede6d6' } });
+  term.open(host);
   const write = d => api('/api/term/' + id, { data: d });
   term.onData(write);
   tes = new EventSource('/api/term/' + id + '?t=' + encodeURIComponent(TOKEN));
   tes.addEventListener('init', ev => {
-    const i = JSON.parse(ev.data), fs = Math.max(7.5, Math.min(11, W / (i.cols * .6)));   // fit the Mac's columns; if still too wide, scroll sideways
+    const i = JSON.parse(ev.data), fs = Math.max(6.5, Math.min(11, W / (i.cols * .6)));   // fit the Mac's columns; if still too wide, scroll sideways
     term.options.fontSize = fs; term.resize(i.cols, i.rows); term.reset(); term.write(i.backlog);
+    host.scrollTop = host.scrollHeight;
   });
   tes.addEventListener('data', ev => term.write(JSON.parse(ev.data)));
   tes.addEventListener('exit', () => term.write('\r\n\x1b[90m[process exited]\x1b[0m\r\n'));
-  document.querySelectorAll('.keys button').forEach(b => b.onclick = () => write(decodeURIComponent(b.dataset.k)));
-  const go = () => { const v = $('#tIn').value; write(v); setTimeout(() => write('\r'), 60); $('#tIn').value = ''; };
-  $('#tGo').onclick = go; $('#tIn').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); go(); } };
+  box.querySelectorAll('.keys button').forEach(b => b.onclick = () => write(decodeURIComponent(b.dataset.k)));
+  const inp = box.querySelector('.tIn'), go = () => { const v = inp.value; write(v); setTimeout(() => write('\r'), 60); inp.value = ''; };
+  box.querySelector('.tGo').onclick = go; inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); go(); } };
 }
+function openTerminal(id) {
+  $('#termTab').classList.remove('hidden'); setTab('term', true);
+  sheet('term', `<div id="termWrap"><div class="sh-h"><h2>Terminal</h2><button class="x">×</button></div><div id="xt"></div>${termControls()}</div>`, true);
+  mountTerm($('#xt'), id, $('#termWrap'));
+}
+
+// ---------- views: Mesh · Split · Grid ----------
+// Split: the mesh (smaller star, one-line tags) over a session pane — portrait stacks them, landscape puts them
+//   side by side. The pane is that session's live terminal when it runs inside the Mac app, otherwise its
+//   controls (send, interrupt, quick commands, activity). A chip strip switches sessions; the keyboard
+//   takes over the whole screen while typing.
+// Grid: every live session as a card — health, speed sparkline, spend, context, latest activity — no
+//   terminal streams (iOS allows ~6 connections per host), so it stays light. Tap a card → Split on it,
+//   press and hold → what the session does.
+let view = 'mesh', splitSid = localStorage.getItem('mesh.splitSid') || null, paneKind = null;
+function setView(v) {
+  view = v; document.body.dataset.view = v; localStorage.setItem('mesh.view', v);
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === v));
+  viz.compact = v === 'split'; viz.offscreen = v === 'grid';
+  viz.selected = v === 'split' ? splitSid : null;
+  if (v !== 'split' && paneKind === 'term' && sheetKind !== 'term') { tes && tes.close(); paneKind = null; }
+  if (v === 'split') renderSplit(true);
+  if (v === 'grid') renderGrid();
+  requestAnimationFrame(() => viz.resize());
+}
+function tapSession(sid) { if (view === 'split') pickSplit(sid); else openSession(sid); }
+function pickSplit(sid) {
+  splitSid = sid; localStorage.setItem('mesh.splitSid', sid); viz.selected = sid;
+  if (view !== 'split') { setTab('split', true); setView('split'); } else renderSplit(true);
+}
+function splitSession() {
+  const S = snap.sessions;
+  let s = S.find(x => x.sid === splitSid);
+  if (!s) { s = S.find(x => x.owner && x.health === 'working') || S.find(x => x.owner) || S.find(x => x.health === 'working') || S[0]; if (s) { splitSid = s.sid; viz.selected = s.sid; } }
+  return s;
+}
+function renderSplit(force) {
+  const S = [...snap.sessions].sort((a, b) => (b.owner ? 1 : 0) - (a.owner ? 1 : 0) || (b.health === 'working') - (a.health === 'working'));
+  const s = splitSession();
+  $('#switch').innerHTML = S.map(x => `<button class="chip ${s && x.sid === s.sid ? 'on' : ''}" data-sid="${x.sid}"><span class="dot ${x.health}"></span>${esc(x.name.length > 22 ? x.name.slice(0, 21) + '…' : x.name)}${x.health === 'working' ? ` <small>${Math.round(x.tps)}</small>` : ''}</button>`).join('')
+    || '<span class="meta" style="padding:6px 4px">No Claude Code sessions running.</span>';
+  $('#switch').querySelectorAll('[data-sid]').forEach(b => b.onclick = () => pickSplit(b.dataset.sid));
+  if (!s) { $('#pane').innerHTML = ''; paneKind = null; return; }
+  const kind = s.owner ? 'term' : 'ctl', key = kind + s.sid;
+  const head = `<span class="dot ${s.health}"></span><b>${esc(s.name)}</b><span class="pm">${s.health === 'working' ? Math.round(s.tps) + ' tok/s · ' : ''}${fmt$(s.todayUsd)}</span>`;
+  if (!force && paneKind === key) {                              // live refresh without touching the terminal or the text box
+    $('#paneHead .ph').innerHTML = head;
+    if (kind === 'ctl') { $('#pStats').innerHTML = paneStats(s); $('#pLog').innerHTML = paneLog(s); }
+    const on = $('#switch .chip.on'); if (on && renderSplit.last !== s.sid) { renderSplit.last = s.sid; on.scrollIntoView({ inline: 'center', block: 'nearest' }); }
+    return;
+  }
+  paneKind = key;
+  $('#pane').innerHTML = `<div id="paneHead"><div class="ph">${head}</div>${kind === 'term' ? '<button id="pFull" title="Full screen">⤢</button>' : ''}<button id="pInfo" title="Details">ⓘ</button></div>` +
+    (kind === 'term' ? `<div id="pxt"></div>${termControls()}`
+      : `<div id="pScroll"><div id="pStats">${paneStats(s)}</div>${(s.tty && s.kind !== 'bg') ? `<div class="tin"><textarea id="pText" rows="2" placeholder="Message ${esc(s.name)}…"></textarea><button class="primary" id="pSend">Send</button></div>
+          <div class="chips"><button id="pInt">Interrupt</button>${QUICK.slice(0, 5).map(c => `<button data-c="${c}">${c}</button>`).join('')}</div>` : '<div class="meta">Background session — view only.</div>'}<div id="pLog">${paneLog(s)}</div></div>`);
+  $('#pInfo').onclick = () => openSession(s.sid);
+  if (kind === 'term') {
+    $('#pFull').onclick = () => openTerminal(s.owner);
+    mountTerm($('#pxt'), s.owner, $('#pane'));
+  } else {
+    if (termId && sheetKind !== 'term') { tes && tes.close(); }
+    const send = $('#pSend');
+    if (send) {
+      send.onclick = async () => { const v = $('#pText').value.trim(); if (!v) return; const r = await api('/api/send', { sid: s.sid, text: v }); if (r.ok === false || r.out === 'notfound') return toast('Send failed'); $('#pText').value = ''; toast('Sent'); };
+      $('#pInt').onclick = async () => { await api('/api/interrupt', { sid: s.sid }); toast('Interrupt sent'); };
+      $('#pane').querySelectorAll('[data-c]').forEach(b => b.onclick = () => runCmd(s, b.dataset.c));
+    }
+  }
+  const on = $('#switch .chip.on'); if (on) on.scrollIntoView({ inline: 'center', block: 'nearest' });
+}
+const paneStats = s => { const pct = s.ctxMax ? s.ctx / s.ctxMax * 100 : 0;
+  return `<div class="meta"><span style="color:${FAMILY_COLOR[s.family] || '#9fb4d8'}">${esc((s.model || '—').replace('claude-', ''))}</span><span>${s.kind === 'bg' ? 'background' : 'Terminal.app'}</span><span>context ${Math.round(pct)}%</span><span>${fmt$(s.totalUsd)} session</span></div>`; };
+const paneLog = s => `<div class="log">${s.log.slice(-8).reverse().map(l => `<div class="${l.kind}">${l.kind === 'tool' ? '⚙ ' : l.kind === 'you' ? '› ' : ''}${esc(l.text)}</div>`).join('') || '<div>—</div>'}</div>`;
+
+// sparkline as an SVG path (cheap to redraw every telemetry tick)
+function sparkPath(data, peak, w, h) {
+  const top = Math.max(10, peak || 0, ...data);
+  return data.map((v, i) => `${i ? 'L' : 'M'}${(i / (data.length - 1) * w).toFixed(1)} ${(h - 1 - v / top * (h - 3)).toFixed(1)}`).join('');
+}
+const gridCards = new Map();
+function renderGrid() {
+  const g = $('#grid'), S = [...snap.sessions].sort((a, b) => (b.health === 'working') - (a.health === 'working') || b.todayUsd - a.todayUsd);
+  if (!S.length) { g.innerHTML = '<div class="meta" style="padding:20px 6px">No Claude Code sessions running.</div>'; gridCards.clear(); return; }
+  if (g.querySelector('.meta')) g.innerHTML = '';
+  const seen = new Set();
+  S.forEach((s, i) => {
+    seen.add(s.sid);
+    let c = gridCards.get(s.sid);
+    if (!c) {
+      c = document.createElement('div'); c.className = 'gcard'; c.dataset.sid = s.sid; gridCards.set(s.sid, c);
+      let ht = null, held = false;
+      c.addEventListener('touchstart', () => { held = false; ht = setTimeout(() => { held = true; navigator.vibrate && navigator.vibrate(10); openDetails(c.dataset.sid); }, 520); }, { passive: true });
+      c.addEventListener('touchmove', () => clearTimeout(ht), { passive: true });
+      c.addEventListener('touchend', () => clearTimeout(ht), { passive: true });
+      c.addEventListener('click', () => { if (!held) pickSplit(c.dataset.sid); });
+    }
+    if (g.children[i] !== c) g.insertBefore(c, g.children[i] || null);
+    const col = FAMILY_COLOR[s.family] || '#9fb4d8', pct = s.ctxMax ? Math.min(100, s.ctx / s.ctxMax * 100) : 0, work = s.health === 'working';
+    const last = [...s.log].reverse().find(l => l.kind === 'claude' || l.kind === 'you' || l.kind === 'tool');
+    c.className = 'gcard ' + s.health;
+    c.innerHTML = `<div class="gh"><span class="dot ${s.health}"></span><span class="gn">${esc(s.name)}</span></div>
+      <div class="gm"><span style="color:${col}">${esc((s.model || '—').replace('claude-', '').replace(/-\d.*$/, ''))}</span><span>${s.owner ? 'in-app' : s.kind === 'bg' ? 'bg' : 'terminal'}</span>${s.serverUses ? '<span>⇄ server</span>' : ''}</div>
+      <div class="gv"><b>${work ? Math.round(s.tps) : fmt$(s.todayUsd)}</b><small>${work ? ' tok/s' : ' today'}</small><span class="gs">${work ? fmt$(s.todayUsd) : ago(s.sinceWrite) + ' ago'}</span></div>
+      <svg class="gsp" viewBox="0 0 100 26" preserveAspectRatio="none"><path d="${sparkPath(s.spark || [0, 0], s.sparkPeak, 100, 26)}" stroke="${col}" /></svg>
+      <div class="gbar"><div style="width:${pct}%;background:${pct > 85 ? 'var(--err)' : pct > 60 ? 'var(--warn)' : col}"></div></div>
+      <div class="gl">${last ? (last.kind === 'you' ? '› ' : last.kind === 'tool' ? '⚙ ' : '') + esc(last.text) : '—'}</div>`;
+  });
+  for (const [sid, c] of gridCards) if (!seen.has(sid)) { c.remove(); gridCards.delete(sid); }
+  const A = snap.agents || [];
+  let ag = $('#gAgents');
+  if (A.length) {
+    if (!ag) { ag = document.createElement('div'); ag.id = 'gAgents'; }
+    g.appendChild(ag);
+    ag.innerHTML = `<h3>Agents · ${A.length}</h3>` + A.map(a => `<div class="item"><span class="dot ${a.state === 'running' ? 'working' : 'waiting'}"></span><div class="t"><div class="n">${esc(a.name || a.id)}</div><div class="m">${esc(a.state || '')}</div></div></div>`).join('');
+  } else if (ag) ag.remove();
+}
+
+// keyboard up (iOS): let the typing surface take the screen
+if (window.visualViewport) {
+  const kb = () => { const h = Math.max(0, innerHeight - visualViewport.height - visualViewport.offsetTop);
+    document.documentElement.style.setProperty('--kb', h + 'px'); document.body.classList.toggle('kb', h > 120);
+    if (h > 120) scrollTo(0, 0); requestAnimationFrame(() => viz.resize()); };
+  visualViewport.addEventListener('resize', kb); visualViewport.addEventListener('scroll', kb);
+}
+addEventListener('orientationchange', () => setTimeout(() => { viz.resize(); if (view === 'split' && paneKind && paneKind.startsWith('term')) renderSplit(true); }, 350));
+{ const v0 = localStorage.getItem('mesh.view'); if (v0 === 'split' || v0 === 'grid') { setTab(v0, true); setView(v0); } }
 
 // ---------- press-and-hold a session: what it does, skills, commands, tools, CLAUDE.md ----------
 async function openDetails(sid) {

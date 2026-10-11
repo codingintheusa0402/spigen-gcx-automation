@@ -76,7 +76,7 @@ function fmtReset(t) {
 }
 
 Object.assign(Mesh.prototype, {
-  motherRadius() { return Math.max(56, Math.min(104, Math.min(this.w, this.h) * .13)); },
+  motherRadius() { return Math.max(this.compact ? 22 : 56, Math.min(104, Math.min(this.w, this.h) * (this.compact ? .16 : .13))); },
   galaxyRadius() { return this.motherRadius(); },          // older call sites (orbit sizing, pixel mode)
   starAges() {
     const L = (this.hub.usage && this.hub.usage.limits) || [], pct = k => { const l = L.find(x => x.kind === k); return l ? l.used / 100 : 0; };
@@ -137,6 +137,7 @@ Object.assign(Mesh.prototype, {
 
   // drawn after the sessions so an orbiting bubble never hides it
   drawMotherInfo() {
+    if (this.compact) return;                     // mini window / phone split: usage lives in the page chrome instead
     const ctx = this.ctx, h = this.hub, R = this.motherRadius();
     const below = this.drawLimits(ctx, h.x, h.y + R * 1.22 + 8);
     ctx.textAlign = 'center';

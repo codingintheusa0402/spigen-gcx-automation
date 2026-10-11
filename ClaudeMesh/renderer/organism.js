@@ -180,6 +180,16 @@ Object.assign(Mesh.prototype, {
       ctx.beginPath(); ctx.arc(n.x, n.y, R + 22, 0, 6.29); ctx.stroke();
     }
     ctx.globalAlpha = grow * Math.max(.75, op) * (.85 + .15 * n.swell);
+    if (this.compact) {                               // mini window / phone split: one-line name tag
+      const nm = s.name.length > 18 ? s.name.slice(0, 17) + '…' : s.name;
+      ctx.font = '600 11px -apple-system, system-ui, sans-serif, "Apple SD Gothic Neo"';
+      const pw = ctx.measureText(nm).width + 18, py = n.y + R + 8; n.labelW = pw;
+      ctx.fillStyle = 'rgba(0,0,0,.72)'; ctx.strokeStyle = hexA(mix(P.rim, .3), .3 + .25 * n.swell); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.roundRect(n.x - pw / 2, py, pw, 19, 9.5); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = HEALTH_COLOR[s.health] || '#9fb4d8'; ctx.beginPath(); ctx.arc(n.x - pw / 2 + 9, py + 9.5, 2.6, 0, 6.29); ctx.fill();
+      ctx.textAlign = 'center'; ctx.fillStyle = '#f2f3ff'; ctx.fillText(nm, n.x + 4, py + 13.5);
+      ctx.globalAlpha = 1; return;
+    }
     const name = s.name.length > 30 ? s.name.slice(0, 29) + '…' : s.name;
     const l2 = `${(s.model || '—').replace('claude-', '')}  ·  $${s.todayUsd.toFixed(2)}`;
     const l3 = (work ? `working · ${Math.round(s.tps)} tok/s` : s.health) + (s.owner ? '  ·  in-app' : '') + (s.serverUses ? '  ·  ⇄ server' : '');

@@ -38,14 +38,16 @@ Object.assign(Mesh.prototype, {
   loadOrbits() { if (!this.orbits) { try { this.orbits = JSON.parse(localStorage.getItem(PIN_KEY)) || {}; } catch { this.orbits = {}; } } return this.orbits; },
   saveOrbits() { try { localStorage.setItem(PIN_KEY, JSON.stringify(this.orbits)); } catch { } },
   orbitShape() {                          // the automatic orbit ellipse (also the speed reference)
-    const rx = Math.max(this.motherRadius() + 130, this.w / 2 - 130), ry = Math.max(this.motherRadius() + 100, this.h / 2 - 120);
+    const MR = this.motherRadius();
+    const rx = this.compact ? Math.max(MR * 2.4, this.w / 2 - 70) : Math.max(MR + 130, this.w / 2 - 130);
+    const ry = this.compact ? Math.max(MR * 1.8, this.h / 2 - 46) : Math.max(MR + 100, this.h / 2 - 120);
     return { rx, ry, k: ry / rx };
   },
   // keep a session's whole footprint (glow ring above, label pill + hint line below) inside the mesh
   // window at any window/dock size — orbits that would leave it slide along the edge instead
   fitInView(n, p) {
     const R = this.nodeRadius(n) * 1.12, half = Math.max(R + 20, (n.labelW || 200) / 2) + 8;
-    const top = R + 22, bottom = R + 22 + 46 + 10 + 26;       // ring | label gap + pill + pad + #meshHint
+    const top = this.compact ? R + 6 : R + 22, bottom = this.compact ? R + 8 + 19 + 8 : R + 22 + 46 + 10 + 26;   // ring | label gap + pill + pad + #meshHint
     const x0 = half, x1 = this.w - half, y0 = top, y1 = this.h - bottom;
     const cx = v => x1 > x0 ? Math.min(x1, Math.max(x0, v)) : this.w / 2;
     let x = cx(p.x); const y = y1 > y0 ? Math.min(y1, Math.max(y0, p.y)) : (y0 + y1) / 2;
@@ -58,11 +60,13 @@ Object.assign(Mesh.prototype, {
   // screen box of the mother bubble + its usage card + "$ today" line (see drawMotherInfo)
   motherBox() {
     const R = this.motherRadius(), L = (this.hub.usage && this.hub.usage.limits) || [];
+    if (this.compact) return { x0: this.hub.x - R * 1.22, x1: this.hub.x + R * 1.22, y0: this.hub.y - R * 1.22, y1: this.hub.y + R * 1.22 };
     const cardH = 22 + Math.max(1, L.length) * 24, hw = Math.max(R * 1.22, 107) + 4;
     return { x0: this.hub.x - hw, x1: this.hub.x + hw, y0: this.hub.y - R * 1.22, y1: this.hub.y + R * 1.22 + 8 + cardH + 24 };
   },
   // mother sits at the centre unless that would push its usage card below the mesh (short window/tall dock)
   motherY() {
+    if (this.compact) return this.h / 2;
     const R = this.motherRadius(), below = R * 1.22 + 8 + (22 + 3 * 24) + 24 + 30;   // card + today line + #meshHint
     return Math.max(R * 1.22 + 6, Math.min(this.h / 2, this.h - below));
   },

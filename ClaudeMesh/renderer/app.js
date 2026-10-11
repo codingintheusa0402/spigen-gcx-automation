@@ -25,7 +25,7 @@ window.api.onTelemetry(s => {
   snap = s;
   if (s.ready) $('#loading').style.display = 'none';
   viz.update(s);
-  renderHeader(); renderList(); renderToday(); renderPanel(); syncTermTitles(); notifyTransitions();
+  renderHeader(); renderList(); renderToday(); renderPanel(); syncTermTitles(); notifyTransitions(); renderRail();
 });
 
 function renderHeader() {
@@ -63,6 +63,8 @@ function renderToday() {
 
 // ---------------- detail panel ----------------
 function select(sid) {
+  const ms = sid && snap.sessions.find(x => x.sid === sid);
+  if (isMini() && ms && ms.owner && terms.has(ms.owner)) { selected = sid; viz.selected = sid; $('#panel').classList.add('hidden'); miniShow('term'); activate(ms.owner); renderList(); return; }
   selected = sid; viz.selected = sid;
   $('#panel').classList.toggle('hidden', !sid);
   $('#panelBody').innerHTML = sid ? '<div id="pStatic"></div><div id="pCtl"></div>' : '';
@@ -278,7 +280,7 @@ async function newTerm(opts) {
   term.textarea && term.textarea.addEventListener('focus', () => { activeTerm = info.id; markFocus(); });
   terms.set(info.id, { term, fit, el, title: info.title, kind: opts.kind });
   $('#noTerms').style.display = 'none';
-  activate(info.id);
+  activate(info.id); if (isMini()) miniShow('term');
   return info.id;
 }
 
@@ -296,6 +298,7 @@ function closeTerm(id) {
   if (activeTerm === id) activeTerm = [...terms.keys()].pop() || null;
   $('#noTerms').style.display = terms.size ? 'none' : '';
   if (activeTerm) activate(activeTerm); else renderTabs();
+  if (isMini() && !terms.size) miniShow('mesh'); else renderRail();
   layoutGrid();
 }
 
@@ -412,3 +415,53 @@ function notifyTransitions() {
   });
   h.addEventListener('dblclick', () => { apply(DEF); store.set('sideW', DEF); viz.resize(); });
 }
+
+// ---------------- window size modes: full → compact → mini ----------------
+// compact (narrow/short window): the sidebar becomes a slide-over drawer (☰ / ⌘0), the detail panel floats,
+//   header drops the model chips and health pills.
+// mini (small widget-sized window): a slim bar with plan usage left, the mesh with a smaller star, and a
+//   session strip along the bottom — tap a session to fill the window with its terminal, ◎ to go back.
+const isMini = () => document.body.dataset.size === 'mini';
+let miniPane = store.get('miniPane', 'mesh');
+function sizeMode() {
+  const w = innerWidth, h = innerHeight;
+  const m = w < 700 || h < 470 ? 'mini' : w < 1180 || h < 700 ? 'compact' : 'full';
+  if (document.body.dataset.size !== m) {
+    document.body.dataset.size = m;
+    viz.compact = m === 'mini';
+    document.body.classList.remove('drawer');
+    if (m === 'mini') { if (miniPane === 'term' && !terms.size) miniPane = 'mesh'; document.body.dataset.mini = miniPane; }
+    renderRail();
+  }
+  requestAnimationFrame(() => { viz.resize(); fitAll(); });
+}
+function miniShow(p) {
+  miniPane = p === 'term' && terms.size ? 'term' : 'mesh'; store.set('miniPane', miniPane);
+  document.body.dataset.mini = miniPane; renderRail();
+  requestAnimationFrame(() => { viz.resize(); fitAll(); const t = terms.get(activeTerm); if (miniPane === 'term' && t) t.term.focus(); });
+}
+function renderRail() {
+  const u = (snap.usage && snap.usage.limits) || [];
+  $('#miniUsage').innerHTML = u.slice(0, 3).map(l => { const left = Math.max(0, 100 - l.used), col = limitColor(left);
+    return `<span class="mu" title="${esc(l.label)} · resets in ${fmtReset(l.resetsAt)}"><b style="color:${col}">${Math.round(left)}%</b> ${esc(l.label === 'All models' ? 'week' : l.label === 'Session' ? '5h' : l.label.split(' ')[0].toLowerCase())}<i><em style="width:${left}%;background:${col}"></em></i></span>`; }).join('')
+    + `<span class="mu">${fmt$(snap.todayUsd || 0)}</span>`;
+  if (!isMini()) return;
+  const S = [...snap.sessions].sort((a, b) => (b.owner ? 1 : 0) - (a.owner ? 1 : 0) || (b.health === 'working') - (a.health === 'working'));
+  const onTerm = miniPane === 'term';
+  const curSid = onTerm ? (snap.sessions.find(x => x.owner === activeTerm) || {}).sid : selected;
+  const chips = S.map(s => `<button class="rchip ${s.sid === curSid ? 'on' : ''} ${s.owner ? 'app' : ''}" data-sid="${s.sid}" title="${esc(s.name)} · ${esc(s.health)} · ${fmt$(s.todayUsd)} today${s.owner ? '' : ' · not in this app — opens its controls'}">
+      <span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span>${s.health === 'working' ? `<span class="r">${Math.round(s.tps)}</span>` : ''}</button>`).join('');
+  const shells = [...terms].filter(([id]) => !snap.sessions.some(s => s.owner === id))
+    .map(([id, t]) => `<button class="rchip app ${onTerm && id === activeTerm ? 'on' : ''}" data-pty="${id}"><span class="hdot h-${t.exited ? 'error' : 'idle'}"></span><span class="t">${esc(t.title)}</span></button>`).join('');
+  $('#rail').innerHTML = `<button class="rchip home ${onTerm ? '' : 'on'}" id="railMesh" title="Mesh">◎</button>${shells}${chips}<button class="rchip add" id="railNew" title="New session (⌘T)">＋</button>`;
+  const on = $('#rail .rchip.on:not(.home)'); if (on && curSid !== renderRail.last) { renderRail.last = curSid; on.scrollIntoView({ inline: 'nearest', block: 'nearest' }); }
+  $('#railMesh').onclick = () => miniShow('mesh');
+  $('#railNew').onclick = openNew;
+  document.querySelectorAll('#rail [data-sid]').forEach(b => b.onclick = () => { const s = snap.sessions.find(x => x.sid === b.dataset.sid); if (s && s.owner && terms.has(s.owner)) select(s.sid); else { miniShow('mesh'); select(b.dataset.sid); } });
+  document.querySelectorAll('#rail [data-pty]').forEach(b => b.onclick = () => { miniShow('term'); activate(b.dataset.pty); });
+}
+$('#drawerBtn').onclick = () => document.body.classList.toggle('drawer');
+$('#mesh').addEventListener('pointerdown', () => document.body.classList.remove('drawer'));
+addEventListener('keydown', e => { if (e.metaKey && e.key === '0') { e.preventDefault(); $('#drawerBtn').click(); } else if (e.key === 'Escape') document.body.classList.remove('drawer'); });
+addEventListener('resize', sizeMode);
+sizeMode();
