@@ -11,6 +11,7 @@ push its state to the server (while the server copy is held stopped by gcx-owner
 import glob, json, os, shutil, subprocess, time
 
 import gcx_owner as O
+from gcx_owner import SERVICES  # noqa: F401  (used by gcx_fallback.py)
 
 FB = os.path.expanduser("~/.gcx-fallback")
 MIRROR = os.path.join(FB, "mirror")
