@@ -357,3 +357,87 @@ body.pixel .sc-row, body.pixel .sc-edit { border-radius: 0; }
 #sideHandle:hover, body.side-resizing #sideHandle { background: rgba(160,175,255,.35); }
 body.side-resizing { cursor: col-resize; user-select: none; }
 button.primary:hover { background: #82aaff; border-color: #82aaff; }
+
+/* ======================================================================================
+   VOID theme (2026-10-11) — true black ground; panels lift with faint white, not navy;
+   the only colour comes from the sessions themselves. One accent: starlight ivory, taken
+   from the mother star. Sentence-case labels, hairlines instead of boxes. Pixel mode keeps
+   its own retro skin (everything here is scoped to body:not(.pixel)).
+   ====================================================================================== */
+body:not(.pixel) {
+  --bg: #000; --bg2: #000; --panel: rgba(255,255,255,.035); --panel2: rgba(255,255,255,.07);
+  --line: rgba(255,255,255,.08); --line2: rgba(255,255,255,.14);
+  --text: #ecebe6; --dim: #9b9aa3; --faint: #64636c;
+  --star: #ede6d6; --star-ink: #14110b;
+  --ok: #5be3a4; --warn: #f2c14e; --err: #ff5d6c; --accent: #ede6d6;
+  background: #000; font-weight: 400; letter-spacing: 0;
+}
+body:not(.pixel) ::selection { background: rgba(237,230,214,.25); }
+
+/* header: black bar, hairline below, no glass */
+body:not(.pixel) #top { background: #000; border-bottom: 1px solid var(--line); }
+body:not(.pixel) .brand { font-weight: 600; letter-spacing: -.01em; font-size: 14px; text-transform: none; color: var(--text); }
+body:not(.pixel) .mchip, body:not(.pixel) .hpill { background: transparent; border-color: var(--line2); color: var(--dim); }
+body:not(.pixel) .mchip b { font-weight: 600; letter-spacing: 0; color: var(--text); }
+body:not(.pixel) .hpill i { color: var(--text); }
+
+/* buttons: quiet outlines; the primary action is solid starlight */
+body:not(.pixel) button { background: transparent; border: 1px solid var(--line2); color: var(--text); border-radius: 8px; letter-spacing: 0; font-weight: 500; }
+body:not(.pixel) button:hover { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.26); box-shadow: none; }
+body:not(.pixel) button:active { background: rgba(255,255,255,.1); }
+body:not(.pixel) button:focus-visible, body:not(.pixel) input:focus-visible, body:not(.pixel) textarea:focus-visible { outline: 2px solid var(--star); outline-offset: 2px; }
+body:not(.pixel) button.primary { background: var(--star); border-color: var(--star); color: var(--star-ink); font-weight: 600; }
+body:not(.pixel) button.primary:hover { background: #fff8ea; border-color: #fff8ea; }
+body:not(.pixel) button.danger, body:not(.pixel) .cm-i.danger b { color: var(--err); }
+body:not(.pixel) button.danger-solid { background: var(--err); border-color: var(--err); color: #1a0306; }
+body:not(.pixel) .icon-btn { border-color: transparent; opacity: .55; } body:not(.pixel) .icon-btn.on { opacity: 1; }
+body:not(.pixel) .seg { border-radius: 8px; background: transparent; border-color: var(--line2); }
+body:not(.pixel) .seg button { border: 0; border-radius: 0; text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--dim); }
+body:not(.pixel) .seg button.on { background: rgba(255,255,255,.1); color: var(--text); box-shadow: none; }
+
+/* sidebar & panel: black, hairline edge; section labels in sentence case */
+body:not(.pixel) #side, body:not(.pixel) #panel { background: #000; border-color: var(--line); }
+body:not(.pixel) .side-h, body:not(.pixel) .sec h3, body:not(.pixel) .hgh, body:not(.pixel) .sc-sec {
+  text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 600; color: var(--dim); }
+body:not(.pixel) .hgh i, body:not(.pixel) .side-h span { color: var(--faint); font-weight: 400; }
+body:not(.pixel) .srow, body:not(.pixel) .hrow, body:not(.pixel) .arow { border-radius: 6px; border: 0; border-left: 2px solid transparent; }
+body:not(.pixel) .srow:hover, body:not(.pixel) .hrow:hover, body:not(.pixel) .arow:hover { background: rgba(255,255,255,.045); }
+body:not(.pixel) .srow.sel { background: rgba(255,255,255,.06); border-left-color: var(--star); box-shadow: none; }
+body:not(.pixel) .hrow.live .t { color: var(--text); } body:not(.pixel) .hrow.pinned .t { color: var(--star); }
+body:not(.pixel) .tag { border-color: var(--line2); color: var(--dim); border-radius: 4px; }
+body:not(.pixel) .hrow.live .tag { color: var(--ok); border-color: rgba(91,227,164,.35); }
+body:not(.pixel) #hSearch { background: rgba(255,255,255,.04); border-color: var(--line); border-radius: 8px; }
+body:not(.pixel) .today .big { font-weight: 300; font-size: 30px; letter-spacing: -.02em; color: var(--text); }
+body:not(.pixel) #sideHandle:hover, body.side-resizing:not(.pixel) #sideHandle { background: rgba(237,230,214,.3); }
+
+/* status dots: solid, no neon halo */
+body:not(.pixel) .hdot { width: 8px; height: 8px; border: 0; }
+body:not(.pixel) .h-working { background: var(--ok) !important; box-shadow: none; }
+body:not(.pixel) .h-idle { background: #46454d !important; }
+body:not(.pixel) .h-waiting, body:not(.pixel) .h-quiet { background: var(--warn) !important; box-shadow: none; }
+body:not(.pixel) .h-error { background: var(--err) !important; box-shadow: none; }
+
+/* stats */
+body:not(.pixel) .bar { background: rgba(255,255,255,.08); height: 3px; border-radius: 2px; } body:not(.pixel) .bar > div { box-shadow: none; }
+body:not(.pixel) .kpi { background: transparent; border: 0; border-top: 1px solid var(--line); border-radius: 0; padding-left: 0; }
+body:not(.pixel) .kpi .v { font-weight: 500; font-variant-numeric: tabular-nums; }
+body:not(.pixel) .ph h2 { font-weight: 600; letter-spacing: -.01em; }
+
+/* terminals dock */
+body:not(.pixel) #dock { background: #000; }
+body:not(.pixel) #dockHandle { background: var(--line); } body:not(.pixel) #dockHandle:hover { background: rgba(237,230,214,.3); }
+body:not(.pixel) .tab { border-radius: 6px 6px 0 0; letter-spacing: 0; }
+body:not(.pixel) .tab.on { background: rgba(255,255,255,.07); border-color: var(--line2); }
+body:not(.pixel) #meshHint { text-transform: none; letter-spacing: 0; font-size: 11.5px; color: rgba(236,235,230,.32); }
+body:not(.pixel) #loading { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--dim); }
+
+/* modals, menus, cards: near-opaque black sheets with a hairline */
+body:not(.pixel) .card { background: rgba(10,10,12,.96); backdrop-filter: none; border: 1px solid var(--line2); border-radius: 14px; box-shadow: 0 30px 80px rgba(0,0,0,.8); }
+body:not(.pixel) .card h2 { text-transform: none; letter-spacing: -.01em; font-weight: 600; font-size: 16px; }
+body:not(.pixel) #cmdMenu, body:not(.pixel) .cmd-ac, body:not(.pixel) #holdCard { background: rgba(10,10,12,.97); border-color: var(--line2); border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,.85); backdrop-filter: none; }
+body:not(.pixel) textarea, body:not(.pixel) input, body:not(.pixel) select { background: rgba(255,255,255,.04); border-color: var(--line2); border-radius: 8px; }
+body:not(.pixel) #toast { background: #0d0d10; border-color: var(--line2); border-radius: 8px; }
+body:not(.pixel) .sc-row { background: transparent; border: 0; border-top: 1px solid var(--line); border-radius: 0; }
+body:not(.pixel) .sc-edit { background: rgba(255,255,255,.035); }
+body:not(.pixel) .sc-sw input:checked + i { background: var(--ok); }
+body:not(.pixel) ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); }

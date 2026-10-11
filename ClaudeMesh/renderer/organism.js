@@ -181,7 +181,7 @@ Object.assign(Mesh.prototype, {
     ctx.font = '600 12px system-ui, "Apple SD Gothic Neo"'; const w1 = ctx.measureText(name).width;
     ctx.font = '400 10.5px system-ui'; const pw = Math.max(w1, ctx.measureText(l2).width, ctx.measureText(l3).width) + 22;
     const py = n.y + R + 22, ph = 46; n.labelW = pw;
-    ctx.fillStyle = 'rgba(12,12,40,.72)'; ctx.strokeStyle = hexA(mix(P.rim, .3), .3 + .25 * n.swell); ctx.lineWidth = 1;
+    ctx.fillStyle = 'rgba(0,0,0,.72)'; ctx.strokeStyle = hexA(mix(P.rim, .3), .3 + .25 * n.swell); ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(n.x - pw / 2, py, pw, ph, 8); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
     ctx.font = '600 12px system-ui, "Apple SD Gothic Neo"'; ctx.fillStyle = '#f2f3ff'; ctx.fillText(name, n.x, py + 15);

@@ -4,7 +4,8 @@
 // clicking empty space fires an ejection burst (shockwave); pinch / scroll zooms the view.
 const FAMILY_COLOR = { fable: '#ff5c8a', mythos: '#ff5c8a', opus: "#7d7bff", sonnet: "#2ef0a8", haiku: '#ffb347', other: '#9fb4d8' };
 const HEALTH_COLOR = { working: '#7dffc4', idle: '#7c86b8', quiet: '#ffcf6b', waiting: '#ffcf6b', error: '#ff6b7d' };
-const BG = ['#1a1850', '#0d0b30', '#05041a'], NEB = ['#5a3cff', '#2a8cff', '#b04cff'];
+// deep space: black ground with only a faint violet/blue haze (VOID theme)
+const BG = ['#07050f', '#020106', '#000000'], NEB = ['#3a1f8a', '#14306b', '#5a1f6b'];
 const AMBIENT_COLORS = ['#5ec8ff', '#3ee6b0', '#8f8bff', '#ff6b8b', '#b98bff', '#4fa3ff'];
 
 function rgb(hex) { const n = parseInt(hex.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
@@ -148,7 +149,7 @@ class Mesh {
       g.addColorStop(0, BG[0]); g.addColorStop(.45, BG[1]); g.addColorStop(1, BG[2]); bx.fillStyle = g; bx.fillRect(0, 0, W, H);
       for (const [nx, ny, col] of [[.22, .28, NEB[0]], [.8, .72, NEB[1]], [.7, .2, NEB[2]]]) {
         const ng = bx.createRadialGradient(W * nx, H * ny, 0, W * nx, H * ny, Math.max(W, H) * .42);
-        ng.addColorStop(0, hexA(col, .28)); ng.addColorStop(1, hexA(col, 0)); bx.fillStyle = ng; bx.fillRect(0, 0, W, H);
+        ng.addColorStop(0, hexA(col, .16)); ng.addColorStop(1, hexA(col, 0)); bx.fillStyle = ng; bx.fillRect(0, 0, W, H);
       }
       // all star layers in one canvas with a margin, so parallax is one blit (no wrap-around tiling)
       const M = 160, sc = document.createElement('canvas'); sc.width = Math.ceil((W + 2 * M) * d); sc.height = Math.ceil((H + 2 * M) * d);
