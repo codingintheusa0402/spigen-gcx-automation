@@ -458,7 +458,7 @@ body[data-size="compact"] #side, body[data-size="mini"] #side { position: absolu
   transform: translateX(-102%); transition: transform .2s cubic-bezier(.2,.8,.2,1); box-shadow: 18px 0 50px rgba(0,0,0,.7); }
 body.drawer[data-size] #side { transform: none; }
 body[data-size="compact"] #sideHandle, body[data-size="mini"] #sideHandle { display: none; }
-body[data-size="compact"] #panel, body[data-size="mini"] #panel { position: absolute; z-index: 29; top: 0; bottom: 0; right: 0; width: min(380px, 92vw); box-shadow: -18px 0 50px rgba(0,0,0,.7); }
+body[data-size="mini"] #panel { position: absolute; z-index: 29; top: 0; bottom: 0; right: 0; width: min(380px, 92vw); box-shadow: -18px 0 50px rgba(0,0,0,.7); }
 body[data-size="compact"] #meshHint { display: none; }
 
 /* mini: slim bar + mesh/terminal + session strip */
