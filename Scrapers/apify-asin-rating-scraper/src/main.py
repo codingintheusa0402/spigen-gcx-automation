@@ -139,7 +139,7 @@ async def main() -> None:
             fallback = await Actor.create_proxy_configuration(groups=['RESIDENTIAL'])
         memory_mb = int(os.environ.get('ACTOR_MEMORY_MBYTES') or os.environ.get('APIFY_MEMORY_MBYTES') or 1024)
         safe = max(4, memory_mb // MB_PER_SESSION)
-        requested = int(inp.get('maxConcurrency', 20))
+        requested = int(inp.get('maxConcurrency', 40))
         concurrency = max(1, min(requested, safe, MAX_CONCURRENCY, len(asins)))
         if requested > safe:
             Actor.log.info(f'maxConcurrency {requested} capped to {safe} for {memory_mb} MB memory — give the run more memory for more speed')
