@@ -20,3 +20,8 @@ G=/home/kevinkim/Desktop/GCX
 
 # Pull skill/memory updates pushed from the Mac every 5 min is done by the Mac (push), nothing here.
 */30 * * * *  cd $G/GAS_Operations/DiscolorationReport && python3 report.py >> $G/GAS_Operations/DiscolorationReport/logs/launchd.out.log 2>> $G/GAS_Operations/DiscolorationReport/logs/launchd.err.log  # mesh:discoloration-report
+
+# Mac fallback (2026-10-11): if this server stops its heartbeat (>7 min) and is unreachable on 2 checks in a row,
+# the Mac (launchd com.spigen.gcx.server-fallback, ServerBootstrap/fallback/gcx_fallback.py) runs the badreview,
+# backfill, discoloration and apify-health jobs above until it's back. Keep its JOBS list in step with this file.
+# Double sends are blocked by the shared run ledger (fallback/gcx_ledger.py, tab `ledger` of the heartbeat sheet).

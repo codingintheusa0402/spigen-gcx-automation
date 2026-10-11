@@ -34,6 +34,10 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from googleapiclient.discovery import build
 
+# shared run ledger (server ⇄ Mac fallback): per-product success dates are mirrored to a sheet
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "ServerBootstrap", "fallback"))
+import gcx_ledger  # noqa: E402
+
 KST = ZoneInfo("Asia/Seoul")
 SECRETS_PATH = os.path.expanduser("~/.config/caspi_sales_backfill/secrets.json")
 STATE_PATH = os.path.expanduser("~/.config/caspi_sales_backfill/state.json")
@@ -200,6 +204,18 @@ def main():
     pending = [p for p in PRODUCTS if state.get(p["key"], {}).get("last_success_date") != today_str]
     if not pending:
         return  # already ran successfully for all products today
+    try:   # the other machine (server / Mac fallback) may already have done some today
+        shared = (gcx_ledger.get("caspi-backfill:state") or {}).get("data") or {}
+    except Exception as e:
+        shared = {}
+        log(f"ledger read failed: {e}")
+    for k, d in shared.items():
+        if d == today_str:
+            state.setdefault(k, {})["last_success_date"] = d
+    pending = [p for p in PRODUCTS if state.get(p["key"], {}).get("last_success_date") != today_str]
+    if not pending:
+        save_state(state)
+        return
 
     secrets = load_json(SECRETS_PATH, {})
     api_key = secrets.get("caspi_api_key")
@@ -219,6 +235,8 @@ def main():
             state.setdefault(product["key"], {})["last_success_date"] = today_str
             state[product["key"]]["last_run_at"] = now.isoformat()
             save_state(state)  # persist after each product so partial progress survives a crash
+            gcx_ledger.put("caspi-backfill:state", "done",
+                           {k: v.get("last_success_date") for k, v in state.items() if isinstance(v, dict)})
         except Exception as e:
             log(f"  {product['key']}: FAILED - {e!r}")
 

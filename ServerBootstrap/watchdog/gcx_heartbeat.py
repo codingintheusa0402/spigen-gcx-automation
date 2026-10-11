@@ -67,8 +67,10 @@ def main():
 
     # heartbeat → sheet (read by the cloud monitor)
     sid = open(os.path.expanduser("~/.config/gcx_heartbeat_sheet.txt")).read().strip()
+    # D = "ledger:1" tells the Mac fallback (ServerBootstrap/fallback) that this server's jobs record their
+    # runs in the shared ledger, so the Mac may safely take over when the heartbeat stops
     sheets().spreadsheets().values().update(spreadsheetId=sid, range="heartbeat!A2:E2", valueInputOption="RAW",
-        body={"values": [[now, boot, "gcx-server", "", time.strftime("%Y-%m-%d %H:%M:%S")]]}).execute()
+        body={"values": [[now, boot, "gcx-server", "ledger:1", time.strftime("%Y-%m-%d %H:%M:%S")]]}).execute()
     st["last"] = now
     json.dump(st, open(STATE, "w"))
 

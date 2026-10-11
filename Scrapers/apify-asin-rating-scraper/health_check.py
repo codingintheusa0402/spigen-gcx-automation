@@ -100,6 +100,12 @@ def autofix(problems):
     if os.path.exists(stamp):
         log('autofix already attempted today — skipping')
         return None
+    sys.path.insert(0, os.path.join(HERE, '..', '..', 'ServerBootstrap', 'fallback'))
+    import gcx_ledger                                  # server ⇄ Mac fallback: one autofix per day across both
+    if not gcx_ledger.claim(f'apify-autofix:{datetime.now():%F}'):
+        log('autofix already attempted today on the other machine — skipping')
+        return None
+    gcx_ledger.put(f'apify-autofix:{datetime.now():%F}', 'done')     # attempted — once a day is enough
     open(stamp, 'w').close()
     log('starting autofix Claude session')
     env = dict(os.environ, PATH=f"{os.path.expanduser('~/.venvs/apify-asin/bin')}:{os.path.expanduser('~/.local/bin')}:/usr/local/bin:/usr/bin:/bin")
