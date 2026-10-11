@@ -45,10 +45,14 @@ Object.assign(Mesh.prototype, {
   },
   // keep a session's whole footprint (glow ring above, label pill + hint line below) inside the mesh
   // window at any window/dock size — orbits that would leave it slide along the edge instead
-  fitInView(n, p) {
+  // A session you placed by hand keeps the area that was on screen when you dropped it (stored relative to
+  // the star), so it stays put after zooming out/panning and dropping it outside the original window box.
+  fitInView(n, p, box) {
     const R = this.nodeRadius(n) * 1.12, half = Math.max(R + 20, (n.labelW || 200) / 2) + 8;
     const top = this.compact ? R + 6 : R + 22, bottom = this.compact ? R + 8 + 19 + 8 : R + 22 + 46 + 10 + 26;   // ring | label gap + pill + pad + #meshHint
-    const x0 = half, x1 = this.w - half, y0 = top, y1 = this.h - bottom;
+    const hx = this.hub.x, hy = this.hub.y;
+    const x0 = Math.min(0, box ? hx + box.x0 : 0) + half, x1 = Math.max(this.w, box ? hx + box.x1 : 0) - half;
+    const y0 = Math.min(0, box ? hy + box.y0 : 0) + top, y1 = Math.max(this.h, box ? hy + box.y1 : 0) - bottom;
     const cx = v => x1 > x0 ? Math.min(x1, Math.max(x0, v)) : this.w / 2;
     let x = cx(p.x); const y = y1 > y0 ? Math.min(y1, Math.max(y0, p.y)) : (y0 + y1) / 2;
     // squeezed into the mother's column (short window)? slide sideways so neither covers the other
@@ -94,7 +98,11 @@ Object.assign(Mesh.prototype, {
   dropOrbit(n) {                          // turn the drop point into an orbit on the same ellipse family
     const sh = this.orbitShape(), dx = n.x - this.hub.x, dy = (n.y - this.hub.y) / sh.k;
     const rx = Math.max(this.motherRadius() + this.nodeRadius(n) + 20, Math.hypot(dx, dy));
-    this.loadOrbits()[n.sid] = { rx, a0: Math.atan2(dy, dx), t0: Date.now() }; this.saveOrbits();
+    const v = this.view ? this.view() : { x0: 0, y0: 0, x1: this.w, y1: this.h }, hx = this.hub.x, hy = this.hub.y;
+    const R = this.nodeRadius(n) * 1.12, px = Math.max(R + 20, (n.labelW || 200) / 2) + 10, top = R + 24, bot = R + 120;   // bubble + its label
+    const box = { x0: Math.min(0, v.x0, n.x - px) - hx, x1: Math.max(this.w, v.x1, n.x + px) - hx,       // what was visible at the drop,
+                  y0: Math.min(0, v.y0, n.y - top) - hy, y1: Math.max(this.h, v.y1, n.y + bot) - hy };   // always including the drop point
+    this.loadOrbits()[n.sid] = { rx, a0: Math.atan2(dy, dx), t0: Date.now(), box }; this.saveOrbits();
   },
 
   // ---------------- session motion (shared by both renderers) ----------------
@@ -123,7 +131,7 @@ Object.assign(Mesh.prototype, {
         const dx = p.x - F.x, dy = p.y - F.y, d = Math.hypot(dx, dy) || 1, D = this.nodeRadius(F) + this.nodeRadius(n) + 260;
         if (d < D) { const k = (D - d) * F.focus; p = { x: p.x + dx / d * k, y: p.y + dy / d * k }; }
       }
-      const h = this.fitInView(n, p);                  // each session follows only its own orbit, kept on-screen
+      const h = this.fitInView(n, p, orb[n.sid] && orb[n.sid].box);                  // each session follows only its own orbit, kept on-screen
       n.vx += (h.x - n.x) * 2.2 * dt; n.vy += (h.y - n.y) * 2.2 * dt;
       const damp = Math.pow(.12, dt); n.vx *= damp; n.vy *= damp;
       n.x += n.vx * dt; n.y += n.vy * dt;
