@@ -82,7 +82,12 @@ function makeOrb(fam, seed) {
 
 Object.assign(Mesh.prototype, {
   // size: base by lifetime spend × recency (latest-run biggest) × focus (the session you're typing in)
-  nodeRadius(n) { return (30 + Math.min(28, Math.log10(1 + (n.s.totalUsd || 0)) * 10)) * (.8 + .36 * (n.rec ?? 1)) * (1 + .14 * (n.focus || 0)); },
+  // sized against the mother's core: never more than 3/4 of it (biggest spender, most frequent, focused)
+  nodeRadius(n) {
+    const spend = Math.min(1, Math.log10(1 + (n.s.totalUsd || 0)) / 2.8);
+    const f = (.22 + .33 * spend) * (.7 + .3 * (n.rec ?? 1)) * (1 + .3 * (n.focus || 0));
+    return Math.max(12, this.motherRadius() * Math.min(.75, f));
+  },
 
   drawMote(n, dt) {
     const ctx = this.ctx, s = n.s, t = this.time, fam = s.serverUses ? 'server' : ORB_PAL[s.family] ? s.family : 'other';
