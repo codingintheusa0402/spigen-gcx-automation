@@ -33,6 +33,11 @@ import sys
 import urllib.request
 from collections import defaultdict
 
+# shared run ledger (server ⇄ Mac fallback): what was sent/reported lives in a sheet too, so the machine
+# that runs next doesn't re-send today's report or re-list already-reported claims
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "ServerBootstrap", "fallback"))
+import gcx_ledger  # noqa: E402
+
 CASPI_ENDPOINT = "https://caspilm.spigen.com/api/data-api/run"
 Q_CLAIMS = "pq_cde9dcd490cc850dad"
 Q_REVIEWS = "pq_3cc3dd0f30778bf1f8"
@@ -211,7 +216,19 @@ def main():
     if not a.force and not a.dry_run:
         if today.weekday() not in SEND_WEEKDAYS or now.hour < SEND_HOUR:
             return
+        try:   # merge what the other machine already reported
+            shared = (gcx_ledger.get("discoloration:state") or {}).get("data") or {}
+        except Exception as e:
+            shared = {}
+            log(f"ledger read failed: {e}")
+        if (shared.get("last_sent_date") or "") > (state.get("last_sent_date") or ""):
+            state["last_sent_date"] = shared["last_sent_date"]
+        for k in ("reported_claims", "reported_reviews"):
+            state[k] = sorted(set(state.get(k, [])) | set(shared.get(k, [])))
         if state.get("last_sent_date") == today.isoformat():
+            save_state(state)
+            return
+        if not gcx_ledger.claim(f"discoloration:{today}"):
             return
 
     secrets = load_json(SECRETS, None)
@@ -260,6 +277,8 @@ def main():
     state["reported_reviews"] = sorted(reported_r | {r["REVIEW_ID"] for r in new_reviews})
     state["last_sent_date"] = today.isoformat()
     save_state(state)
+    gcx_ledger.put("discoloration:state", "done", {k: state[k] for k in ("last_sent_date", "reported_claims", "reported_reviews")})
+    gcx_ledger.put(f"discoloration:{today}", "sent")
 
 
 if __name__ == "__main__":

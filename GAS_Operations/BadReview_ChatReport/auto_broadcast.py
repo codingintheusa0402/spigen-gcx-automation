@@ -41,6 +41,10 @@ SKILLS = os.path.expanduser("~/.claude/skills")
 GWS_TOKEN_PATH = os.path.expanduser("~/.config/gws_shim/token.json")
 LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 STATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
+# shared run ledger (server ⇄ Mac fallback): today's send/hold is recorded in a sheet so whichever
+# machine runs next knows — local ran_/held_ markers only exist on the machine that ran
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "ServerBootstrap", "fallback"))
+import gcx_ledger  # noqa: E402
 
 
 def held_marker_path(today):
@@ -279,12 +283,16 @@ def main():
             return  # outside the catch-up window — stay silent, don't spam the log every 5 min
         if os.path.exists(ran_marker_path(today)):
             return  # today's real run already happened (on time or an earlier catchup) — nothing to do
+        if gcx_ledger.status(f"badreview:{today}") in ("sent", "held"):
+            os.makedirs(STATE_DIR, exist_ok=True)
+            open(ran_marker_path(today), "w").close()   # done on the other machine — remember locally
+            return
         log(f"CATCHUP {today.isoformat()}: no run recorded yet today (likely a missed "
             f"10:30 trigger, e.g. the Mac was asleep) — running now")
 
     if a.retry_if_held:
         marker = held_marker_path(today)
-        if not os.path.exists(marker):
+        if not os.path.exists(marker) and gcx_ledger.status(f"badreview:{today}") != "held":
             log(f"RETRY {today.isoformat()}: nothing held, skipping")
             return
         log(f"RETRY {today.isoformat()}: 10:30 run held the carousel — retrying now, "
@@ -296,6 +304,9 @@ def main():
             return
         if a.catchup and os.path.exists(ran_marker_path(today)):
             return  # re-checked under the lock: a run finished while this one was starting
+        if not gcx_ledger.claim(f"badreview:{today}", allow=("held",) if a.retry_if_held else ()):
+            log(f"SKIP {today.isoformat()}: already handled / in progress on the other machine (ledger)")
+            return
 
     log(f"RUN {today.isoformat()}: fetching sheets")
     token = refresh_gws_token()
@@ -374,6 +385,7 @@ def main():
         open(held_marker_path(today), "w").close()
         if not a.test_only:
             open(ran_marker_path(today), "w").close()
+            gcx_ledger.put(f"badreview:{today}", "held")
         log(f"DONE {today.isoformat()}: carousel HELD ENTIRELY (0 KR reviews for Z8) — "
             f"alert + preview posted to private room; marker written for main+1h retry")
         return
@@ -393,6 +405,7 @@ def main():
     if not a.test_only:
         os.makedirs(STATE_DIR, exist_ok=True)
         open(ran_marker_path(today), "w").close()
+        gcx_ledger.put(f"badreview:{today}", "sent")
 
     log(f"DONE {today.isoformat()}: sent to {len(targets)} {'test' if a.test_only else ''} room(s)")
 
