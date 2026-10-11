@@ -48,10 +48,10 @@
     "maxConcurrency": {
       "title": "Max concurrency",
       "type": "integer",
-      "default": 5,
+      "default": 20,
       "minimum": 1,
-      "maximum": 20,
-      "description": "Parallel ASIN requests."
+      "maximum": 50,
+      "description": "Parallel browser-like sessions (each with its own IP and cookies). Automatically capped to what the run memory supports (~1 session per 12 MB: 512 MB → 42, 1 GB → 50). The actor backs off on its own if Amazon starts blocking."
     },
     "proxyConfiguration": {
       "title": "Proxy",
