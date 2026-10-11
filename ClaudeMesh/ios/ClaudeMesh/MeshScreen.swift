@@ -57,17 +57,18 @@ struct MeshWebView: UIViewRepresentable {
     }
 
     final class Coord: NSObject, WKNavigationDelegate, WKUIDelegate {
-        var parent: MeshWebView; weak var web: WKWebView?; var index = 0; var lastAttempt = 0
+        var parent: MeshWebView; weak var web: WKWebView?; var index = 0; var lastAttempt = 0; var lastError = ""
         init(_ p: MeshWebView) { parent = p; lastAttempt = p.attempt }
         func load(index i: Int) {
             index = i
             guard i < parent.urls.count else { DispatchQueue.main.async { self.parent.failed = true }; return }
-            var r = URLRequest(url: parent.urls[i]); r.timeoutInterval = 6
+            var r = URLRequest(url: parent.urls[i]); r.timeoutInterval = 12
+            NSLog("GCXMESH load %@", parent.urls[i].absoluteString.replacingOccurrences(of: #"t=[^&]+"#, with: "t=…", options: .regularExpression))
             web?.load(r)
         }
         // address didn't answer → try the next paired one
-        func webView(_ w: WKWebView, didFailProvisionalNavigation n: WKNavigation!, withError e: Error) { load(index: index + 1) }
-        func webView(_ w: WKWebView, didFail n: WKNavigation!, withError e: Error) { load(index: index + 1) }
+        func webView(_ w: WKWebView, didFailProvisionalNavigation n: WKNavigation!, withError e: Error) { NSLog("GCXMESH fail-prov %@", "\(e)"); lastError = e.localizedDescription; load(index: index + 1) }
+        func webView(_ w: WKWebView, didFail n: WKNavigation!, withError e: Error) { NSLog("GCXMESH fail %@", "\(e)"); lastError = e.localizedDescription; load(index: index + 1) }
         func webView(_ w: WKWebView, didFinish n: WKNavigation!) { DispatchQueue.main.async { self.parent.failed = false } }
 
         // the page's alert / confirm / prompt dialogs, shown natively

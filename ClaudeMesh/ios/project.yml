@@ -35,5 +35,5 @@ targets:
       path: ClaudeMesh/Info.plist
       properties:
         NSAppTransportSecurity:
-          NSAllowsArbitraryLoads: true      # the Mac serves plain http on your Wi-Fi / Tailnet
-          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true      # the Mac serves plain http on your Wi-Fi / Tailnet (100.x). Don't add
+                                            # NSAllowsLocalNetworking: its presence makes iOS ignore this key → Tailscale blocked
