@@ -90,9 +90,9 @@ function accessToken_() {
 }
 
 /* ---------------- send to KakaoTalk (나에게 보내기) ---------------- */
-function kakaoSend_(text, url) {
+function kakaoSend_(text, url, title) {
   const tpl = { object_type: 'text', text: text.length > 200 ? text.slice(0, 199) + '…' : text,
-    link: { web_url: url || ROOM_URL, mobile_web_url: url || ROOM_URL }, button_title: 'Chat에서 보기' };
+    link: { web_url: url || ROOM_URL, mobile_web_url: url || ROOM_URL }, button_title: title || 'Chat에서 보기' };
   const go = () => UrlFetchApp.fetch('https://kapi.kakao.com/v2/api/talk/memo/default/send', {
     method: 'post', headers: { Authorization: 'Bearer ' + accessToken_() },
     payload: { template_object: JSON.stringify(tpl) }, muteHttpExceptions: true });
@@ -124,7 +124,9 @@ function relay() {
       const isBot = m.sender && m.sender.type === 'BOT';
       const text = messageText_(m);
       if (isBot && text && text.indexOf(RELAY_TAG) < 0) {
-        try { kakaoSend_(text, threadUrl_(m)); }
+        // a message that asks for something (OTP page, re-login page) → the Kakao button opens THAT page
+        const act = actionUrl_(m);
+        try { act ? kakaoSend_(text, act, /otp/i.test(act) ? 'OTP 입력하기' : '로그인 / 열기') : kakaoSend_(text, threadUrl_(m)); }
         catch (err) { if (/token|401|invalid_grant|not connected/i.test(err.message)) { needReauth_(err); return; } throw err; }
       }
       since = m.createTime; P.setProperty('LAST_CREATE', since);
@@ -152,6 +154,20 @@ function messageText_(m) {
   (m.cards || []).forEach(walk);
   if (m.text) { const c = clean(m.text); if (c && out.indexOf(c) < 0) out.unshift(c); }
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// first openLink button in a card (e.g. "Re-login amazon:de"), else the first URL in the text (e.g. the OTP page)
+function actionUrl_(m) {
+  let found = null;
+  const walk = o => {
+    if (found || !o || typeof o !== 'object') return;
+    if (Array.isArray(o)) return o.forEach(walk);
+    if (o.openLink && o.openLink.url && !/chat\.google\.com/.test(o.openLink.url)) { found = o.openLink.url; return; }
+    Object.keys(o).forEach(k => walk(o[k]));
+  };
+  (m.cardsV2 || []).forEach(c => walk(c.card));
+  if (!found && m.text) { const u = String(m.text).match(/https?:\/\/[^\s<>|]+/); if (u) found = u[0]; }
+  return found;
 }
 
 const threadUrl_ = m => m.thread && m.thread.name
