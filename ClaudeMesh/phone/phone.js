@@ -32,6 +32,8 @@ let T = null, holdT = null;
 const pt = t => ({ clientX: t.clientX, clientY: t.clientY });
 cv.addEventListener('touchstart', e => {
   e.preventDefault(); viz.lastInput = performance.now();
+  const ae = document.activeElement;   // a focused terminal/textarea keeps the keyboard (and a scrolled layout) alive — drop it
+  if (ae && ae !== document.body && /^(TEXTAREA|INPUT)$/.test(ae.tagName)) { ae.blur(); resetScroll(); }
   const c = viz.cam;
   if (e.touches.length === 1) {
     const p = pt(e.touches[0]), h = viz.hit(p);
@@ -73,6 +75,11 @@ cv.addEventListener('touchend', e => {
   }
   if (e.touches.length === 0) T = null;
 }, { passive: false });
+// iOS cancels touches when the keyboard, a sheet or a system gesture takes over — never leave a drag/pinch half-open
+cv.addEventListener('touchcancel', () => { clearTimeout(holdT); if (T && T.mode === 'drag') viz.dragEnd(); T = null; });
+// after typing, iOS can leave the page scrolled: the mesh is drawn in place but touches land on the wrong layer
+function resetScroll() { const go = () => { scrollTo(0, 0); document.documentElement.scrollTop = document.body.scrollTop = 0; viz.resize(); };
+  go(); setTimeout(go, 120); setTimeout(go, 400); }
 
 // ---------- live data ----------
 let es = null, lastMsg = 0;
@@ -374,10 +381,13 @@ function renderGrid() {
 
 // keyboard up (iOS): let the typing surface take the screen
 if (window.visualViewport) {
-  const kb = () => { const h = Math.max(0, innerHeight - visualViewport.height - visualViewport.offsetTop);
-    document.documentElement.style.setProperty('--kb', h + 'px'); document.body.classList.toggle('kb', h > 120);
-    if (h > 120) scrollTo(0, 0); requestAnimationFrame(() => viz.resize()); };
+  let wasUp = false;
+  const kb = () => { const h = Math.max(0, innerHeight - visualViewport.height - visualViewport.offsetTop), up = h > 120;
+    document.documentElement.style.setProperty('--kb', (up ? h : 0) + 'px'); document.body.classList.toggle('kb', up);
+    if (up) scrollTo(0, 0); else if (wasUp) resetScroll();
+    wasUp = up; requestAnimationFrame(() => viz.resize()); };
   visualViewport.addEventListener('resize', kb); visualViewport.addEventListener('scroll', kb);
+  addEventListener('focusout', () => setTimeout(kb, 60));
 }
 addEventListener('orientationchange', () => setTimeout(() => { viz.resize(); if (view === 'split' && paneKind && paneKind.startsWith('term')) renderSplit(true); }, 350));
 { const v0 = localStorage.getItem('mesh.view'); if (v0 === 'split' || v0 === 'grid') { setTab(v0, true); setView(v0); } }
