@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build + install GCX Mesh on the iPhone (free Apple ID signing expires every 7 days → rerun this).
+# Build + install GCX Mesh on the iPhone (free Apple ID signing expires every 7 days; keepalive.sh reruns this automatically).
 # Needs: Apple ID signed in at Xcode → Settings → Accounts; iPhone connected (cable or same Wi-Fi), unlocked.
 set -e
 cd "$(dirname "$0")"
