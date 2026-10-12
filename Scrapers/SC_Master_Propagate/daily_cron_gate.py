@@ -1,30 +1,40 @@
 #!/usr/bin/env python3
 """Weekday + KR-holiday gate for the daily sc-review-propagate cron job.
 
-Runs on the GCX server (cron, weekdays 8:30 AM KST — the day-of-week filter
-is already in the crontab entry itself; this script's own weekday check is
-just defense-in-depth). Skips on Korean public holidays, computed via the
-`holidays` package (South Korea, "public" category) in the dedicated venv
-~/.venvs/gcx-holidays — EXCEPT 제헌절 (Constitution Day, Jul 17), which the
-library mislabels: it has not been a non-working public holiday since 2008.
+Called every 5 min by cron (not a single exact-time shot) so a missed slot
+(server was down/asleep at 8:30) self-catches-up the moment the machine is
+back, instead of silently skipping the whole day — added 2026-10-12 after a
+27h Modern Standby outage ate both this job's 8:30 run and the Apify health
+check's 10:00 run on the same day. Only actually launches once per working
+day (state/last_run.json), from 08:30 KST onward.
 
-If today is a working day, launches the daily pipeline as a fresh Claude
-Code session in tmux window gcx:sc-propagate-daily (same mechanism as
-run-on-server's run_on_server.sh), which fetches from Caspi, runs
-propagate.py through all phases, then phase_g.py --commit for the image
-backfill — architected exactly per the sc-review-propagate skill.
+Skips on Korean public holidays, computed via the `holidays` package (South
+Korea, "public" category) in the dedicated venv ~/.venvs/gcx-holidays —
+EXCEPT 제헌절 (Constitution Day, Jul 17), which the library mislabels: it has
+not been a non-working public holiday since 2008.
+
+If today is a working day and we're past 08:30 and haven't already launched
+today, launches the daily pipeline as a fresh Claude Code session in tmux
+window gcx:sc-propagate-daily (same mechanism as run-on-server's
+run_on_server.sh), which fetches from Caspi, runs propagate.py through all
+phases, then phase_g.py --commit for the image backfill — architected
+exactly per the sc-review-propagate skill.
 """
+import json
 import os
 import subprocess
 import sys
-from datetime import date
+from datetime import date, datetime, time as dtime
 from zoneinfo import ZoneInfo
-from datetime import datetime
 
 KST = ZoneInfo("Asia/Seoul")
 EXCLUDE_HOLIDAYS = {"07-17"}  # 제헌절 — no longer a non-working day since 2008
 TASK_NAME = "sc-propagate-daily"
 TASK_DIR = os.path.expanduser("~/.gcx-tasks")
+TARGET_TIME = dtime(8, 30)
+STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state_cron_gate.json")
+
+sys.path.insert(0, os.path.expanduser("~/Desktop/GCX/ServerBootstrap/watchdog"))
 
 PROMPT = """Run today's full sc-review-propagate pipeline end to end, autonomously, no confirmation needed. This is the standing daily routine (see memory sc_master_sheet_propagation.md, caspilm_review_fetch_workflow.md, and ~/Desktop/GCX/Scrapers/SC_Master_Propagate/SKILL.md — read them, don't re-derive the approach). You are running on the GCX server via a cron-triggered session with no prior context, so figure out today's date yourself first.
 
@@ -67,6 +77,31 @@ def is_working_day(today: date) -> bool:
     return today not in kr
 
 
+def load_state():
+    if os.path.exists(STATE_PATH):
+        with open(STATE_PATH) as f:
+            return json.load(f)
+    return {}
+
+
+def save_state(state):
+    with open(STATE_PATH, "w") as f:
+        json.dump(state, f)
+
+
+def notify_catchup(today_str, now, late_minutes):
+    try:
+        from gcx_alert import alert
+        alert(
+            "sc-review-propagate 지연 실행 (catch-up)",
+            f"오늘({today_str}) 08:30 예정이던 자동 실행이 서버 다운/절전 등으로 누락되어, "
+            f"{now.strftime('%H:%M')} KST ({late_minutes:.0f}분 지연)에 catch-up 으로 실행을 시작합니다.",
+            level="warn",
+        )
+    except Exception as e:
+        print(f"WARN: catch-up chat alert failed: {e}", file=sys.stderr)
+
+
 def launch_pipeline():
     os.makedirs(TASK_DIR, exist_ok=True)
     prompt_path = os.path.join(TASK_DIR, f"{TASK_NAME}.prompt")
@@ -83,12 +118,40 @@ tmux new-window -t gcx -n {TASK_NAME} 'cd ~ && export PATH=$HOME/.local/bin:$PAT
 
 
 def main():
-    today = datetime.now(KST).date()
+    now = datetime.now(KST)
+    today = now.date()
+    today_str = today.isoformat()
+
     if not is_working_day(today):
         reason = "weekend" if today.weekday() >= 5 else "KR public holiday"
         print(f"{today} skipped ({reason})")
         return
-    print(f"{today} is a working day — launching pipeline")
+
+    if now.time() < TARGET_TIME:
+        print(f"{today} not yet {TARGET_TIME} KST, skipping this tick")
+        return
+
+    state = load_state()
+    if state.get("last_run_date") == today_str:
+        print(f"{today} already launched today, skipping")
+        return
+
+    # Catch-up detection: are we more than ~10 min past the target time?
+    target_dt = datetime.combine(today, TARGET_TIME, tzinfo=KST)
+    late_minutes = (now - target_dt).total_seconds() / 60
+    is_catchup = late_minutes > 10
+
+    state["last_run_date"] = today_str
+    state["last_run_at"] = now.isoformat()
+    state["was_catchup"] = is_catchup
+    save_state(state)
+
+    if is_catchup:
+        print(f"{today} CATCH-UP launch ({late_minutes:.0f} min late) — alerting Chat")
+        notify_catchup(today_str, now, late_minutes)
+    else:
+        print(f"{today} on-time launch")
+
     launch_pipeline()
 
 
