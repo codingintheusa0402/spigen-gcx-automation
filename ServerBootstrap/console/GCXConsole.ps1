@@ -157,8 +157,14 @@ $HealthJob = {
   $r
 }
 
-function JobRow($name, $detail, $color) {
+function JobRow($name, $detail, $color, $key) {
   $d = New-Object Windows.Controls.DockPanel; $d.Margin = "0,4,0,4"
+  if ($key -match '^[A-Za-z0-9:_.-]+$') {                 # RUNNING NOW row → click opens its live log in a terminal
+    $d.Background = [Windows.Media.Brushes]::Transparent; $d.Cursor = [Windows.Input.Cursors]::Hand
+    $d.Tag = "$key|$name"; $d.ToolTip = "Click: live log"
+    $d.Add_MouseLeftButtonUp({ param($s, $e) $k, $n = "$($s.Tag)".Split("|", 2)
+      Log "live log: $n ($k)"; Term "Live log · $n" "bash ~/Desktop/GCX/ServerBootstrap/console/gcx-logview.sh $k" })
+  }
   $dot = New-Object Windows.Shapes.Ellipse; $dot.Width = 9; $dot.Height = 9; $dot.Margin = "0,0,10,0"; $dot.Fill = $bc.ConvertFromString($color)
   [Windows.Controls.DockPanel]::SetDock($dot, "Left")
   if ($color -eq "#3DDC97") { try { $dot.BeginAnimation([Windows.UIElement]::OpacityProperty, (Anim 1.0 0.25 0.9 $true)) } catch { } }   # running → breathing dot
@@ -192,13 +198,13 @@ function RefreshSchedule {
     $ok = @($lines | ? { "$_" -match "^(run|next)\|" })
     if (-not $ok.Count -and $lines.Count) { Log ("schedule refresh output: " + (($lines | Select -First 3) -join " / ")) }
     $running.Children.Clear(); $upnext.Children.Clear()
-    foreach ($l in $ok) { $p = "$l".Split("|", 3)
-      if ($p[0] -eq "run")  { [void]$running.Children.Add((JobRow $p[1] $p[2] "#3DDC97")) }
+    foreach ($l in $ok) { $p = "$l".Split("|", 4)
+      if ($p[0] -eq "run")  { [void]$running.Children.Add((JobRow $p[1] $p[2] "#3DDC97" $p[3])) }
       if ($p[0] -eq "next") { [void]$upnext.Children.Add((JobRow $p[1] $p[2] "#8FA2FF")) } }
     if ($running.Children.Count -eq 0) { [void]$running.Children.Add((JobRow "Nothing running" "" "#5D648C")) }
     if ($upnext.Children.Count -eq 0) { [void]$upnext.Children.Add((JobRow "No scheduled jobs" "" "#5D648C")) }
     $u = (Get-Date).ToString("HH:mm:ss")
-    $runTitle.Text = "RUNNING NOW  ·  live, updated $u"; $nextTitle.Text = "UP NEXT  ·  live, updated $u"
+    $runTitle.Text = "RUNNING NOW  ·  live, updated $u  ·  click a row for its live log"; $nextTitle.Text = "UP NEXT  ·  live, updated $u"
   } catch { Log ("schedule refresh error: " + $_.Exception.Message) }
 }
 $timer = New-Object Windows.Threading.DispatcherTimer; $timer.Interval = [TimeSpan]::FromSeconds(30); $timer.Add_Tick({ Refresh }); $timer.Start()

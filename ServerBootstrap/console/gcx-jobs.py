@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Running + upcoming jobs on gcx-server for the GCX console. Prints: run|name|detail  and  next|name|detail"""
+"""Running + upcoming jobs on gcx-server for the GCX console. Prints: run|name|detail|logkey  and  next|name|detail
+(logkey → gcx-logview.sh, opened when the row is clicked)"""
 import datetime as dt, json, os, re, subprocess
 from zoneinfo import ZoneInfo
 from croniter import croniter
@@ -75,19 +76,19 @@ if up:
         detail = f"{up} · {len(act)} plan(s) active ({real} real · {len(act) - real} mock)"
     except Exception:
         detail = up
-    print(f"run|AI Trader engine|{detail}")
+    print(f"run|AI Trader engine|{detail}|svc:mock-trader:user")
 elif sh("systemctl", "--user", "is-active", "mock-trader") == "activating":
-    print("run|AI Trader engine|waiting — the Mac fallback is running it")
+    print("run|AI Trader engine|waiting — the Mac fallback is running it|svc:mock-trader:user")
 if subprocess.run(["curl", "-s", "-m", "2", "-o", "/dev/null", "http://127.0.0.1:9222/json/version"]).returncode == 0:
-    print("run|Zendesk Chrome (for ticket monitor)|open · CDP 9222")
+    print("run|Zendesk Chrome (for ticket monitor)|open · CDP 9222|tmux:zendesk-chrome")
 up = unit_up("gcx-relogin", user=False)
 if up:
-    print(f"run|Re-login page (Tailscale)|{up}")
+    print(f"run|Re-login page (Tailscale)|{up}|svc:gcx-relogin:system")
 up = unit_up("gcx-owner-watch")
 if up:
-    print(f"run|Mac hand-over guard|{up}")
+    print(f"run|Mac hand-over guard|{up}|svc:gcx-owner-watch:user")
 print("run|Health checks|watchdog " + ago(f"{H}/.gcx-watchdog.json") + " · heartbeat " + ago(f"{H}/.gcx-heartbeat.json")
-      + " · self-heal every 2m · git sync " + ago(f"{H}/.gcx-autosync.log"))
+      + " · self-heal every 2m · git sync " + ago(f"{H}/.gcx-autosync.log") + "|health")
 
 # running: only real job processes (python/bash actually executing the job script) —
 # not Claude sessions whose prompt merely mentions a script name
@@ -102,7 +103,7 @@ for line in ps:
     n = name_of(script) if script.endswith((".py", ".sh")) else None
     if n and n not in seen:
         seen.add(n); m = int(secs) // 60
-        print(f"run|{n}|running {m // 60}h {m % 60}m" if m >= 60 else f"run|{n}|running {max(m, 0)}m")
+        print((f"run|{n}|running {m // 60}h {m % 60}m" if m >= 60 else f"run|{n}|running {max(m, 0)}m") + f"|pid:{pid}")
 
 # Claude task sessions: listed only while actually working (status busy); the ticket monitor is a standing loop
 cmd = {l.strip().split(None, 2)[0]: l.strip().split(None, 2)[2] for l in ps if len(l.split(None, 2)) == 3}
@@ -120,11 +121,11 @@ for f in os.listdir(sess_dir) if os.path.isdir(sess_dir) else []:
     m = re.search(r"--remote-control (gcx-[\w-]+)", args)
     label = m.group(1)[4:] if m else (d.get("name") or "session")
     if "ticket-monitor" in label:
-        print("run|Ticket monitor (Claude loop)|" + ("checking now" if d.get("status") == "busy" else "watching · every minute"))
+        print("run|Ticket monitor (Claude loop)|" + ("checking now" if d.get("status") == "busy" else "watching · every minute") + "|tmux:ticket-monitor")
     elif d.get("status") == "busy":
-        print(f"run|Claude: {label}|working")
+        print(f"run|Claude: {label}|working|" + ("tmux:main" if label == "main" else f"pid:{pid}"))
     elif label == "main":
-        print("run|Claude: main (Remote Control)|idle · ready")
+        print("run|Claude: main (Remote Control)|idle · ready|tmux:main")
 
 # upcoming: next fire time of each cron line
 cron = subprocess.run(["crontab", "-l"], capture_output=True, text=True).stdout.splitlines()
