@@ -37,7 +37,7 @@ async def check():
             u = (me or {}).get("user") or {}
             return bool(u.get("id")) and u.get("role") != "end-user" and u.get("role") is not None, u.get("email") or ""
         finally:
-            await browser.close()          # disconnects only — the Chrome window stays open
+            pass                           # no browser.close(): leaving async_playwright just disconnects; Chrome stays open
 
 
 async def login(email, password, ask_code, say=print):
@@ -96,7 +96,7 @@ async def login(email, password, ask_code, say=print):
             return ok, ("Signed in — the ticket monitor resumes on its next run." if ok else
                         f"Still not signed in ({page.url[:60]}…). Wrong password, a captcha or an extra check — use VNC.")
         finally:
-            await browser.close()
+            pass                           # never close the Zendesk Chrome — only disconnect
 
 
 async def check_page(page):
