@@ -74,11 +74,12 @@ own `--help`/docstring.
    full carousel preview to the private test room only — see `AUTO_BROADCAST.md`.
 
 The broadcast room list lives in `broadcast.py` `ROOMS` (source of truth: memory
-`gcx_team_gchat_webhooks.md`). Currently 13 rooms: GCX전략 x SDA / ADS1 / ADS2 / ADS3 /
+`gcx_team_gchat_webhooks.md`). Currently 14 rooms: GCX전략 x SDA / ADS1 / ADS2 / ADS3 /
 ADS5 (CP) / JP Sales / IN Sales / 모바일제품개발팀, 실장님 & GCX, GCX x 클리어프로텍션
-개발팀, [CQ] SPIGEN 국내&해외 CS, 리더들방, GCX전략 Spigen x TCK (added 2026-09-29) —
-the last two share a webhook for all cards (no `glxz8` override). The internal GCX
-team room (`gcx_gchat_webhook.md`) is **not** in this list.
+개발팀, [CQ] SPIGEN 국내&해외 CS, 리더들방, GCX전략 Spigen x TCK (added 2026-09-29),
+안준서 부문장 해외사업부문 (added 2026-10-12) — the last three share a webhook for
+all cards (no `glxz8` override). The internal GCX team room (`gcx_gchat_webhook.md`)
+is **not** in this list.
 
 **Per-product webhook routing** (2026-09-03): the Pixel 11 card always uses a room's
 default `token`. Each of the 11 GCX rooms also has a `glxz8` override token — a separate
@@ -164,7 +165,7 @@ Report per-room OK/ERR.
   (`SIG_RATIO`/`SIG_RED`) — keep them in sync. Only `decoratedText.text` renders HTML
   color (verified against the live webhook); `topLabel`/`bottomLabel` show raw tags.
 - Each room gets **1 combined carousel message** on a normal `--all` (all 3 products) —
-  13 rooms = 13 messages. A `--product` subset resend still sends one message per
+  14 rooms = 14 messages. A `--product` subset resend still sends one message per
   product per room, 1s apart, via the old per-product routing.
 - New messages every run — webhook messages can't be edited/deleted from here.
 - Card layout / height rules live in the two per-product `report.py` (kept in sync).
