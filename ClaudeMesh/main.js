@@ -249,6 +249,13 @@ async function scanHistory() {
 }
 // Rename = the same record `/rename` writes, appended to the transcript (shows in the /resume picker)
 ipcMain.handle('hist:rename', (_e, sid, name) => renameTranscript(sid, name));
+// stop a running session (one outside the app — in-app terminals are closed by the renderer)
+ipcMain.handle('session:stop', async (_e, pid) => {
+  pid = +pid; if (!pid || pid === process.pid) return { ok: false, err: 'bad pid' };
+  try { process.kill(pid, 'SIGTERM'); } catch (e) { return { ok: e.code === 'ESRCH', err: e.message }; }
+  for (let i = 0; i < 30; i++) { await new Promise(r => setTimeout(r, 100)); try { process.kill(pid, 0); } catch { return { ok: true }; } }
+  try { process.kill(pid, 'SIGKILL'); } catch { } return { ok: true };
+});
 function renameTranscript(sid, name) {
   const c = [...histCache.values()].find(c => c.meta && c.meta.sid === sid);
   let file = c && c.meta.file;

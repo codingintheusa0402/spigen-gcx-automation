@@ -15,7 +15,9 @@ async function loadHistory() {
 // groups: Running (live) on top, then 📌 Pinned, then everything else by recency.
 // Within each group you can press-and-drag rows to set your own order (saved per group).
 let histPins = store.get('hist.pins', []), histOrder = store.get('hist.order', {}), histDragging = false;
+let histHidden = new Set(store.get('hist.hidden', []));      // removed from the list (still found by search)
 const savePins = () => store.set('hist.pins', histPins), saveOrder = () => store.set('hist.order', histOrder);
+const saveHidden = () => store.set('hist.hidden', [...histHidden]);
 function orderGroup(key, list) {
   const ord = histOrder[key] || [], pos = new Map(ord.map((sid, i) => [sid, i]));
   return list.sort((a, b) => (pos.has(a.sid) ? pos.get(a.sid) : 1e6) - (pos.has(b.sid) ? pos.get(b.sid) : 1e6) || b.mtime - a.mtime);
@@ -24,7 +26,7 @@ function renderHistory() {
   if (histDragging) return;                                   // don't redraw under a drag
   const q = $('#hSearch').value.trim().toLowerCase(), auto = $('#hAuto').checked;
   const liveSids = new Set(snap.sessions.map(s => s.sid)), agentSids = new Set((snap.agents || []).map(a => a.sessionId));
-  const rows = hist.filter(h => (auto || h.entry !== 'sdk-cli') &&
+  const rows = hist.filter(h => (auto || h.entry !== 'sdk-cli') && (q || liveSids.has(h.sid) || !histHidden.has(h.sid)) &&
     (!q || [h.title, h.aiTitle, h.first, h.last, h.cwd, h.branch, h.sid].some(v => v && v.toLowerCase().includes(q))));
   $('#hCount').textContent = '· ' + rows.length;
   const pins = new Set(histPins);
@@ -37,7 +39,7 @@ function renderHistory() {
   const rowHtml = (h, g) => {
     const live = liveSids.has(h.sid), ag = agentSids.has(h.sid), pinned = pins.has(h.sid);
     return `<div class="hrow ${live ? 'live' : ''} ${pinned ? 'pinned' : ''}" draggable="true" data-group="${g}" data-hsid="${h.sid}" title="${esc(histTitle(h))}\n${esc(h.cwd)}${h.last ? '\nlast: ' + esc(h.last) : ''}\n(drag to reorder)">
-      <div class="n"><span class="t">${esc(histTitle(h))}</span>${live ? '<span class="tag">live</span>' : ag ? '<span class="tag">agent</span>' : ''}<span class="pin ${pinned ? 'on' : ''}" data-pin="${h.sid}" title="${pinned ? 'Unpin' : 'Pin'}">📌</span><span class="more" data-hmore="${h.sid}">⋯</span></div>
+      <div class="n"><span class="t">${esc(histTitle(h))}</span>${live ? '<span class="tag">live</span>' : ag ? '<span class="tag">agent</span>' : ''}<span class="pin ${pinned ? 'on' : ''}" data-pin="${h.sid}" title="${pinned ? 'Unpin' : 'Pin'}">📌</span><span class="more" data-hmore="${h.sid}">⋯</span><span class="rm" data-hrm="${h.sid}" title="${live ? 'Stop and remove from Running' : 'Remove from list'}">×</span></div>
       <div class="m">${esc(projName(h.cwd))}${h.branch && h.branch !== 'HEAD' ? ' · ' + esc(h.branch) : ''} · ${agoT(h.mtime)} · ${h.size > 1e6 ? (h.size / 1e6).toFixed(1) + 'MB' : Math.round(h.size / 1e3) + 'kB'}</div></div>`;
   };
   let html = '';
@@ -108,6 +110,7 @@ function attachAgent(a) {
 
 $('#hList').addEventListener('click', e => {
   const pn = e.target.closest('[data-pin]'); if (pn) { e.stopPropagation(); return togglePin(pn.dataset.pin); }
+  const rm = e.target.closest('[data-hrm]'); if (rm) { e.stopPropagation(); return removeSession(rm.dataset.hrm); }
   const m = e.target.closest('[data-hmore]');
   if (m) { e.stopPropagation(); const r = m.getBoundingClientRect(); return openSessMenu(m.dataset.hmore, r.right + 6, r.top); }
   const row = e.target.closest('.hrow'); if (row) resumeSession(row.dataset.hsid);
@@ -129,6 +132,8 @@ function openSessMenu(sid, x, y, agent) {
     [histPins.includes(sid) ? 'Unpin' : '📌 Pin to top', () => togglePin(sid)],
     ['Rename…', () => renameSession(sid, h ? histTitle(h) : live && live.name)],
     ['Convert to background agent…', () => convertToAgent(sid)],
+    histHidden.has(sid) && !live ? ['Show in list again', () => { histHidden.delete(sid); saveHidden(); renderHistory(); }]
+      : [live ? 'Stop and remove…' : 'Remove from list', () => removeSession(sid), true],
   ];
   const el = document.createElement('div'); el.id = 'cmdMenu';
   el.innerHTML = `<div class="cm-h">${esc(ag ? (ag.name || ag.id) : h ? histTitle(h) : live ? live.name : sid.slice(0, 8))}</div><div class="cm-list">` +
@@ -137,6 +142,29 @@ function openSessMenu(sid, x, y, agent) {
   const r = el.getBoundingClientRect();
   el.style.left = Math.min(x, innerWidth - r.width - 10) + 'px'; el.style.top = Math.min(y, innerHeight - r.height - 10) + 'px';
   el.querySelectorAll('.cm-i').forEach(n => n.onclick = () => { closeCmdMenu(); items[+n.dataset.i][1](); });
+}
+
+// ---------------- remove from the list ----------------
+// Running → asks, stops it (closes its in-app terminal, or ends the claude process), and it drops to Recent.
+// Not running → hidden from the list (search still finds it; ⋯ → Show in list again).
+async function removeSession(sid) {
+  const live = snap.sessions.find(s => s.sid === sid), h = hist.find(x => x.sid === sid);
+  const name = live ? live.name : h ? histTitle(h) : sid.slice(0, 8);
+  if (!live) {
+    histHidden.add(sid); saveHidden(); renderHistory();
+    return toast('Removed ' + name.slice(0, 50) + ' — search still finds it');
+  }
+  modal(`<h2>Stop this session?</h2>
+    <div style="color:var(--dim);line-height:1.6;font-size:13px"><b style="color:var(--text)">${esc(name)}</b> is still running${live.health === 'working' ? ' <b style="color:var(--warn)">and working right now</b>' : ''}.
+    Removing it stops it${live.owner ? ' and closes its terminal' : live.tty ? ' (its Terminal.app tab stays open)' : ''}. It moves to <b style="color:var(--text)">Recent</b>, where you can resume it any time.</div>
+    <div class="btns" style="justify-content:flex-end"><button id="mCancel">Cancel</button><button class="danger" id="rmGo">Stop and remove</button></div>`);
+  $('#rmGo').onclick = async () => {
+    closeModal(); histHidden.delete(sid); saveHidden();
+    if (live.owner && terms.has(live.owner)) closeTerm(live.owner);
+    else { const r = await window.api.stopSession(live.pid); if (!r.ok) return toast('Could not stop it: ' + (r.err || '')); }
+    toast('Stopped ' + name.slice(0, 50) + ' — now under Recent');
+    lastHistKey = ''; setTimeout(loadHistory, 1500);
+  };
 }
 
 // ---------------- rename ----------------

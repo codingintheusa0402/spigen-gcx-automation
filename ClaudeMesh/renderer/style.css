@@ -259,6 +259,7 @@ body.pixel #cmdMenu .cm-i.on, body.pixel .cmd-ac div.on { background: #29466f; }
 .hrow .m { color: var(--dim); font-size: 11px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hrow .more, .arow .more { padding: 0 6px; border-radius: 6px; color: var(--dim); opacity: 0; font-weight: 700; }
 .hrow:hover .more, .arow:hover .more { opacity: 1; }
+.hrow .rm { padding: 0 5px; border-radius: 6px; color: var(--dim); opacity: 0; font-size: 14px; line-height: 1; } .hrow:hover .rm { opacity: .8; } .hrow .rm:hover { color: var(--err); background: rgba(255,93,108,.12); opacity: 1; }
 .hrow.live .t { color: var(--ok); }
 .hmore { margin: 4px 18px; font-size: 11.5px; color: var(--dim); cursor: pointer; }
 .arow { margin: 2px 8px; padding: 7px 10px; border-radius: 12px; cursor: pointer; border: 1px solid rgba(160,175,255,.18); }

@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('api', {
   restore: { get: () => ipcRenderer.invoke('restore:get'), done: () => ipcRenderer.invoke('restore:done') },
   details: sid => ipcRenderer.invoke('sess:details', sid),
   rename: (sid, name) => ipcRenderer.invoke('hist:rename', sid, name),
+  stopSession: pid => ipcRenderer.invoke('session:stop', pid),
   agents: {
     list: () => ipcRenderer.invoke('agents:list'),
     convert: (sid, cwd, task) => ipcRenderer.invoke('agent:convert', sid, cwd, task),
