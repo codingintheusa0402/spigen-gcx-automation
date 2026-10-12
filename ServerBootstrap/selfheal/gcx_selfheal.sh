@@ -18,6 +18,8 @@ allowed() { local f="$ST/$(echo "$1" | tr -c 'A-Za-z0-9\n' '_')" now=$(date +%s)
   awk -v n=$now '$1>n-1800' "$f" > "$f.t"; mv "$f.t" "$f"
   if [ $(wc -l < "$f") -ge 3 ]; then [ -f "$f.loop" ] || { touch "$f.loop"; loops+=("$1"); }; return 1; fi
   rm -f "$f.loop"; echo $now >> "$f"; return 0; }
+allowed_peek() { local f="$ST/$(echo "$1" | tr -c 'A-Za-z0-9\n' '_')"; [ ! -f "$f" ] && return 0
+  [ $(awk -v n=$(date +%s) '$1>n-1800' "$f" | wc -l) -lt 3 ]; }
 heal() { allowed "$1" || return; log "restart $1"; eval "$2" >/dev/null 2>&1 && fixed+=("$1") || fixed+=("$1 (restart FAILED)"); }
 
 # keep our own cron line (in case crontab was rewritten)
@@ -39,15 +41,12 @@ if [ -f ~/.config/systemd/user/mock-trader.service ] && [ ! -f ~/.gcx-owner/aitr
   [ "$st" = activating ] || heal "AI Trader engine" "systemctl --user start --no-block mock-trader"
 fi
 
-# WSLg display frozen (seen 10-12 after a reboot: X :0 stops answering, so every Chrome start hangs) → only a
-# restart of Ubuntu from the signed-in Windows session fixes it; ask the Windows side (GCX-SelfHeal) to do that
-if ! timeout 4 xset -display :0 q >/dev/null 2>&1; then
-  if [ ! -f /mnt/c/GCX-Setup/selfheal/wslg-broken.flag ]; then
-    date '+%m-%d %H:%M:%S' > /mnt/c/GCX-Setup/selfheal/wslg-broken.flag; log "WSLg display not answering — asked Windows to restart Ubuntu"
-  fi
-  exit 0                                                     # don't respawn GUI apps into a dead display
-fi
-rm -f /mnt/c/GCX-Setup/selfheal/wslg-broken.flag
+# WSLg display frozen (seen 10-12 after a reboot: every new Chrome start hangs) → only a restart of Ubuntu from the
+# signed-in Windows session fixes it. Detected as: Zendesk Chrome stays down although it was restarted 3× in 30 min.
+# (An `xset q` probe is NOT used — X :0 can be unresponsive while Chrome, on Wayland, works fine.)
+wslg_broken() { [ -f /mnt/c/GCX-Setup/selfheal/wslg-broken.flag ] || { date '+%m-%d %H:%M:%S' > /mnt/c/GCX-Setup/selfheal/wslg-broken.flag
+  log "Zendesk Chrome keeps failing to open — asked Windows to restart Ubuntu (WSLg display)"; }; }
+curl -s -m 5 http://127.0.0.1:9222/json/version >/dev/null && rm -f /mnt/c/GCX-Setup/selfheal/wslg-broken.flag
 
 # tmux session + its windows
 if ! tmux has-session -t gcx 2>/dev/null; then
@@ -59,7 +58,9 @@ else
   CHROME="/opt/google/chrome/chrome --user-data-dir=$HOME/.chrome-zendesk-profile --remote-debugging-port=9222 --no-first-run --no-default-browser-check https://spigenhelp.zendesk.com/agent/filters/360103290632; exec bash"
   TM="cd ~ && python3 $F/gcx_owner.py gate ticket-monitor; claude --remote-control gcx-ticket-monitor \"\$(cat ~/.gcx-tasks/ticket-monitor.prompt)\"; echo; echo [session ended]; exec bash"
   pgrep -f -- "--remote-control gcx-main" >/dev/null || heal "Claude session gcx-main" 'run main "$MAIN"'
-  curl -s -m 5 http://127.0.0.1:9222/json/version >/dev/null || heal "Zendesk Chrome (CDP 9222)" 'run zendesk-chrome "$CHROME"'
+  if ! curl -s -m 5 http://127.0.0.1:9222/json/version >/dev/null; then
+    allowed_peek "Zendesk Chrome (CDP 9222)" && heal "Zendesk Chrome (CDP 9222)" 'run zendesk-chrome "$CHROME"' || wslg_broken
+  fi
   if [ -f ~/.gcx-tasks/ticket-monitor.prompt ] && [ ! -f ~/.gcx-owner/ticket-monitor.stopped ] && \
      ! pgrep -f -- "--remote-control gcx-ticket-monitor" >/dev/null && ! pgrep -f "gcx_owner.py gate ticket-monitor" >/dev/null; then
     sleep 5; curl -s -m 5 http://127.0.0.1:9222/json/version >/dev/null && heal "Zendesk ticket monitor" 'run ticket-monitor "$TM"'
