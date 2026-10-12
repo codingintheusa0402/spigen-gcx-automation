@@ -83,6 +83,9 @@ ROOMS = [
  # GCX전략 Spigen x TCK — added 2026-09-29, no per-product override (same as 리더들방).
  {"name": "GCX전략 Spigen x TCK", "sid": "AAAAlxfKOYE",
   "token": "TtxdDkyX3Q5QGgKRWGKeedQk5R9z8IQ4mn_4m5oLhu4"},
+ # 안준서 부문장 해외사업부문 — added 2026-10-12, no per-product override (same as 리더들방).
+ {"name": "안준서 부문장 해외사업부문", "sid": "_vLUhqAAAAE",
+  "token": "CWZaIMDTpJFmjINKDnoUuAzWmPL2hXXEuGv_lo3vqXk"},
 ]
 
 # product_key -> (skill folder, --*-data dest, short log label). Order here is send order.
