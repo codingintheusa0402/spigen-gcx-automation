@@ -213,7 +213,7 @@ $win.Add_KeyDown({
   if ($_.Key -eq "L" -and ([Windows.Input.Keyboard]::Modifiers -band [Windows.Input.ModifierKeys]::Control)) { ShowLock }   # Ctrl+L = lock now
 })
 
-# ---------------- dashboard lock (10 min idle, or Ctrl+L on the dashboard) ----------------
+# ---------------- dashboard lock (20 min idle, or Ctrl+L on the dashboard) ----------------
 # Not the Windows lock: a full-screen GCX lock window on top of everything. Unlocks with the Windows
 # password of account "user", verified by Windows (LogonUser) — no extra password is stored anywhere.
 Add-Type -Namespace GCX -Name Native -MemberDefinition @"
@@ -232,7 +232,7 @@ public static void PinCursor() { int x = GetSystemMetrics(0) / 2, y = GetSystemM
 public static void FreeCursor() { UnclipCursor(System.IntPtr.Zero); }
 public static bool CheckPassword(string pw) { System.IntPtr t; bool ok = LogonUser("user", ".", pw, 2, 0, out t); if (ok) CloseHandle(t); return ok; }
 "@
-$LOCK_AFTER_MS = 10 * 60 * 1000
+$LOCK_AFTER_MS = 20 * 60 * 1000
 $global:gcxLock = $null
 
 function TryUnlock {
