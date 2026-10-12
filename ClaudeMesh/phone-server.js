@@ -35,6 +35,7 @@ function createPhoneServer(ctx) {
     '/xterm.js': 'node_modules/@xterm/xterm/lib/xterm.js', '/xterm.css': 'node_modules/@xterm/xterm/css/xterm.css', '/addon-fit.js': 'node_modules/@xterm/addon-fit/lib/addon-fit.js',
   };
 
+  const termId = p => { try { return decodeURIComponent(p.slice(10)); } catch { return p.slice(10); } };   // tmux pane ids (%0) arrive encoded
   const body = req => new Promise(res => { let b = ''; req.on('data', c => { b += c; if (b.length > 2e6) req.destroy(); }); req.on('end', () => { try { res(JSON.parse(b || '{}')); } catch { res({}); } }); });
   const json = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
   const sse = res => { res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' }); res.write('retry: 2000\n\n'); };
@@ -70,7 +71,7 @@ function createPhoneServer(ctx) {
     if (p === '/api/details') return json(res, 200, await ctx.details(u.searchParams.get('sid') || ''));
     if (p === '/api/commands') return json(res, 200, await ctx.commandsFor(u.searchParams.get('cwd') || ''));
     if (p.startsWith('/api/term/') && req.method === 'GET') {           // live terminal of an in-app session
-      const id = p.slice(10), pt = ctx.ptys.get(id); if (!pt) return json(res, 404, { error: 'no such terminal' });
+      const id = termId(p), pt = ctx.ptys.get(id); if (!pt) return json(res, 404, { error: 'no such terminal' });
       sse(res);
       if (ctx.termOpen) await ctx.termOpen(id);                           // server: start streaming the tmux pane
       send(res, 'init', { cols: pt.proc.cols, rows: pt.proc.rows, backlog: pt.buf || '' });
@@ -86,7 +87,7 @@ function createPhoneServer(ctx) {
     if (p === '/api/rename') return json(res, 200, await ctx.rename(b.sid, String(b.name || '').slice(0, 120)));
     if (p === '/api/convert') return json(res, 200, await ctx.convert(b.sid, b.task || ''));
     if (p.startsWith('/api/term/')) {                                    // keystrokes from the phone's terminal
-      const pt = ctx.ptys.get(p.slice(10)); if (!pt) return json(res, 404, {});
+      const pt = ctx.ptys.get(termId(p)); if (!pt) return json(res, 404, {});
       pt.proc.write(String(b.data || '')); return json(res, 200, { ok: true });
     }
     json(res, 404, {});
@@ -111,7 +112,7 @@ function createPhoneServer(ctx) {
     return out.sort((a, b) => a.kind.localeCompare(b.kind)).reverse();
   }
 
-  if (cfg.enabled) start();
+  if (cfg.enabled && !ctx.passive) start();        // passive: a CLI run (--pair / --status) beside the running service
   return {
     broadcast(snap) { for (const c of clients) try { send(c.res, 'telemetry', snap); } catch { } },
     status: () => ({ enabled: cfg.enabled, running: !!server, port: PORT, urls: urls(), clients: clients.size }),

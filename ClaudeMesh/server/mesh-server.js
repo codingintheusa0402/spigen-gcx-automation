@@ -159,8 +159,9 @@ async function tick() {
 function main() {
   fs.mkdirSync(USERDATA, { recursive: true });
   cleanupStale();
+  const cli = process.argv.includes('--pair') || process.argv.includes('--status');
   phone = createPhoneServer({
-    root: ROOT, userData: USERDATA, ptys, ptyBus, termOpen, termClose,
+    root: ROOT, userData: USERDATA, ptys, ptyBus, termOpen, termClose, passive: cli,
     getSnap: () => lastSnap,
     getHistory: () => core.listHistory(),
     details: sid => core.sessionDetails(sid),

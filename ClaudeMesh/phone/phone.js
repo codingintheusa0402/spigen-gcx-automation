@@ -254,9 +254,9 @@ function mountTerm(host, id, box) {
   term = new Terminal({ fontFamily: 'Menlo, monospace', fontSize: 9, convertEol: false, disableStdin: false, scrollback: 20000,
     theme: { background: '#000000', foreground: '#e6e9f2', cursor: '#ede6d6' } });
   term.open(host); touchScroll(host);
-  const write = d => api('/api/term/' + id, { data: d });
+  const write = d => api('/api/term/' + encodeURIComponent(id), { data: d });
   term.onData(write);
-  tes = new EventSource('/api/term/' + id + '?t=' + encodeURIComponent(TOKEN));
+  tes = new EventSource('/api/term/' + encodeURIComponent(id) + '?t=' + encodeURIComponent(TOKEN));
   tes.addEventListener('init', ev => {
     const i = JSON.parse(ev.data), fs = Math.max(6.5, Math.min(11, W / (i.cols * .6)));   // fit the Mac's columns; if still too wide, scroll sideways
     term.options.fontSize = fs; term.resize(i.cols, i.rows); term.reset(); term.write(keepHist(i.backlog));
