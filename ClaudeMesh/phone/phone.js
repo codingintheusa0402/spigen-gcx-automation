@@ -69,7 +69,7 @@ cv.addEventListener('touchmove', e => {
 cv.addEventListener('touchend', e => {
   e.preventDefault(); clearTimeout(holdT); if (!T) return;
   if (T.held && !T.moved) { if (e.touches.length === 0) T = null; return; }
-  if (T.mode === 'drag') { viz.dragEnd(); toast('Orbit saved on this phone'); }
+  if (T.mode === 'drag') viz.dragEnd();
   else if (!T.moved && e.touches.length === 0) {
     if (T.hit === 'hub') openBroadcast(); else if (T.hit) tapSession(T.hit);
   }
