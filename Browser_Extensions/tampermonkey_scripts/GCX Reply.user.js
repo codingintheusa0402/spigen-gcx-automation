@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         GCX Reply
 // @namespace    https://spigen.com/gcx
-// @version      3.8.1
-// @description  Amazon order data via GAS web app + Spigen product info + Zendesk auto-fill
+// @version      3.9.0
+// @description  Amazon order data via GAS web app + Spigen product info + Zendesk auto-fill + smart reply autocomplete
 // @author       Spigen GCX
 // @updateURL    https://raw.githubusercontent.com/codingintheusa0402/spigen-gcx-automation/main/Browser_Extensions/tampermonkey_scripts/GCX%20Reply.user.js
 // @downloadURL  https://raw.githubusercontent.com/codingintheusa0402/spigen-gcx-automation/main/Browser_Extensions/tampermonkey_scripts/GCX%20Reply.user.js
@@ -97,7 +97,7 @@
   // Keep CURRENT_VERSION in sync with the @version header above, and add a
   // CHANGELOG_ entry, every time the version is bumped. Empty/missing entries
   // are skipped silently (no popup shown).
-  const CURRENT_VERSION = '3.8.1';
+  const CURRENT_VERSION = '3.9.0';
   // Stale per-version entries pruned — CHANGELOG_[CURRENT_VERSION] is the
   // only access pattern, so every past entry becomes dead weight the moment
   // its version is superseded. Add a fresh '<version>': [...] entry here on
@@ -2037,6 +2037,9 @@
         }
       }
       const promise = origFetch.apply(this, args);
+      // v3.9.0: autocomplete learns from every confirmed submit (public AND
+      // internal). Fully isolated from the relay path below.
+      try { acObserveSubmit_(ops, promise); } catch (_) {}
       if (ticketId && htmlBody) {
         // Clone before reading — the body stream can only be consumed once, and
         // Zendesk's own caller still needs to read the original `promise`'s response.
@@ -5870,6 +5873,19 @@
           </div>
         </div>
         <div style="border-top:1px solid rgba(0,0,0,0.06);padding-top:8px;margin-top:8px;">
+          <div style="font-size:11px;color:#888;margin-bottom:6px;font-weight:500;">자동완성 (Smart Autocomplete)</div>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;font-size:12px;color:#1c1c1e;">
+            <input type="checkbox" id="sp-ac-chk" ${acEnabled_() ? 'checked' : ''}/>
+            답변 / 내부 메모 입력 시 문장 제안
+          </label>
+          <div style="font-size:10.5px;color:#999;margin-top:3px;line-height:1.5;">
+            회색 제안 글자 → <b>Tab</b> 전체 수락 · <b>Alt+→</b> 한 단어 · <b>Esc</b> 닫기<br/>
+            학습 문장 <span id="sp-ac-count">${acEntryCount_()}</span>개 ·
+            <a href="#" id="sp-ac-import" style="color:#5b6dc8;">내 과거 답변 가져오기</a> ·
+            <a href="#" id="sp-ac-reset" style="color:#5b6dc8;">초기화</a>
+          </div>
+        </div>
+        <div style="border-top:1px solid rgba(0,0,0,0.06);padding-top:8px;margin-top:8px;">
           <div style="font-size:11px;color:#888;margin-bottom:6px;font-weight:500;">MCF 담당자</div>
           <select id="sp-mcf-person-select" style="width:100%;padding:4px 6px;font-size:12px;border:1px solid #d8dcde;border-radius:6px;box-sizing:border-box;">
             <option value="">선택 안 함</option>
@@ -5951,6 +5967,42 @@
       });
     }
 
+    const acChk = drawer.querySelector('#sp-ac-chk');
+    if (acChk) {
+      acChk.addEventListener('change', () => {
+        saveUi({ acOff: !acChk.checked });
+        if (acChk.checked) { acInit_(); acScan_(); } else acHide_();
+      });
+    }
+    const acImport = drawer.querySelector('#sp-ac-import');
+    if (acImport) {
+      acImport.addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation();
+        acImport.textContent = '가져오는 중…';
+        acSeedHistory_(true).then(() => { acImport.textContent = '내 과거 답변 가져오기'; })
+          .catch(() => { acImport.textContent = '내 과거 답변 가져오기'; });
+      });
+    }
+    const acReset = drawer.querySelector('#sp-ac-reset');
+    if (acReset) {
+      // two-click confirm (no blocking confirm() dialog)
+      acReset.addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation();
+        if (acReset.dataset.armed !== '1') {
+          acReset.dataset.armed = '1';
+          acReset.textContent = '정말 초기화? (다시 클릭)';
+          setTimeout(() => { acReset.dataset.armed = ''; acReset.textContent = '초기화'; }, 4000);
+          return;
+        }
+        acResetCorpus_();
+        acReset.dataset.armed = '';
+        acReset.textContent = '초기화';
+        const cnt = drawer.querySelector('#sp-ac-count');
+        if (cnt) cnt.textContent = '0';
+        acHide_();
+      });
+    }
+
     const mcfPersonSelect = drawer.querySelector('#sp-mcf-person-select');
     if (mcfPersonSelect) {
       mcfPersonSelect.addEventListener('change', () => {
@@ -5967,6 +6019,724 @@
       // Populate the pending count as soon as the panel mounts, instead of
       // waiting up to 5 min for the next background sweep tick.
       updateAbmBadge_();
+    }
+  }
+
+  // ── Smart Autocomplete: ghost-text suggestions in the Zendesk composer ───
+  // v3.9.0. IDE-style inline completion for public replies AND internal
+  // notes: the predicted continuation is drawn in faint text right after the
+  // caret; Tab accepts all of it, Alt+→ (or Ctrl+→) accepts one word, Esc
+  // dismisses. Nothing is ever inserted unless the agent presses Tab.
+  //
+  // Where suggestions come from (all local to this browser, GM storage):
+  //   1. What THIS agent submits — captured from the same GraphQL fetch hook
+  //      the ABM relay uses (installAbmRelayHook_ → acObserveSubmit_), both
+  //      public and internal, only after Zendesk confirms the save.
+  //   2. The agent's own past replies/notes — Zendesk API seed on first run
+  //      (newest ~80 assigned tickets) + weekly top-up (acSeedHistory_).
+  //   3. Active macros (team phrasing) — weekly refresh, lowest weight.
+  // Before storing, customer names / order IDs / ASINs / emails / URLs /
+  // long numbers are replaced with placeholders ({{name}}, {{order}}, …)
+  // and re-filled from the CURRENT ticket when suggesting, so a sentence
+  // learned on one customer is offered correctly for the next.
+  //
+  // Matching (per keystroke, all in-memory, ~ms):
+  //   a. paragraph prefix  — learned paragraphs that start with what has
+  //      been typed in the current paragraph so far
+  //   b. sentence prefix   — same, against the current sentence only
+  //   c. word n-gram chain — predicts the next words from the last 1–2 words
+  //      (trigram → bigram back-off), stops at low confidence / sentence end
+  // Ranked by frequency × recency × source weight × channel match.
+  //
+  // Rendering never touches CKEditor's DOM/model: a pointer-events:none
+  // overlay is positioned at the caret (editor mapper → DOM range rect) with
+  // the editable's own font metrics, so wrapping lines up with real text.
+  // Suggestions are only shown while the caret is at the END of its block
+  // (so the ghost never covers real text) and never during IME composition.
+  const AC_STORE_KEY   = 'gcx_ac_corpus_v1';
+  const AC_META_KEY    = 'gcx_ac_meta_v1';
+  const AC_MAX_ENTRIES = 5000;
+  const AC_MAX_TEXT    = 600;
+  const AC_SRC         = { TYPED: 0, HISTORY: 1, MACRO: 2 };
+  const AC_SRC_W       = [1.0, 0.85, 0.55];
+  const AC_KIND_BIT    = { p: 1, n: 2 };
+  const AC_EDITABLE_SEL = '[data-test-id="omnicomposer-rich-text-ckeditor"][contenteditable="true"]';
+  const AC_ORDER_RE    = /\b\d{3}-\d{7}-\d{7}\b/g;
+  const AC_ASIN_RE     = /\bB0[A-Z0-9]{8}\b/g;
+  const AC_EMAIL_RE    = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
+  const AC_URL_RE      = /\bhttps?:\/\/[^\s<>"')\]]+/gi;
+  const AC_LONGNUM_RE  = /\b\d{9,}\b/g;
+  const AC_PH_RE       = /\{\{(name|fullname|lastname|order|asin|email|agent|x)\}\}/g;
+
+  let _acCorpus   = null;   // { v, e: { [lowerText]: { t, n, l, s, k } } }
+  let _acMeta     = null;   // { me, seededAt, seeded: [ticketIds], macrosAt }
+  let _acIndex    = null;   // { buckets: Map(first2 → [entry]), star: [entry], ngram3: Map, ngram2: Map }
+  let _acIndexDirty = true;
+  let _acSaveTimer = null;
+  let _acCtx      = { ticketId: null, name: '', fullname: '', lastname: '', order: '', asin: '', email: '', agent: '' };
+  let _acCtxVer   = 0;
+  let _acAttached = new WeakSet();
+  let _acActive   = null;   // { editable, editor, kind, suggestion, typed, composing, dismissedFor }
+  let _acOverlay  = null;
+  let _acSeeding  = false;
+
+  function acEnabled_() { return loadUi().acOff !== true; }
+
+  function acLoadCorpus_() {
+    if (_acCorpus) return _acCorpus;
+    try {
+      const raw = GM_getValue(AC_STORE_KEY, '');
+      const parsed = raw ? JSON.parse(raw) : null;
+      _acCorpus = (parsed && parsed.v === 1 && parsed.e) ? parsed : { v: 1, e: {} };
+    } catch (_) { _acCorpus = { v: 1, e: {} }; }
+    try {
+      const raw = GM_getValue(AC_META_KEY, '');
+      _acMeta = raw ? JSON.parse(raw) : {};
+    } catch (_) { _acMeta = {}; }
+    if (!_acMeta || typeof _acMeta !== 'object') _acMeta = {};
+    if (!Array.isArray(_acMeta.seeded)) _acMeta.seeded = [];
+    return _acCorpus;
+  }
+  function acSaveCorpus_(immediate) {
+    clearTimeout(_acSaveTimer);
+    const doSave = () => {
+      // `_lw` / `_sent` are index-time scratch fields — never persisted
+      try { GM_setValue(AC_STORE_KEY, JSON.stringify(_acCorpus, (k, v) => (k && k[0] === '_') ? undefined : v)); } catch (_) {}
+      try { GM_setValue(AC_META_KEY, JSON.stringify(_acMeta)); } catch (_) {}
+    };
+    if (immediate) doSave(); else _acSaveTimer = setTimeout(doSave, 1500);
+  }
+  function acEntryCount_() { acLoadCorpus_(); return Object.keys(_acCorpus.e).length; }
+  function acResetCorpus_() {
+    _acCorpus = { v: 1, e: {} };
+    _acMeta = { me: _acMeta && _acMeta.me, seeded: [], seededAt: 0, macrosAt: 0 };
+    _acIndexDirty = true;
+    acSaveCorpus_(true);
+  }
+
+  // ── Text normalisation / placeholders ────────────────────────────────────
+  function acNorm_(s) {
+    return String(s || '').replace(/ /g, ' ').replace(/[ \t]+/g, ' ').replace(/ ?\n ?/g, '\n').trim();
+  }
+  function acEscapeRe_(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  function acSplitName_(full) {
+    const parts = acNorm_(full).split(' ').filter(Boolean);
+    return { fullname: parts.join(' '), name: parts[0] || '', lastname: parts.length > 1 ? parts[parts.length - 1] : '' };
+  }
+  // Replace ticket-specific values with placeholders. ctx = { fullname, name, lastname, agent }.
+  function acTokenize_(text, ctx) {
+    let s = acNorm_(text);
+    if (!s) return '';
+    // Zendesk liquid placeholders (macros)
+    s = s.replace(/\{\{\s*ticket\.requester\.first_name[^}]*\}\}/gi, '{{name}}')
+         .replace(/\{\{\s*ticket\.requester\.last_name[^}]*\}\}/gi, '{{lastname}}')
+         .replace(/\{\{\s*ticket\.requester\.name[^}]*\}\}/gi, '{{fullname}}')
+         .replace(/\{\{\s*current_user\.(?:first_)?name[^}]*\}\}/gi, '{{agent}}')
+         .replace(/\{\{\s*ticket\.requester\.email[^}]*\}\}/gi, '{{email}}')
+         .replace(/\{\{[^}]*\}\}/g, '{{x}}')
+         .replace(/\{%[^%]*%\}/g, '');
+    s = s.replace(AC_URL_RE, '{{url}}').replace(AC_EMAIL_RE, '{{email}}')
+         .replace(AC_ORDER_RE, '{{order}}').replace(AC_ASIN_RE, '{{asin}}').replace(AC_LONGNUM_RE, '{{x}}');
+    if (ctx) {
+      const fn = ctx.fullname && ctx.fullname.length >= 4 ? ctx.fullname : '';
+      const n  = ctx.name && ctx.name.length >= 2 ? ctx.name : '';
+      const ln = ctx.lastname && ctx.lastname.length >= 4 ? ctx.lastname : '';
+      if (fn) s = s.replace(new RegExp('(^|[^\\w])' + acEscapeRe_(fn) + '(?![\\w])', 'gi'), '$1{{fullname}}');
+      if (n)  s = s.replace(new RegExp('(^|[^\\w])' + acEscapeRe_(n) + '(?![\\w])', 'gi'), '$1{{name}}');
+      if (ln) s = s.replace(new RegExp('(^|[^\\w])' + acEscapeRe_(ln) + '(?![\\w])', 'gi'), '$1{{lastname}}');
+      if (ctx.agent && ctx.agent.length >= 2) s = s.replace(new RegExp('(^|[^\\w])' + acEscapeRe_(ctx.agent) + '(?![\\w])', 'gi'), '$1{{agent}}');
+    }
+    // Greeting lines ("Dear Marco," / "Hi Marco Rossi,") — the name after the
+    // salutation is the customer's even when the requester record didn't
+    // match (nickname, single-letter name, different spelling), so it's
+    // never stored literally.
+    s = s.replace(/^((?:dear|hi|hello|hey|ciao|hola|bonjour|hallo|olá|salve|こんにちは|안녕하세요)\s+)(?!\{\{)([A-ZÀ-ɏ][\wÀ-ɏ'’.-]*(?:\s+[A-ZÀ-ɏ][\wÀ-ɏ'’.-]*)?)\s*(?=[,!:;]|$)/gim, '$1{{name}}');
+    return s.replace(/\{\{url\}\}/g, '{{x}}');
+  }
+  // Fill placeholders from the current ticket. Returns { text, cut } — `cut`
+  // is true when an unfillable placeholder was hit and the text was truncated
+  // right before it (the agent then gets everything up to that point).
+  function acExpand_(t, ctx) {
+    let cut = false;
+    let out = '';
+    let last = 0;
+    AC_PH_RE.lastIndex = 0;
+    let m;
+    while ((m = AC_PH_RE.exec(t))) {
+      out += t.slice(last, m.index);
+      const v = m[1] === 'x' ? '' : (ctx[m[1]] || (m[1] === 'agent' && _acMeta && _acMeta.me && _acMeta.me.name) || '');
+      if (!v) { cut = true; break; }
+      out += v;
+      last = m.index + m[0].length;
+    }
+    if (!cut) out += t.slice(last);
+    return { text: cut ? out.replace(/\s+$/, '') : out, cut };
+  }
+
+  // ── Learning ─────────────────────────────────────────────────────────────
+  function acHtmlToText_(html) {
+    const div = document.createElement('div');
+    div.innerHTML = String(html || '')
+      .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|h[1-6]|blockquote|tr)>/gi, '\n')
+      .replace(/<(script|style)[\s\S]*?<\/\1>/gi, '');
+    return (div.textContent || '').replace(/ /g, ' ');
+  }
+  function acSentences_(block) {
+    const out = [];
+    const re = /[^.!?。！？]+(?:[.!?。！？]+["')\]»]*|$)/g;
+    let m;
+    while ((m = re.exec(block))) {
+      const s = acNorm_(m[0]);
+      if (s) out.push(s);
+      if (m.index === re.lastIndex) re.lastIndex++;
+    }
+    return out;
+  }
+  function acWordCount_(s) { return s.split(/\s+/).filter(Boolean).length; }
+  function acLooksLikeJunk_(line) {
+    if (!line) return true;
+    if (/^>/.test(line)) return true;                       // quoted text
+    if (/\bwrote:$/i.test(line) || /^On .+ wrote/i.test(line)) return true;
+    if (/^[-_=*]{3,}$/.test(line)) return true;             // separators
+    if (/^\{\{x\}\}$/.test(line)) return true;
+    if (!/[A-Za-zÀ-ɏ가-힣぀-ヿ一-鿿]/.test(line)) return true; // no letters at all
+    return false;
+  }
+  function acBump_(text, kind, src, ts) {
+    const t = text.length > AC_MAX_TEXT ? '' : text;
+    if (!t || acWordCount_(t) < 2) return;
+    const key = t.toLowerCase();
+    const e = _acCorpus.e[key];
+    const bit = AC_KIND_BIT[kind] || 0;
+    if (e) {
+      // Macro re-imports must not inflate counts; anything the agent actually
+      // sent (or sent in the past) does.
+      if (src !== AC_SRC.MACRO) { e.n += 1; e.l = Math.max(e.l || 0, ts); }
+      e.k = (e.k || 0) | bit;
+      if (src < e.s) e.s = src; // promote macro → history → typed
+    } else {
+      _acCorpus.e[key] = { t, n: 1, l: ts, s: src, k: bit };
+    }
+  }
+  // Learn one message body (plain text). kind 'p' | 'n'. ctx = ticket context
+  // used for placeholder replacement (may be partial).
+  function acLearnText_(plain, kind, ctx, src, ts) {
+    acLoadCorpus_();
+    ts = ts || Date.now();
+    const tokenized = acTokenize_(plain, ctx);
+    if (!tokenized) return 0;
+    let learned = 0;
+    for (const rawLine of tokenized.split('\n')) {
+      const line = acNorm_(rawLine);
+      if (acLooksLikeJunk_(line)) continue;
+      if (line.length <= AC_MAX_TEXT) { acBump_(line, kind, src, ts); learned++; }
+      const sents = acSentences_(line);
+      if (sents.length > 1) for (const s of sents) { if (acWordCount_(s) >= 3) { acBump_(s, kind, src, ts); learned++; } }
+    }
+    acPrune_();
+    _acIndexDirty = true;
+    acSaveCorpus_(false);
+    return learned;
+  }
+  function acScore_(e, now, kind) {
+    const age = Math.max(0, now - (e.l || 0)) / 86400000;
+    const recency = 1 + 0.6 * Math.exp(-age / 45);
+    const kindW = (e.k & AC_KIND_BIT[kind]) ? 1.2 : 0.8;
+    return Math.log(1 + e.n) * AC_SRC_W[e.s] * recency * kindW;
+  }
+  function acPrune_() {
+    const keys = Object.keys(_acCorpus.e);
+    if (keys.length <= AC_MAX_ENTRIES) return;
+    const now = Date.now();
+    keys.sort((a, b) => acScore_(_acCorpus.e[a], now, 'p') - acScore_(_acCorpus.e[b], now, 'p'));
+    for (let i = 0; i < keys.length - AC_MAX_ENTRIES; i++) delete _acCorpus.e[keys[i]];
+  }
+
+  // Called from installAbmRelayHook_ for EVERY composer submit (public or
+  // internal). Learns only after Zendesk confirms the comment saved.
+  function acObserveSubmit_(ops, promise) {
+    if (!acEnabled_()) return;
+    const items = [];
+    for (const op of ops) {
+      const c = op?.variables?.ticket?.comment;
+      const html = c && c.body && c.body.value;
+      if (html && String(html).trim()) items.push({ ticketId: String(op.variables.id || ''), html, kind: c.isPublic ? 'p' : 'n' });
+    }
+    if (!items.length) return;
+    promise.then(res => {
+      if (!res || !res.ok) return;
+      res.clone().json().then(json => {
+        const results = Array.isArray(json) ? json : [json];
+        if (!results.some(r => r?.data?.updateTicket?.__typename === 'UpdateTicketSuccess')) return;
+        for (const it of items) {
+          acGetCtx_(it.ticketId).then(ctx => {
+            const n = acLearnText_(acHtmlToText_(it.html), it.kind, ctx, AC_SRC.TYPED);
+            if (n) logStep_(`Autocomplete: learned ${n} phrase(s) from this ${it.kind === 'p' ? 'reply' : 'note'}`);
+          }).catch(() => {});
+        }
+      }).catch(() => {});
+    }).catch(() => {});
+  }
+
+  // ── Ticket context (who the customer is, order/ASIN) ─────────────────────
+  const _acCtxCache = {}; // ticketId → Promise<ctx>
+  function acGetCtx_(ticketId) {
+    if (!ticketId) return Promise.resolve(Object.assign({}, _acCtx));
+    if (_acCtxCache[ticketId]) return _acCtxCache[ticketId];
+    const p = new Promise(resolve => {
+      const ctx = { ticketId, name: '', fullname: '', lastname: '', order: '', asin: '', email: '', agent: (_acMeta && _acMeta.me && _acMeta.me.name) || '' };
+      fetchTicketJson_(ticketId, ticket => {
+        if (!ticket) return resolve(ctx);
+        const vals = (ticket.custom_fields || []).map(f => String(f.value || ''));
+        ctx.order = vals.find(v => /^\d{3}-\d{7}-\d{7}$/.test(v)) || '';
+        ctx.asin  = vals.find(v => /^B[A-Z0-9]{9}$/.test(v)) || '';
+        if (!ticket.requester_id) return resolve(ctx);
+        gmRequest_({ method: 'GET', url: `https://spigenhelp.zendesk.com/api/v2/users/${ticket.requester_id}.json`, timeout: 10000 })
+          .then(res => {
+            try {
+              const u = JSON.parse(res.responseText).user || {};
+              Object.assign(ctx, acSplitName_(u.name || ''));
+              ctx.email = u.email || '';
+            } catch (_) {}
+            resolve(ctx);
+          }).catch(() => resolve(ctx));
+      });
+    });
+    _acCtxCache[ticketId] = p;
+    setTimeout(() => { delete _acCtxCache[ticketId]; }, 10 * 60 * 1000);
+    return p;
+  }
+  function acRefreshCtx_(attempt) {
+    const ticketId = location.pathname.match(/\/tickets\/(\d+)/)?.[1] || null;
+    if (!ticketId) return;
+    acGetCtx_(ticketId).then(ctx => {
+      if ((location.pathname.match(/\/tickets\/(\d+)/)?.[1] || null) !== ticketId) return;
+      // Prefer the Amazon buyer name once the order loaded (what agents
+      // address customers by), else the Zendesk requester name. The order
+      // arrives a few seconds after navigation, so re-check a couple of times.
+      const b = lastOrderData && (lastOrderData.buyer || {});
+      const o = lastOrderData && (lastOrderData.order || {});
+      const bn = (b && b.BuyerName) || (o && o.BuyerInfo && o.BuyerInfo.BuyerName) || '';
+      if (bn) Object.assign(ctx, acSplitName_(bn));
+      _acCtx = Object.assign({}, ctx);
+      _acCtxVer++;
+      acRecompute_();
+      if (!bn && (attempt || 0) < 3) setTimeout(() => acRefreshCtx_((attempt || 0) + 1), 8000);
+    });
+  }
+
+  // ── Index / n-gram model ─────────────────────────────────────────────────
+  function acWords_(s) { return s.split(/\s+/).filter(Boolean); }
+  function acBuildIndex_() {
+    acLoadCorpus_();
+    const buckets = new Map();
+    const star = [];
+    const ngram3 = new Map();
+    const ngram2 = new Map();
+    const now = Date.now();
+    const add = (map, key, next, w) => {
+      let m = map.get(key);
+      if (!m) { m = new Map(); map.set(key, m); }
+      m.set(next, (m.get(next) || 0) + w);
+    };
+    for (const key in _acCorpus.e) {
+      const e = _acCorpus.e[key];
+      e._lw = e.t.toLowerCase();
+      e._sent = acWordCount_(e.t) >= 3;
+      if (/^\{\{/.test(e.t)) star.push(e);
+      else {
+        const k = e._lw.slice(0, 2);
+        let arr = buckets.get(k);
+        if (!arr) { arr = []; buckets.set(k, arr); }
+        arr.push(e);
+      }
+      // n-grams: weight by frequency/source so the agent's own habits win
+      const w = Math.log(1 + e.n) * AC_SRC_W[e.s] * (now - (e.l || 0) < 90 * 86400000 ? 1.2 : 1);
+      const ws = acWords_(e.t);
+      for (let i = 0; i < ws.length - 1; i++) {
+        add(ngram2, ws[i].toLowerCase(), ws[i + 1], w);
+        if (i < ws.length - 2) add(ngram3, ws[i].toLowerCase() + ' ' + ws[i + 1].toLowerCase(), ws[i + 2], w);
+      }
+    }
+    _acIndex = { buckets, star, ngram3, ngram2 };
+    _acIndexDirty = false;
+  }
+  function acIndex_() { if (!_acIndex || _acIndexDirty) acBuildIndex_(); return _acIndex; }
+
+  // Best learned text that starts with `typed` (case-insensitive). Returns
+  // { remainder, score } or null.
+  function acPrefixMatch_(typed, kind, sentenceOnly) {
+    const idx = acIndex_();
+    const tl = typed.toLowerCase();
+    if (!tl) return null;
+    const cands = (idx.buckets.get(tl.slice(0, 2)) || []).concat(idx.star);
+    const now = Date.now();
+    let best = null;
+    for (const e of cands) {
+      if (sentenceOnly && !e._sent) continue;
+      if (tl.length === 1 && e.n < 3 && e.s !== AC_SRC.TYPED) continue; // 1 char: only well-known openers
+      // Fast reject on the raw (placeholder) text when no placeholder falls
+      // inside the typed span — avoids expanding every candidate.
+      const ph = e._lw.indexOf('{{');
+      if ((ph === -1 || ph >= tl.length) && !e._lw.startsWith(tl)) continue;
+      const ex = acExpand_(e.t, _acCtx);
+      const exl = ex.text.toLowerCase();
+      if (!exl.startsWith(tl)) continue;
+      const rem = ex.text.slice(typed.length);
+      if (!rem.trim()) continue;
+      const score = acScore_(e, now, kind) * (ex.cut ? 0.9 : 1);
+      if (!best || score > best.score) best = { remainder: rem, score, entry: e };
+    }
+    return best;
+  }
+  // n-gram continuation from the current words. Returns remainder string or ''.
+  function acNgramMatch_(typed) {
+    const idx = acIndex_();
+    const endsWithSpace = /\s$/.test(typed);
+    const ws = acWords_(typed);
+    let partial = '';
+    if (!endsWithSpace && ws.length) partial = ws.pop();
+    if (!ws.length && !partial) return '';
+    if (!ws.length) return ''; // need at least one complete word of context
+    const out = [];
+    let w1 = ws.length > 1 ? ws[ws.length - 2].toLowerCase() : '';
+    let w2 = ws[ws.length - 1].toLowerCase();
+    for (let step = 0; step < 14; step++) {
+      let m = w1 ? idx.ngram3.get(w1 + ' ' + w2) : null;
+      let backoff = false;
+      if (!m || (step === 0 && partial && ![...m.keys()].some(k => k.toLowerCase().startsWith(partial.toLowerCase())))) { m = idx.ngram2.get(w2); backoff = true; }
+      if (!m) break;
+      let total = 0, top = null, topW = 0;
+      const pl = step === 0 ? partial.toLowerCase() : '';
+      for (const [next, w] of m) {
+        if (pl && !next.toLowerCase().startsWith(pl)) continue;
+        if (pl && next.length <= partial.length) continue;
+        total += w;
+        if (w > topW) { topW = w; top = next; }
+      }
+      if (!top) break;
+      const share = topW / total;
+      const minShare = step === 0 ? (pl ? 0.35 : 0.45) : 0.6;
+      const minW = (pl && partial.length >= 4) ? 0.6 : 1.2;
+      if (share < minShare || topW < minW || (backoff && step > 0 && share < 0.75)) break;
+      // Placeholder tokens: fill or stop
+      let word = top;
+      if (word.includes('{{')) {
+        const ex = acExpand_(word, _acCtx);
+        if (ex.cut || !ex.text) break;
+        word = ex.text;
+      }
+      out.push(step === 0 && pl ? word.slice(partial.length) : word);
+      if (/[.!?。！？]["')\]]*$/.test(top)) break;
+      w1 = w2; w2 = top.toLowerCase();
+    }
+    if (!out.length) return '';
+    if (partial) return out[0] + (out.length > 1 ? ' ' + out.slice(1).join(' ') : '');
+    return (endsWithSpace ? '' : ' ') + out.join(' ');
+  }
+  function acSuggest_(blockText, kind) {
+    const typed = blockText.replace(/^\s+/, '');
+    if (!typed) return '';
+    // a. whole paragraph
+    const a = acPrefixMatch_(typed, kind, false);
+    if (a) return a.remainder;
+    // b. current sentence
+    const sm = typed.match(/[.!?。！？]["')\]]*\s+([^]*)$/);
+    const sentence = sm ? sm[1] : '';
+    if (sentence && sentence.trim().length >= 2) {
+      const b = acPrefixMatch_(sentence, kind, true);
+      if (b) return b.remainder;
+    }
+    // c. next words
+    return acNgramMatch_(typed);
+  }
+
+  // ── Editor binding ───────────────────────────────────────────────────────
+  function acKindOf_(editable) {
+    const label = (editable.getAttribute('aria-label') || '') + ' ' + (document.querySelector('[data-test-id="omnichannel-channel-switcher-button"]')?.textContent || '');
+    return /internal|note|메모|内部|內部/i.test(label) ? 'n' : 'p';
+  }
+  // Text of the caret's block up to the caret + whether the caret is at the
+  // block end / last block. null when nothing should be suggested.
+  function acCaretInfo_(editor) {
+    const sel = editor.model.document.selection;
+    if (!sel.isCollapsed) return null;
+    const pos = sel.getFirstPosition();
+    if (!pos || !pos.isAtEnd) return null;
+    const parent = pos.parent;
+    if (!parent || !parent.is || !parent.is('element')) return null;
+    let text = '';
+    for (const ch of parent.getChildren()) {
+      if (ch.is('$text') || ch.is('$textProxy')) text += ch.data;
+      else if (ch.is('element', 'softBreak')) text += '\n';
+      else text += ' ';
+    }
+    const lines = text.split('\n');
+    return { blockText: lines[lines.length - 1], pos, isLastBlock: !parent.nextSibling };
+  }
+  function acCaretRect_(editor) {
+    try {
+      const pos = editor.model.document.selection.getFirstPosition();
+      const viewPos = editor.editing.mapper.toViewPosition(pos);
+      const domPos = editor.editing.view.domConverter.viewPositionToDom(viewPos);
+      if (!domPos) return null;
+      const rg = document.createRange();
+      rg.setStart(domPos.parent, domPos.offset);
+      rg.collapse(true);
+      let r = rg.getBoundingClientRect();
+      if (!r || (!r.height && !r.width)) {
+        const el = domPos.parent.nodeType === 1 ? domPos.parent : domPos.parent.parentElement;
+        if (!el) return null;
+        const er = el.getBoundingClientRect();
+        r = { left: er.left, top: er.top, height: er.height || 18 };
+      }
+      return { left: r.left, top: r.top, height: r.height };
+    } catch (_) { return null; }
+  }
+  function acEnsureOverlay_() {
+    if (_acOverlay && document.body.contains(_acOverlay)) return _acOverlay;
+    const wrap = document.createElement('div');
+    wrap.id = 'gcx-ac-overlay';
+    wrap.innerHTML = '<div id="gcx-ac-ghost"><span id="gcx-ac-text"></span><span id="gcx-ac-pill">Tab</span></div>';
+    document.body.appendChild(wrap);
+    _acOverlay = wrap;
+    return wrap;
+  }
+  function acHide_() {
+    if (_acActive) _acActive.suggestion = '';
+    if (_acOverlay) _acOverlay.style.display = 'none';
+  }
+  function acRender_() {
+    const a = _acActive;
+    if (!a || !a.suggestion) { acHide_(); return; }
+    const rect = acCaretRect_(a.editor);
+    const ed = a.editable;
+    if (!rect || !document.body.contains(ed)) { acHide_(); return; }
+    const er = ed.getBoundingClientRect();
+    // the editable scrolls inside a parent; clip to the visible box
+    let clip = er;
+    let p = ed.parentElement;
+    while (p && p !== document.body) {
+      const cs = getComputedStyle(p);
+      if (/(auto|scroll|hidden)/.test(cs.overflowY)) { const pr = p.getBoundingClientRect(); clip = { left: Math.max(clip.left, pr.left), top: Math.max(clip.top, pr.top), right: Math.min(clip.right, pr.right), bottom: Math.min(clip.bottom, pr.bottom) }; }
+      p = p.parentElement;
+    }
+    if (rect.top < clip.top - 2 || rect.top > clip.bottom) { if (_acOverlay) _acOverlay.style.display = 'none'; return; }
+    const cs = getComputedStyle(ed);
+    const padL = parseFloat(cs.paddingLeft) || 0, padR = parseFloat(cs.paddingRight) || 0;
+    const left = er.left + padL;
+    const width = Math.max(40, er.width - padL - padR);
+    const wrap = acEnsureOverlay_();
+    const ghost = wrap.firstElementChild;
+    wrap.style.cssText = `position:fixed;left:${clip.left}px;top:${clip.top}px;width:${clip.right - clip.left}px;height:${clip.bottom - clip.top}px;overflow:hidden;pointer-events:none;z-index:2147483000;display:block;`;
+    ghost.style.cssText = `position:absolute;left:${left - clip.left}px;top:${rect.top - clip.top}px;width:${width}px;` +
+      `font-family:${cs.fontFamily};font-size:${cs.fontSize};line-height:${cs.lineHeight};font-weight:${cs.fontWeight};letter-spacing:${cs.letterSpacing};word-spacing:${cs.wordSpacing};` +
+      `color:${cs.color};opacity:0.42;text-indent:${Math.max(0, rect.left - left)}px;white-space:${a.wrap ? 'pre-wrap' : 'pre'};overflow-wrap:break-word;overflow:hidden;` +
+      (a.wrap ? '' : `max-height:${rect.height || 18}px;`);
+    ghost.querySelector('#gcx-ac-text').textContent = a.suggestion;
+  }
+  function acRecompute_() {
+    const a = _acActive;
+    if (!a) return;
+    if (!acEnabled_() || a.composing || !a.focused) { acHide_(); return; }
+    const info = acCaretInfo_(a.editor);
+    if (!info) { acHide_(); return; }
+    a.kind = acKindOf_(a.editable);
+    a.typed = info.blockText;
+    if (a.dismissedFor !== null && a.dismissedFor === info.blockText) { acHide_(); return; }
+    a.dismissedFor = null;
+    let s = '';
+    try { s = acSuggest_(info.blockText, a.kind); } catch (e) { s = ''; }
+    a.suggestion = s || '';
+    a.wrap = info.isLastBlock;
+    acRender_();
+  }
+  function acAccept_(wordsOnly) {
+    const a = _acActive;
+    if (!a || !a.suggestion) return false;
+    // A very fast Tab right after a keystroke can arrive before the deferred
+    // recompute — never insert a suggestion computed for different text.
+    const info = acCaretInfo_(a.editor);
+    if (!info || info.blockText !== a.typed) {
+      acRecompute_();
+      if (!a.suggestion) return false;
+    }
+    let text = a.suggestion;
+    if (wordsOnly) {
+      const m = text.match(/^\s*\S+\s?/);
+      text = m ? m[0] : text;
+    }
+    const editor = a.editor;
+    try {
+      editor.model.change(w => {
+        const sel = editor.model.document.selection;
+        editor.model.insertContent(w.createText(text, sel.getAttributes()), sel);
+      });
+    } catch (e) {
+      try { document.execCommand('insertText', false, text); } catch (_) { return false; }
+    }
+    a.suggestion = '';
+    // change:data fires synchronously inside the change block; recompute once
+    // more after the DOM/selection settle so chained suggestions appear.
+    setTimeout(acRecompute_, 0);
+    return true;
+  }
+  function acOnKeydown_(e) {
+    const a = _acActive;
+    if (!a || !a.suggestion || a.composing || e.isComposing) return;
+    if (e.target !== a.editable && !a.editable.contains(e.target)) return;
+    if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (acAccept_(false)) { e.preventDefault(); e.stopImmediatePropagation(); }
+    } else if (e.key === 'ArrowRight' && (e.altKey || e.ctrlKey) && !e.shiftKey && !e.metaKey) {
+      if (acAccept_(true)) { e.preventDefault(); e.stopImmediatePropagation(); }
+    } else if (e.key === 'Escape') {
+      a.dismissedFor = a.typed;
+      acHide_();
+      e.preventDefault(); e.stopImmediatePropagation();
+    }
+  }
+  function acAttach_(editable) {
+    if (_acAttached.has(editable)) return;
+    const editor = editable.ckeditorInstance;
+    if (!editor || !editor.model || !editor.editing) return; // not ready yet; observer retries
+    _acAttached.add(editable);
+    const state = { editable, editor, kind: 'p', suggestion: '', typed: '', composing: false, focused: document.activeElement === editable, dismissedFor: null, wrap: true };
+    const activate = () => { _acActive = state; };
+    const schedule = () => { if (_acActive !== state) activate(); clearTimeout(state._t); state._t = setTimeout(acRecompute_, 0); };
+    try { editor.model.document.on('change:data', schedule); } catch (_) {}
+    try { editor.model.document.selection.on('change:range', schedule); } catch (_) {}
+    editable.addEventListener('focus', () => { state.focused = true; activate(); schedule(); });
+    editable.addEventListener('blur', () => { state.focused = false; setTimeout(() => { if (!state.focused) acHide_(); }, 50); });
+    editable.addEventListener('compositionstart', () => { state.composing = true; acHide_(); });
+    editable.addEventListener('compositionend', () => { state.composing = false; schedule(); });
+    if (state.focused) { activate(); schedule(); }
+    logStep_('Autocomplete: attached to composer');
+  }
+  let _acScanTimer = null;
+  function acScan_() {
+    clearTimeout(_acScanTimer);
+    _acScanTimer = setTimeout(() => {
+      if (!acEnabled_()) return;
+      let pending = false;
+      document.querySelectorAll(AC_EDITABLE_SEL).forEach(ed => {
+        if (_acAttached.has(ed)) return;
+        if (ed.ckeditorInstance) acAttach_(ed); else pending = true;
+      });
+      // editable exists but CKEditor hasn't bound to it yet — retry shortly
+      if (pending) setTimeout(acScan_, 600);
+      // layout may have shifted (composer resized, new comments) — re-place
+      if (_acActive && _acActive.suggestion) acRender_();
+    }, 250);
+  }
+  function acInit_() {
+    if (acInit_._done) return;
+    acInit_._done = true;
+    acLoadCorpus_();
+    safeAddStyle_(`
+      #gcx-ac-overlay { display:none; }
+      #gcx-ac-pill { display:inline-block; margin-left:6px; padding:0 5px; font-size:9.5px; line-height:14px; border:1px solid currentColor; border-radius:4px; opacity:0.85; vertical-align:1px; text-indent:0; font-family:system-ui,-apple-system,sans-serif; letter-spacing:0; }
+    `);
+    document.addEventListener('keydown', acOnKeydown_, true);
+    document.addEventListener('scroll', () => { if (_acActive && _acActive.suggestion) acRender_(); }, true);
+    window.addEventListener('resize', () => { if (_acActive && _acActive.suggestion) acRender_(); });
+    const mo = new MutationObserver(acScan_);
+    mo.observe(document.body, { childList: true, subtree: true });
+    acScan_();
+    acRefreshCtx_();
+    // Background history seeding — well after the panel's own first loads.
+    setTimeout(() => { acSeedHistory_().catch(() => {}); }, 20000);
+  }
+
+  // ── Seeding from the agent's own history + macros (Zendesk API) ─────────
+  function acApiGet_(url) {
+    return gmRequest_({ method: 'GET', url, timeout: 20000 }).then(res => {
+      if (!res || res.status !== 200) return null;
+      try { return JSON.parse(res.responseText); } catch (_) { return null; }
+    }).catch(() => null);
+  }
+  async function acSeedHistory_(force) {
+    if (_acSeeding || !acEnabled_()) return;
+    acLoadCorpus_();
+    const now = Date.now();
+    const WEEK = 7 * 86400000;
+    const needTickets = force || !_acMeta.seededAt || now - _acMeta.seededAt > WEEK;
+    const needMacros  = force || !_acMeta.macrosAt || now - _acMeta.macrosAt > WEEK;
+    if (!needTickets && !needMacros) return;
+    _acSeeding = true;
+    try {
+      if (!_acMeta.me || !_acMeta.me.id) {
+        const me = await acApiGet_('https://spigenhelp.zendesk.com/api/v2/users/me.json');
+        if (me && me.user && me.user.id) _acMeta.me = { id: me.user.id, name: me.user.name || '' };
+      }
+      const me = _acMeta.me || {};
+      let learned = 0;
+      if (needMacros) {
+        let url = 'https://spigenhelp.zendesk.com/api/v2/macros/active.json?per_page=100';
+        for (let page = 0; url && page < 10; page++) {
+          const data = await acApiGet_(url);
+          if (!data) break;
+          for (const mac of (data.macros || [])) {
+            let kind = 'p';
+            let body = '';
+            for (const act of (mac.actions || [])) {
+              if (act.field === 'comment_mode_is_public') kind = String(act.value) === 'false' ? 'n' : 'p';
+              if (act.field === 'comment_value_html') body = acHtmlToText_(act.value);
+              else if (act.field === 'comment_value' && !body) body = Array.isArray(act.value) ? String(act.value[act.value.length - 1] || '') : String(act.value || '');
+            }
+            if (body) learned += acLearnText_(body, kind, { agent: me.name }, AC_SRC.MACRO, now);
+          }
+          url = data.next_page || null;
+        }
+        _acMeta.macrosAt = now;
+      }
+      if (needTickets && me.id) {
+        const firstRun = !_acMeta.seededAt;
+        const want = firstRun ? 80 : 30;
+        const q = encodeURIComponent(`type:ticket assignee:${me.id}`);
+        let url = `https://spigenhelp.zendesk.com/api/v2/search.json?query=${q}&sort_by=updated_at&sort_order=desc&per_page=100`;
+        const tickets = [];
+        for (let page = 0; url && tickets.length < want && page < 3; page++) {
+          const data = await acApiGet_(url);
+          if (!data) break;
+          for (const t of (data.results || [])) {
+            if (t.result_type && t.result_type !== 'ticket') continue;
+            if (_acMeta.seeded.includes(t.id)) continue;
+            tickets.push({ id: t.id, requester_id: t.requester_id });
+            if (tickets.length >= want) break;
+          }
+          url = data.next_page || null;
+        }
+        let i = 0;
+        const worker = async () => {
+          while (i < tickets.length) {
+            const t = tickets[i++];
+            const data = await acApiGet_(`https://spigenhelp.zendesk.com/api/v2/tickets/${t.id}/comments.json?include=users`);
+            if (!data) continue;
+            const users = {};
+            for (const u of (data.users || [])) users[u.id] = u;
+            const req = users[t.requester_id] || {};
+            const ctx = Object.assign({ agent: me.name }, acSplitName_(req.name || ''));
+            for (const c of (data.comments || [])) {
+              if (c.author_id !== me.id || c.type === 'VoiceComment') continue;
+              const txt = c.plain_body || acHtmlToText_(c.html_body || c.body || '');
+              const ts = c.created_at ? Date.parse(c.created_at) || now : now;
+              learned += acLearnText_(txt, c.public ? 'p' : 'n', ctx, AC_SRC.HISTORY, ts);
+            }
+            _acMeta.seeded.push(t.id);
+            await new Promise(r => setTimeout(r, 120));
+          }
+        };
+        await Promise.all([worker(), worker(), worker()]);
+        if (_acMeta.seeded.length > 600) _acMeta.seeded = _acMeta.seeded.slice(-600);
+        _acMeta.seededAt = now;
+      }
+      acSaveCorpus_(true);
+      _acIndexDirty = true;
+      if (learned) logStep_(`Autocomplete: imported ${learned} phrases (${acEntryCount_()} total)`);
+      const cnt = document.getElementById('sp-ac-count');
+      if (cnt) cnt.textContent = String(acEntryCount_());
+    } finally {
+      _acSeeding = false;
     }
   }
 
@@ -6516,6 +7286,7 @@
           lastTicketId = newId;
           resetPanel();
           prefetchTicketData_(); // v3.8.0: network starts now; render flow below unchanged
+          try { acRefreshCtx_(); } catch (_) {} // v3.9.0: autocomplete placeholders follow the new ticket
           _dockFailedAt = null; // restart the 2s floating-fallback timer for the new ticket
           clearTimeout(navTimer);
           navTimer = setTimeout(() => { autoDetectAll(); collapseRawAbmComments_(); }, 1500);
@@ -6560,6 +7331,9 @@
 
     if (isTicketPage_()) prefetchTicketData_();
     if (isTicketPage_()) setTimeout(() => { autoDetectAll(); collapseRawAbmComments_(); }, 1500);
+
+    // v3.9.0: ghost-text autocomplete in the composer (public reply + internal note)
+    try { if (acEnabled_()) acInit_(); } catch (e) { logStep_(`Autocomplete init failed: ${e.message}`); }
 
     showUpdatePopupIfNeeded_();
   }

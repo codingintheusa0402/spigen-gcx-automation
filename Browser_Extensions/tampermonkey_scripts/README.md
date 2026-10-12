@@ -19,7 +19,7 @@ Tampermonkey userscripts for the Spigen GCX Amazon operations workflow.
 
 ## Scripts
 
-### GCX Reply (`v3.7.2`)
+### GCX Reply (`v3.9.0`)
 **Matches:** `spigenhelp.zendesk.com/agent/*` (panel on `/agent/tickets/*`) and Seller Central `…/mcf/orders/create-order*` pages (US/UK/DE/FR/IT/ES and `sellercentral-europe`), where it runs its embedded MCF autofill instead of the panel.
 **Backend:** [GAS_Zendesk/GCXReply_GAS](../../GAS_Zendesk/GCXReply_GAS/) (`GAS_URL` at the top of the script). Every released version is also archived there as `v{version}.gs`.
 
@@ -48,6 +48,14 @@ Floating panel on Zendesk tickets. Fetches Amazon order data and Spigen product 
   Order ID, ASIN, 문의SKU, Customer Name, Purchase Date, Order Status, Order Total, Delivery Level, Country, Point of Purchase, Brand(상세), Device, Product Name, Fulfillment, ❗사진/영상 유무❗, ✅전체 주문, ❎전체 환불
 - Device and Product Name fields are matched to dropdown options using token similarity, with a candidate picker shown when genuinely ambiguous
 - A "what's new" popup shows once per version bump after Auto-Fill/panel changes ship
+
+**Smart Autocomplete (v3.9.0)** — IDE-style ghost text in the Zendesk composer, for public replies *and* internal notes:
+- While the agent types, the predicted continuation is drawn in faint grey right after the caret. **Tab** accepts all of it, **Alt+→** (or Ctrl+→) accepts one word, **Esc** dismisses. Nothing is inserted unless Tab is pressed; the suggestion is only shown while the caret is at the end of its paragraph and never during IME (Korean/Japanese) composition.
+- Sources, all stored locally in this browser's Tampermonkey storage (`gcx_ac_corpus_v1`, max 5,000 phrases): (1) everything the agent actually submits — captured from the same GraphQL fetch hook the ABM relay uses, only after Zendesk confirms the save; (2) the agent's own past replies/notes via the Zendesk API (newest ~80 assigned tickets on first run, weekly top-up); (3) active macros (lowest weight).
+- Customer names, order IDs, ASINs, emails, URLs and long numbers are replaced by placeholders before storing and re-filled from the **current** ticket (requester / Amazon buyer name, Order ID field, ASIN field) when suggesting — a greeting learned as "Dear {{name}}," is offered as "Dear Marco," on the next ticket.
+- Matching per keystroke (in-memory): paragraph prefix → current-sentence prefix → word n-gram chain (trigram/bigram back-off, stops at low confidence or sentence end). Ranked by frequency × recency × source weight × channel match (reply vs note).
+- Rendering never touches CKEditor's DOM or model: a pointer-events-free overlay positioned via the editor's own mapper, with the editable's font metrics so wrapped lines align. Accepting inserts through CKEditor's model API (undo works).
+- ⚙ → 자동완성: on/off, learned-phrase count, "내 과거 답변 가져오기" (re-seed), "초기화" (wipe local data).
 
 **AI 인입사유 분석 button**: asks the backend's `inferReason` (Gemini) for the defect/inquiry-reason label of the current ticket text.
 
