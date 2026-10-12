@@ -1,7 +1,8 @@
 # Auto-broadcast (unattended weekday schedule)
 
 Sends the Pixel 11 + Galaxy Z8 + iPhone 18 (added 2026-09-21) 배드리뷰(1~3점) cards to
-all 13 GCX rooms (GCX전략 Spigen x TCK added 2026-09-29) **every weekday at 10:30 AM KST**, skipping Korean public holidays
+all 14 GCX rooms (GCX전략 Spigen x TCK added 2026-09-29, 안준서 부문장 해외사업부문 added
+2026-10-12) **every weekday at 10:30 AM KST**, skipping Korean public holidays
 automatically — **no test-send, no confirmation prompt.** Added 2026-09-15 per
 explicit user request. This is a *separate*
 path from the interactive `badreview-chat-broadcast` skill, which still requires a
@@ -80,7 +81,7 @@ both sides at once** — that caused a real duplicate send to all 13 live rooms 
    largest country segment, unlike Pixel 11 which has none. KR reviews occasionally
    upload after 11 AM (past this 10:30 run), so 0 KR rows is treated as "maybe still
    incomplete," not a real zero day. If so, the script **does not** broadcast the
-   carousel to the 13 rooms at all (Pixel 11 and iPhone 18 no longer send separately
+   carousel to the 14 rooms at all (Pixel 11 and iPhone 18 no longer send separately
    either, since it's one message now) — it posts an alert plus a full carousel
    preview to the **private test room only**, and writes a marker file
    (`state/held_<date>.flag`) so the 11:30 retry (below) knows there's something to
@@ -96,7 +97,7 @@ both sides at once** — that caused a real duplicate send to all 13 live rooms 
     `state/held_<date>.flag` marker exists (i.e. the main run held the carousel) —
     otherwise it logs `RETRY <date>: nothing held, skipping` and exits immediately,
     no sheets fetch, no send. If the marker IS present, it re-fetches fresh data and
-    broadcasts to all 13 rooms **unconditionally** — even if Z8's KR count is still
+    broadcasts to all 14 rooms **unconditionally** — even if Z8's KR count is still
     0 — then deletes the marker. This is a hard deadline: by explicit user rule,
     incomplete Z8 data is never allowed to hold the broadcast past main+1h.
     ⚠️ **2026-10-07 incident**: a stray duplicate entry (tagged `mesh:badreview-
@@ -150,7 +151,7 @@ without `--test-only`, which leaked a live card to all 12 rooms.
 python3 auto_broadcast.py --test-only --dry-run --date 2026-09-27   # inspect first
 python3 auto_broadcast.py --test-only --date 2026-09-27             # then actually send, still private-only
 ```
-5. Posts the combined carousel (unless held entirely by the KR gate) to all 13 rooms,
+5. Posts the combined carousel (unless held entirely by the KR gate) to all 14 rooms,
    1s apart, logs each result.
 
 ## Manual controls
