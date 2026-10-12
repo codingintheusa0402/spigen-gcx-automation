@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GCX Reply
 // @namespace    https://spigen.com/gcx
-// @version      3.9.0
+// @version      3.9.1
 // @description  Amazon order data via GAS web app + Spigen product info + Zendesk auto-fill + smart reply autocomplete
 // @author       Spigen GCX
 // @updateURL    https://raw.githubusercontent.com/codingintheusa0402/spigen-gcx-automation/main/Browser_Extensions/tampermonkey_scripts/GCX%20Reply.user.js
@@ -97,7 +97,7 @@
   // Keep CURRENT_VERSION in sync with the @version header above, and add a
   // CHANGELOG_ entry, every time the version is bumped. Empty/missing entries
   // are skipped silently (no popup shown).
-  const CURRENT_VERSION = '3.9.0';
+  const CURRENT_VERSION = '3.9.1';
   // Stale per-version entries pruned — CHANGELOG_[CURRENT_VERSION] is the
   // only access pattern, so every past entry becomes dead weight the moment
   // its version is superseded. Add a fresh '<version>': [...] entry here on
@@ -6268,6 +6268,17 @@
       res.clone().json().then(json => {
         const results = Array.isArray(json) ? json : [json];
         if (!results.some(r => r?.data?.updateTicket?.__typename === 'UpdateTicketSuccess')) return;
+        // telemetry: one 'm' event per submitted message, then reset counters
+        try {
+          const a = _acActive;
+          if (a && a.msg) {
+            acEpClose_(a, 'sub');
+            for (const it of items) {
+              acLogPush_({ e: 'm', t: Date.now(), k: it.kind, len: acHtmlToText_(it.html).trim().length, keys: a.msg.keys, nosug: a.msg.nosug, ep: a.msg.ep, acc: a.msg.acc, dur: Math.round((Date.now() - a.msg.t0) / 1000) });
+            }
+            a.msg = { keys: 0, nosug: 0, ep: 0, acc: 0, t0: Date.now() };
+          }
+        } catch (_) {}
         for (const it of items) {
           acGetCtx_(it.ticketId).then(ctx => {
             const n = acLearnText_(acHtmlToText_(it.html), it.kind, ctx, AC_SRC.TYPED);
@@ -6308,6 +6319,8 @@
   }
   function acRefreshCtx_(attempt) {
     const ticketId = location.pathname.match(/\/tickets\/(\d+)/)?.[1] || null;
+    if (!attempt && _acActive && _acActive.ep && _acActive.ctxTicket !== ticketId) acEpClose_(_acActive, 'nav');
+    if (_acActive) _acActive.ctxTicket = ticketId;
     if (!ticketId) return;
     acGetCtx_(ticketId).then(ctx => {
       if ((location.pathname.match(/\/tickets\/(\d+)/)?.[1] || null) !== ticketId) return;
@@ -6434,21 +6447,25 @@
     if (partial) return out[0] + (out.length > 1 ? ' ' + out.slice(1).join(' ') : '');
     return (endsWithSpace ? '' : ' ') + out.join(' ');
   }
+  // Returns { text, lv, src } (lv = which matcher: 'a' paragraph, 'b'
+  // sentence, 'c' n-gram; src = corpus source of the winning entry, -1 for
+  // n-gram) or null.
   function acSuggest_(blockText, kind) {
     const typed = blockText.replace(/^\s+/, '');
-    if (!typed) return '';
+    if (!typed) return null;
     // a. whole paragraph
     const a = acPrefixMatch_(typed, kind, false);
-    if (a) return a.remainder;
+    if (a) return { text: a.remainder, lv: 'a', src: a.entry.s };
     // b. current sentence
     const sm = typed.match(/[.!?。！？]["')\]]*\s+([^]*)$/);
     const sentence = sm ? sm[1] : '';
     if (sentence && sentence.trim().length >= 2) {
       const b = acPrefixMatch_(sentence, kind, true);
-      if (b) return b.remainder;
+      if (b) return { text: b.remainder, lv: 'b', src: b.entry.s };
     }
     // c. next words
-    return acNgramMatch_(typed);
+    const c = acNgramMatch_(typed);
+    return c ? { text: c, lv: 'c', src: -1 } : null;
   }
 
   // ── Editor binding ───────────────────────────────────────────────────────
@@ -6533,23 +6550,127 @@
       `font-family:${cs.fontFamily};font-size:${cs.fontSize};line-height:${cs.lineHeight};font-weight:${cs.fontWeight};letter-spacing:${cs.letterSpacing};word-spacing:${cs.wordSpacing};` +
       `color:${cs.color};opacity:0.42;text-indent:${Math.max(0, rect.left - left)}px;white-space:${a.wrap ? 'pre-wrap' : 'pre'};overflow-wrap:break-word;overflow:hidden;` +
       (a.wrap ? '' : `max-height:${rect.height || 18}px;`);
-    ghost.querySelector('#gcx-ac-text').textContent = a.suggestion;
+    const span = ghost.querySelector('#gcx-ac-text');
+    if (span.textContent !== a.suggestion) span.textContent = a.suggestion;
   }
   function acRecompute_() {
     const a = _acActive;
     if (!a) return;
     if (!acEnabled_() || a.composing || !a.focused) { acHide_(); return; }
     const info = acCaretInfo_(a.editor);
-    if (!info) { acHide_(); return; }
+    if (!info) { acEpClose_(a, 'ign'); acHide_(); return; }
     a.kind = acKindOf_(a.editable);
     a.typed = info.blockText;
     if (a.dismissedFor !== null && a.dismissedFor === info.blockText) { acHide_(); return; }
     a.dismissedFor = null;
-    let s = '';
-    try { s = acSuggest_(info.blockText, a.kind); } catch (e) { s = ''; }
-    a.suggestion = s || '';
+    const t0 = performance.now();
+    let r = null;
+    try { r = acSuggest_(info.blockText, a.kind); } catch (e) { r = null; }
+    const ms = performance.now() - t0;
+    a.suggestion = r ? r.text : '';
     a.wrap = info.isLastBlock;
+    acEpTrack_(a, info.blockText, r, ms);
     acRender_();
+  }
+
+  // ── Telemetry (v3.9.1) ───────────────────────────────────────────────────
+  // Purpose: see how suggestions perform on real tickets so the engine can be
+  // tuned in later versions. Cost: one small object per suggestion *episode*
+  // (not per keystroke), buffered in memory and POSTed to the Worker every 5
+  // minutes (or 40 events). No DOM work, no sync storage on the typing path.
+  // Text fields are de-identified with the same placeholder pass as the
+  // corpus (names / order IDs / ASINs / emails / URLs → {{…}}).
+  //
+  // Event shapes (compact keys):
+  //   s  one suggestion episode: k kind, lv matcher (a/b/c), src corpus source,
+  //      sl suggestion length, tl typed length, ms compute time, o outcome
+  //      (tab | word | esc | typed | ign | swap | drop | blur | nav | sub),
+  //      tt chars typed-through before close, ac chars accepted, w word-accepts,
+  //      sg suggestion text, at what the agent typed instead (ign/swap only)
+  //   m  one submitted message: k, len, keys (keystrokes), nosug (keystrokes
+  //      with nothing to suggest), ep episodes, acc accepted chars
+  //   h  heartbeat per page load: v version, c corpus size, os
+  const AC_LOG_FLUSH_MS = 5 * 60 * 1000;
+  const AC_LOG_FLUSH_AT = 40;
+  const AC_LOG_MAX_BUF  = 400;
+  const AC_LOG_BUF_KEY  = 'gcx_ac_log_buf';
+  let _acLog = [];
+  let _acLogSentHeartbeat = false;
+  let _acLogFlushing = false;
+  const _acTabId = Math.random().toString(36).slice(2, 8);
+
+  function acLogPush_(ev) {
+    _acLog.push(ev);
+    if (_acLog.length > AC_LOG_MAX_BUF) _acLog.splice(0, _acLog.length - AC_LOG_MAX_BUF);
+    if (_acLog.length >= AC_LOG_FLUSH_AT) acLogFlush_();
+  }
+  function acLogPersist_() {
+    try { GM_setValue(AC_LOG_BUF_KEY, _acLog.length ? JSON.stringify(_acLog.slice(-AC_LOG_MAX_BUF)) : ''); } catch (_) {}
+  }
+  function acLogFlush_() {
+    if (_acLogFlushing || !_acLog.length) return;
+    const key = workerKey_();
+    if (!key) return; // keep buffering; sent once the key is available
+    if (!_acLogSentHeartbeat) {
+      _acLogSentHeartbeat = true;
+      let hist = 0, macro = 0;
+      try { for (const k in _acCorpus.e) { if (_acCorpus.e[k].s === AC_SRC.MACRO) macro++; else hist++; } } catch (_) {}
+      _acLog.unshift({ e: 'h', t: Date.now(), v: CURRENT_VERSION, c: hist + macro, hist, macro, os: /Mac/i.test(navigator.platform) ? 'mac' : 'win' });
+    }
+    const batch = _acLog.splice(0, 200);
+    _acLogFlushing = true;
+    const agent = (_acMeta && _acMeta.me && _acMeta.me.id) ? String(_acMeta.me.id) : 'anon';
+    gmRequest_({
+      method: 'POST', url: `${WORKER_URL}/ac/log`, timeout: 15000,
+      headers: { 'content-type': 'application/json', 'x-gcx-key': key },
+      data: JSON.stringify({ agent, tab: _acTabId, ver: CURRENT_VERSION, events: batch }),
+    }).then(res => {
+      if (!res || res.status !== 200) _acLog.unshift(...batch);
+    }).catch(() => { _acLog.unshift(...batch); })
+      .finally(() => { _acLogFlushing = false; acLogPersist_(); });
+  }
+  // Close the open episode with an outcome and queue its event.
+  function acEpClose_(a, outcome) {
+    const ep = a && a.ep;
+    if (!ep) return;
+    a.ep = null;
+    const ev = { e: 's', t: ep.t0, k: ep.k, lv: ep.lv, src: ep.src, sl: ep.sug.length, tl: ep.typed.length, ms: ep.ms, o: outcome, tt: ep.tt, ac: ep.ac, w: ep.w };
+    try { ev.sg = acTokenize_(ep.sug, _acCtx).slice(0, 160); } catch (_) { ev.sg = ''; }
+    if (outcome === 'ign' || outcome === 'swap') {
+      // What did the agent write instead? Record now, then refine once they
+      // have typed a bit more (the event object is updated in place).
+      const grab = () => {
+        try {
+          const info = acCaretInfo_(a.editor);
+          const txt = info ? info.blockText : a.typed;
+          if (txt && txt.startsWith(ep.typed)) ev.at = acTokenize_(txt.slice(ep.typed.length, ep.typed.length + 80), _acCtx);
+        } catch (_) {}
+      };
+      grab();
+      setTimeout(grab, 4000);
+    }
+    if (a.msg) { a.msg.ep++; a.msg.acc += ep.ac; }
+    acLogPush_(ev);
+  }
+  // Called after every recompute with the fresh result; decides whether the
+  // open episode continues (agent is typing exactly what was suggested, or
+  // accepted a word) or closes.
+  function acEpTrack_(a, typed, r, ms) {
+    const ep = a.ep;
+    if (ep) {
+      if (typed.length >= ep.typed.length && typed.startsWith(ep.typed)) {
+        const extra = typed.slice(ep.typed.length);
+        if (ep.sug.startsWith(extra)) {
+          ep.tt = Math.max(0, extra.length - ep.ac);
+          if (r && r.text === ep.sug.slice(extra.length)) return; // same episode, still on track
+          if (extra.length === ep.sug.length) acEpClose_(a, 'typed');     // wrote the whole thing by hand
+          else if (!r || !r.text) acEpClose_(a, 'drop');                  // engine withdrew it
+          else acEpClose_(a, 'swap');                                     // engine changed its mind
+        } else acEpClose_(a, 'ign');
+      } else acEpClose_(a, 'ign');
+    }
+    if (a.msg) { if (!r && typed.length >= 2) a.msg.nosug++; }
+    if (r && r.text) a.ep = { typed, sug: r.text, lv: r.lv, src: r.src, ms: Math.round(ms * 10) / 10, k: a.kind, t0: Date.now(), tt: 0, ac: 0, w: 0 };
   }
   function acAccept_(wordsOnly) {
     const a = _acActive;
@@ -6565,6 +6686,11 @@
     if (wordsOnly) {
       const m = text.match(/^\s*\S+\s?/);
       text = m ? m[0] : text;
+    }
+    if (a.ep) {
+      a.ep.ac += text.length;
+      if (wordsOnly && text.length < a.suggestion.length) a.ep.w++;
+      else acEpClose_(a, wordsOnly ? 'word' : 'tab'); // whole suggestion taken
     }
     const editor = a.editor;
     try {
@@ -6591,6 +6717,7 @@
       if (acAccept_(true)) { e.preventDefault(); e.stopImmediatePropagation(); }
     } else if (e.key === 'Escape') {
       a.dismissedFor = a.typed;
+      acEpClose_(a, 'esc');
       acHide_();
       e.preventDefault(); e.stopImmediatePropagation();
     }
@@ -6600,13 +6727,14 @@
     const editor = editable.ckeditorInstance;
     if (!editor || !editor.model || !editor.editing) return; // not ready yet; observer retries
     _acAttached.add(editable);
-    const state = { editable, editor, kind: 'p', suggestion: '', typed: '', composing: false, focused: document.activeElement === editable, dismissedFor: null, wrap: true };
+    const state = { editable, editor, kind: 'p', suggestion: '', typed: '', composing: false, focused: document.activeElement === editable, dismissedFor: null, wrap: true,
+      ep: null, msg: { keys: 0, nosug: 0, ep: 0, acc: 0, t0: Date.now() } };
     const activate = () => { _acActive = state; };
     const schedule = () => { if (_acActive !== state) activate(); clearTimeout(state._t); state._t = setTimeout(acRecompute_, 0); };
-    try { editor.model.document.on('change:data', schedule); } catch (_) {}
+    try { editor.model.document.on('change:data', () => { state.msg.keys++; schedule(); }); } catch (_) {}
     try { editor.model.document.selection.on('change:range', schedule); } catch (_) {}
     editable.addEventListener('focus', () => { state.focused = true; activate(); schedule(); });
-    editable.addEventListener('blur', () => { state.focused = false; setTimeout(() => { if (!state.focused) acHide_(); }, 50); });
+    editable.addEventListener('blur', () => { state.focused = false; setTimeout(() => { if (!state.focused) { acEpClose_(state, 'blur'); acHide_(); } }, 50); });
     editable.addEventListener('compositionstart', () => { state.composing = true; acHide_(); });
     editable.addEventListener('compositionend', () => { state.composing = false; schedule(); });
     if (state.focused) { activate(); schedule(); }
@@ -6639,12 +6767,30 @@
     document.addEventListener('keydown', acOnKeydown_, true);
     document.addEventListener('scroll', () => { if (_acActive && _acActive.suggestion) acRender_(); }, true);
     window.addEventListener('resize', () => { if (_acActive && _acActive.suggestion) acRender_(); });
-    const mo = new MutationObserver(acScan_);
+    // Ignore mutations caused by our own overlay (its text updates would
+    // otherwise re-trigger the scan → re-render → mutation cycle).
+    const mo = new MutationObserver(records => {
+      for (const r of records) { if (!_acOverlay || !_acOverlay.contains(r.target)) { acScan_(); return; } }
+    });
     mo.observe(document.body, { childList: true, subtree: true });
     acScan_();
     acRefreshCtx_();
     // Background history seeding — well after the panel's own first loads.
     setTimeout(() => { acSeedHistory_().catch(() => {}); }, 20000);
+    // Telemetry: pick up anything unsent from the last page, then flush on a
+    // slow timer and whenever the tab goes to the background.
+    try {
+      const raw = GM_getValue(AC_LOG_BUF_KEY, '');
+      if (raw) { const arr = JSON.parse(raw); if (Array.isArray(arr)) _acLog = arr.concat(_acLog).slice(-AC_LOG_MAX_BUF); GM_setValue(AC_LOG_BUF_KEY, ''); }
+    } catch (_) {}
+    setTimeout(acLogFlush_, 90 * 1000);
+    setInterval(acLogFlush_, AC_LOG_FLUSH_MS);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'hidden') return;
+      if (_acActive) acEpClose_(_acActive, 'blur');
+      acLogPersist_();
+      acLogFlush_();
+    });
   }
 
   // ── Seeding from the agent's own history + macros (Zendesk API) ─────────

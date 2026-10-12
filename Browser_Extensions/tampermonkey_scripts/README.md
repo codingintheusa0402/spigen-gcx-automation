@@ -19,7 +19,7 @@ Tampermonkey userscripts for the Spigen GCX Amazon operations workflow.
 
 ## Scripts
 
-### GCX Reply (`v3.9.0`)
+### GCX Reply (`v3.9.1`)
 **Matches:** `spigenhelp.zendesk.com/agent/*` (panel on `/agent/tickets/*`) and Seller Central `…/mcf/orders/create-order*` pages (US/UK/DE/FR/IT/ES and `sellercentral-europe`), where it runs its embedded MCF autofill instead of the panel.
 **Backend:** [GAS_Zendesk/GCXReply_GAS](../../GAS_Zendesk/GCXReply_GAS/) (`GAS_URL` at the top of the script). Every released version is also archived there as `v{version}.gs`.
 
@@ -56,6 +56,7 @@ Floating panel on Zendesk tickets. Fetches Amazon order data and Spigen product 
 - Matching per keystroke (in-memory): paragraph prefix → current-sentence prefix → word n-gram chain (trigram/bigram back-off, stops at low confidence or sentence end). Ranked by frequency × recency × source weight × channel match (reply vs note).
 - Rendering never touches CKEditor's DOM or model: a pointer-events-free overlay positioned via the editor's own mapper, with the editable's font metrics so wrapped lines align. Accepting inserts through CKEditor's model API (undo works).
 - ⚙ → 자동완성: on/off, learned-phrase count, "내 과거 답변 가져오기" (re-seed), "초기화" (wipe local data).
+- **Telemetry (v3.9.1)** so the engine can be tuned from real use: one small event per suggestion *episode* (shown → `tab` / `word` / `esc` / `typed` (agent wrote the same text by hand) / `ign` (wrote something else, with the de-identified text they wrote instead) / `swap` / `drop` / `blur` / `nav` / `sub`), with matcher level (a paragraph / b sentence / c n-gram), corpus source, lengths, compute time; one event per submitted message (chars, keystrokes, keystrokes with nothing to suggest, episodes, accepted chars); one heartbeat per page load (version, corpus size). Buffered in memory and POSTed to the Worker's `/ac/log` every 5 min / 40 events / tab hidden (unsent events survive a reload via GM storage). Nothing runs on the keystroke path beyond a counter and a `performance.now()` pair. Read back: `GET https://gcx-reply.kjw-55b.workers.dev/ac/log?days=7` (summary) or `&raw=1` (events), header `x-push-key` — see the Worker README.
 
 **AI 인입사유 분석 button**: asks the backend's `inferReason` (Gemini) for the defect/inquiry-reason label of the current ticket text.
 

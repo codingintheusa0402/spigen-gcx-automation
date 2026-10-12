@@ -30,6 +30,23 @@ the key is missing.
   Order ID field (360021934132) is set → webhook *"GCX Reply Worker – order prefetch"*
   (01M4D620JPAJZ4N52S92F1ZGGZ, Bearer = secret `ZD_WEBHOOK_TOKEN`) → `POST /prefetch`.
 
+## Autocomplete telemetry (TM v3.9.1+)
+The panel's Smart Autocomplete POSTs small de-identified event batches to `POST /ac/log` (header
+`x-gcx-key`). Stored in KV as `aclog:<day>:<agentId>:<tab>` (60-day TTL). Nothing here touches the
+order/product read path.
+
+Read it back (header `x-push-key` = `PIDX_PUSH_KEY`, value in `~/.config/gcx_reply_worker/secrets.json`):
+```bash
+PK=$(python3 -c "import json;print(json.load(open('$HOME/.config/gcx_reply_worker/secrets.json'))['PIDX_PUSH_KEY'])")
+curl -s "https://gcx-reply.kjw-55b.workers.dev/ac/log?days=7" -H "x-push-key: $PK" | python3 -m json.tool   # summary
+curl -s "https://gcx-reply.kjw-55b.workers.dev/ac/log?days=7&raw=1" -H "x-push-key: $PK" > events.json     # every event
+```
+Summary fields: `overall` / `byAgent` / `byLevel` (a paragraph, b sentence, c n-gram) / `byKind` (p reply,
+n note) / `bySource` (0 typed, 1 history, 2 macro, -1 n-gram) each with episode counts per outcome,
+`acceptRate` (tab+word), `usefulRate` (+typed-through), accepted chars and compute-time p50/p95;
+`messages` (chars, accepted share, keystroke coverage); `topAccepted` / `topIgnored` suggestion texts
+(ignored ones include samples of what the agent wrote instead); `agents` (last version / corpus size).
+
 ## Secrets / bindings
 `wrangler secret put` (values live only in Cloudflare and `~/.config/gcx_reply_worker/` on the Mac,
 never in git): `GCX_KEY`, `PIDX_PUSH_KEY`, `ZD_WEBHOOK_TOKEN`, `AWS_ACCESS_KEY_ID`,
