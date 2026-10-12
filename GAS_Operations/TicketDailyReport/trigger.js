@@ -1,5 +1,5 @@
 function createTriggers() {
-  const endDate = new Date('2026-09-30');
+  const endDate = new Date('2026-10-20');
   let date = new Date(); // start from today
   date.setHours(9, 0, 0, 0); // 9:00AM in KST
 

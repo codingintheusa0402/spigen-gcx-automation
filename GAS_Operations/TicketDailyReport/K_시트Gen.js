@@ -13,87 +13,12 @@ function kSheetToChat() {
   const rows = all.slice(4, last); // B5..I(last)
   if (!rows.length) return;
 
-  const MAX_ROWS = 25;
-  const clip = rows.slice(0, MAX_ROWS);
-
-  let totalQty = 0;
-  let kjwTotal = 0;
-
-  const dataRows = [];
-  for (const r of clip) {
-    const c = cleanKSheetDisplayRow_(r);
-    totalQty += c.qty;
-    if (c.owner.toUpperCase() === 'KJW') kjwTotal += c.qty;
-    dataRows.push(c.display);
-  }
-
-  // Monospace, column-aligned table (CJK chars count as width 2)
-  const tableText = buildMonoTable_(KSHEET_CARD_HEADER, dataRows);
-
-  // If G3 is present, prefer it; otherwise use computed sum
-  const headlineTotal = (manualTotal !== '' && manualTotal !== null) ? Number(manualTotal) : totalQty;
-
-  // Totals line (All, KJW) — LYS retired 2026-09-10, KJW owns all pending tickets
-  const totalsLine = `All: ${headlineTotal} | KJW: ${kjwTotal}`;
+  // If G3 is present, prefer it; otherwise the card sums the rows
+  const headlineTotal = (manualTotal !== '' && manualTotal !== null) ? Number(manualTotal) : null;
 
   const payload = {
     text: titleText || 'K_시트 Pending Ticket Snapshot',
-    cardsV2: [
-      {
-        cardId: 'k_sheet_compact',
-        card: {
-          header: {
-            title: titleText || 'K_시트 Pending Ticket 수',
-            subtitle: '담당자별 Pending 티켓 현황',
-            imageUrl: 'https://img.icons8.com/color/512/zendesk.png',
-            imageType: 'SQUARE',
-            imageAltText: 'Zendesk'
-          },
-          sections: [
-            {
-              widgets: [
-                {
-                  decoratedText: {
-                    topLabel: 'Ticket Totals',
-                    text: totalsLine
-                  }
-                },
-                {
-                  buttonList: {
-                    buttons: [
-                      {
-                        text: 'Start Zendesk',
-                        onClick: {
-                          openLink: {
-                            url: 'https://spigenhelp.zendesk.com/agent/filters/360103290632'
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                { divider: {} }
-              ]
-            },
-            {
-              widgets: [
-                { textParagraph: { text: '<pre>' + htmlEscape_(tableText) + '</pre>' } }
-              ]
-            },
-            ...(rows.length > MAX_ROWS
-              ? [{
-                  widgets: [{
-                    decoratedText: {
-                      topLabel: 'Note',
-                      text: `Showing first ${MAX_ROWS} rows — open sheet for all.`
-                    }
-                  }]
-                }]
-              : [])
-          ]
-        }
-      }
-    ]
+    cardsV2: [{ cardId: 'k_sheet_compact', card: buildKSheetCard_(titleText, rows, headlineTotal) }]
   };
 
   const res = UrlFetchApp.fetch(webhookUrl, {
@@ -105,17 +30,145 @@ function kSheetToChat() {
   Logger.log(res.getContentText());
 }
 
+/* ===== cardsV2 builder (shared with chatApp.js) ===== */
+
+// No person-in-charge tagging for T2 Escalated tickets (decided 2026-10-12) — the card
+// shows no PIC / owner subtotal. K_시트 column G is still written but no longer displayed.
+const KSHEET_ZENDESK_URL = 'https://spigenhelp.zendesk.com/agent/filters/360103290632';
+const KSHEET_SHEET_URL = 'https://docs.google.com/spreadsheets/d/10VYnysCGztKWMXfvXIWBVcE2_zENnRxvXUr9nicHkpo/edit#gid=1528385180';
+const KSHEET_CARD_MAX_ROWS = 60; // 1 widget per ticket row; cards drop sections past 100 widgets
+
+// Category order + accent colour/icon (unknown categories go last, grey)
+const KSHEET_CATEGORY_STYLE = {
+  'Product Issue':   { order: 1, color: '#D93025', icon: 'report' },
+  'Product Inquiry': { order: 2, color: '#1A73E8', icon: 'help' }
+};
+const KSHEET_CATEGORY_DEFAULT = { order: 9, color: '#E37400', icon: 'label' };
+
+function kSheetCategoryStyle_(category) {
+  return KSHEET_CATEGORY_STYLE[category] || KSHEET_CATEGORY_DEFAULT;
+}
+
+// Full card for the daily webhook post.
+function buildKSheetCard_(titleText, rawRows, headlineTotal) {
+  const m = (titleText || '').match(/^(.*?)\s*Pending Ticket 수\s*$/);
+  return {
+    header: {
+      title: m ? m[1] + ' Pending 티켓' : (titleText || 'K_시트 Pending 티켓'),
+      subtitle: 'Zendesk T2 Escalated · 카테고리별 Pending 현황',
+      imageUrl: 'https://img.icons8.com/color/512/zendesk.png',
+      imageType: 'SQUARE',
+      imageAltText: 'Zendesk'
+    },
+    sections: buildKSheetCardSections_(rawRows, {
+      headlineTotal: headlineTotal,
+      maxRows: KSHEET_CARD_MAX_ROWS,
+      withButtons: true
+    })
+  };
+}
+
+// Sections: summary (total, per-category, per-country, buttons) + one section per category
+// listing its tickets + a truncation note. opts: { headlineTotal, maxRows, withButtons }
+function buildKSheetCardSections_(rawRows, opts) {
+  opts = opts || {};
+  const maxRows = opts.maxRows || KSHEET_CARD_MAX_ROWS;
+  const items = rawRows.map(cleanKSheetDisplayRow_);
+
+  const rowSum = items.reduce((s, it) => s + it.qty, 0);
+  const total = (opts.headlineTotal !== null && opts.headlineTotal !== undefined && !isNaN(opts.headlineTotal))
+    ? opts.headlineTotal : rowSum;
+
+  // Per-category / per-country sums over ALL rows (not just the displayed ones)
+  const catSum = {}, ccSum = {};
+  items.forEach(it => {
+    catSum[it.category] = (catSum[it.category] || 0) + it.qty;
+    ccSum[it.cc] = (ccSum[it.cc] || 0) + it.qty;
+  });
+  const cats = Object.keys(catSum).sort((a, b) =>
+    (kSheetCategoryStyle_(a).order - kSheetCategoryStyle_(b).order) || (catSum[b] - catSum[a]));
+
+  const catWidgets = cats.map(c => {
+    const st = kSheetCategoryStyle_(c);
+    return { decoratedText: {
+      startIcon: { materialIcon: { name: st.icon } },
+      topLabel: c,
+      text: '<b><font color="' + st.color + '">' + catSum[c] + '</font></b> 건'
+    } };
+  });
+
+  const ccLine = Object.keys(ccSum)
+    .sort((a, b) => (ccSum[b] - ccSum[a]) || a.localeCompare(b))
+    .map(cc => flagCc_(cc) + ' <b>' + ccSum[cc] + '</b>')
+    .join(' &nbsp;·&nbsp; ');
+
+  const summaryWidgets = [
+    { columns: { columnItems: [
+      { horizontalSizeStyle: 'FILL_MINIMUM_SPACE', verticalAlignment: 'CENTER', widgets: [
+        { decoratedText: {
+          startIcon: { materialIcon: { name: 'pending_actions' } },
+          topLabel: 'Total Pending',
+          text: '<b><font color="#1A73E8">' + total + '</font></b> 건'
+        } }
+      ] },
+      { horizontalSizeStyle: 'FILL_AVAILABLE_SPACE', verticalAlignment: 'CENTER', widgets: catWidgets }
+    ] } },
+    { decoratedText: {
+      startIcon: { materialIcon: { name: 'public' } },
+      topLabel: '국가별',
+      text: ccLine || '-',
+      wrapText: true
+    } }
+  ];
+  if (opts.withButtons) {
+    summaryWidgets.push({ buttonList: { buttons: [
+      { text: 'Start Zendesk', type: 'FILLED',
+        icon: { materialIcon: { name: 'open_in_new' } },
+        onClick: { openLink: { url: KSHEET_ZENDESK_URL } } },
+      { text: 'K_시트 열기', type: 'OUTLINED',
+        icon: { materialIcon: { name: 'table_view' } },
+        onClick: { openLink: { url: KSHEET_SHEET_URL } } }
+    ] } });
+  }
+
+  const sections = [{ widgets: summaryWidgets }];
+
+  // Ticket rows grouped by category, sheet order kept inside each group
+  const shown = items.slice(0, maxRows);
+  cats.forEach(c => {
+    const st = kSheetCategoryStyle_(c);
+    const rows = shown.filter(it => it.category === c);
+    if (!rows.length) return;
+    sections.push({
+      header: '<font color="' + st.color + '"><b>' + htmlEscape_(c) + '</b></font> · ' + catSum[c] + '건',
+      widgets: rows.map(it => ({ decoratedText: {
+        topLabel: '#' + it.no + '  ' + flagCc_(it.cc) + ' · ' + it.brand + ' · Qty ' + it.qty,
+        text: '<b>' + htmlEscape_(it.device) + '</b><br><font color="' + st.color + '">' +
+              htmlEscape_(it.reason) + '</font>',
+        wrapText: true
+      } }))
+    });
+  });
+
+  if (items.length > maxRows) {
+    sections.push({ widgets: [{ decoratedText: {
+      startIcon: { materialIcon: { name: 'info' } },
+      topLabel: 'Note',
+      text: '상위 ' + maxRows + '행만 표시 (전체 ' + items.length + '행) — 전체는 K_시트를 확인하세요.',
+      wrapText: true
+    } }] });
+  }
+  return sections;
+}
+
 /* ===== helpers ===== */
 
-// Shared header for the K_시트 monospace card table (used by kSheetToChat + the Chat app)
-const KSHEET_CARD_HEADER = ['#', 'CC', 'Brand', 'Category', 'Device', '인입사유', 'Qty', 'PIC'];
-
 // Turn one raw K_시트 / K_시트_history row [seq, country, brand, category, qty, owner, device, reason]
-// into { display: [#, CC, Brand, Category, Device, 인입사유, Qty, PIC], qty, owner } with the
-// card-only cleanups (Brand strip+UPPER, Category drop "N. ", 인입사유 drop "(XXX)_").
+// into { no, cc, brand, category, device, reason, qty } with the card-only cleanups
+// (Brand strip+UPPER, Category drop "N. ", 인입사유 drop "(XXX)_"). Owner is not displayed.
 function cleanKSheetDisplayRow_(raw) {
   const no = safeStr(raw[0]).replace(/\.$/, '');
-  const cc = normalizeIso(safeStr(raw[1])) || safeStr(raw[1]);
+  const cc = normalizeIso(safeStr(raw[1])) || safeStr(raw[1]) || '-';
   const brand = safeStr(raw[2])
     .replace(/spigen_/g, '')
     .replace(/Spigen/g, '')
@@ -124,14 +177,16 @@ function cleanKSheetDisplayRow_(raw) {
     .trim()
     .toUpperCase();
   const category = safeStr(raw[3]).replace(/^\d+\.\s*/, '');
-  const qty = toInt(raw[4]);
-  const owner = safeStr(raw[5]);
   const device = safeStr(raw[6]);
   const reason = safeStr(raw[7]).replace(/^\([^)]*\)_/, '');
   return {
-    display: [no, cc, brand || '-', category || '-', device || '-', reason || '-', String(qty), owner],
-    qty: qty,
-    owner: owner
+    no: no,
+    cc: cc,
+    brand: brand || '-',
+    category: category || '기타',
+    device: device || '-',
+    reason: reason || '-',
+    qty: toInt(raw[4])
   };
 }
 
@@ -150,33 +205,12 @@ function toFlagEmoji(iso2) {
   return String.fromCodePoint(REGIONAL + (c1 - A), REGIONAL + (c2 - A));
 }
 
+// "🇩🇪 DE" (just "DE" when the code has no flag)
+function flagCc_(cc) {
+  const f = toFlagEmoji(cc);
+  return f ? f + ' ' + cc : cc;
+}
+
 function htmlEscape_(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-// Display width: CJK / full-width / Hangul chars occupy 2 monospace cells, the rest 1.
-function monoWidth_(s) {
-  const wide = /[\u1100-\u11FF\u3000-\u30FF\u3130-\u318F\u3400-\u9FFF\uAC00-\uD7A3\uF900-\uFAFF\uFF00-\uFFEF]/;
-  let w = 0;
-  for (const ch of String(s)) w += wide.test(ch) ? 2 : 1;
-  return w;
-}
-
-// Build a fixed-width, column-aligned text table. `#` and `Qty` columns are right-aligned.
-function buildMonoTable_(headerCells, dataRows) {
-  const grid = [headerCells].concat(dataRows);
-  const cols = headerCells.length;
-  const colW = [];
-  for (let c = 0; c < cols; c++) {
-    colW[c] = grid.reduce((m, row) => Math.max(m, monoWidth_(row[c])), 0);
-  }
-  const rightAlign = {}; rightAlign[0] = true; rightAlign[cols - 2] = true; // '#' and 'Qty'
-  const pad = (val, w, right) => {
-    const s = String(val);
-    const gap = ' '.repeat(Math.max(0, w - monoWidth_(s)));
-    return right ? gap + s : s + gap;
-  };
-  const fmtRow = row => row.map((v, c) => pad(v, colW[c], rightAlign[c])).join('  ');
-  const rule = colW.map(w => '-'.repeat(w)).join('  ');
-  return [fmtRow(headerCells), rule].concat(dataRows.map(fmtRow)).join('\n');
 }
