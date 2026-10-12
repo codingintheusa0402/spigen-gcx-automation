@@ -88,7 +88,7 @@ up = unit_up("gcx-owner-watch")
 if up:
     print(f"run|Mac hand-over guard|{up}|svc:gcx-owner-watch:user")
 print("run|Health checks|watchdog " + ago(f"{H}/.gcx-watchdog.json") + " · heartbeat " + ago(f"{H}/.gcx-heartbeat.json")
-      + " · self-heal every 2m · git sync " + ago(f"{H}/.gcx-autosync.log") + "|health")
+      + " · self-heal every 2m · git sync " + ago(f"{H}/.gcx-autosync.heartbeat") + "|health")
 
 # running: only real job processes (python/bash actually executing the job script) —
 # not Claude sessions whose prompt merely mentions a script name
