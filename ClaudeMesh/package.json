@@ -61,7 +61,9 @@
       "package.json"
     ],
     "asarUnpack": [
-      "node_modules/node-pty/**"
+      "node_modules/node-pty/**",
+      "phone/**",
+      "renderer/**"
     ]
   }
 }
