@@ -14,10 +14,10 @@ fixed=(); loops=()
 log() { echo "$(date '+%m-%d %H:%M:%S') $*" >> $HOME/.gcx-selfheal.log; }
 
 # allowed <name>: false if <name> was restarted 3× in the last 30 min
-allowed() { local f=$ST/$1 now=$(date +%s); touch $f
-  awk -v n=$now '$1>n-1800' $f > $f.t; mv $f.t $f
-  if [ $(wc -l < $f) -ge 3 ]; then [ -f $f.loop ] || { touch $f.loop; loops+=("$1"); }; return 1; fi
-  rm -f $f.loop; echo $now >> $f; return 0; }
+allowed() { local f="$ST/$(echo "$1" | tr -c 'A-Za-z0-9\n' '_')" now=$(date +%s); touch "$f"
+  awk -v n=$now '$1>n-1800' "$f" > "$f.t"; mv "$f.t" "$f"
+  if [ $(wc -l < "$f") -ge 3 ]; then [ -f "$f.loop" ] || { touch "$f.loop"; loops+=("$1"); }; return 1; fi
+  rm -f "$f.loop"; echo $now >> "$f"; return 0; }
 heal() { allowed "$1" || return; log "restart $1"; eval "$2" >/dev/null 2>&1 && fixed+=("$1") || fixed+=("$1 (restart FAILED)"); }
 
 # keep our own cron line (in case crontab was rewritten)
@@ -38,6 +38,16 @@ if [ -f ~/.config/systemd/user/mock-trader.service ] && [ ! -f ~/.gcx-owner/aitr
   st=$(systemctl --user show -p ActiveState --value mock-trader)
   [ "$st" = activating ] || heal "AI Trader engine" "systemctl --user start --no-block mock-trader"
 fi
+
+# WSLg display frozen (seen 10-12 after a reboot: X :0 stops answering, so every Chrome start hangs) → only a
+# restart of Ubuntu from the signed-in Windows session fixes it; ask the Windows side (GCX-SelfHeal) to do that
+if ! timeout 4 xset -display :0 q >/dev/null 2>&1; then
+  if [ ! -f /mnt/c/GCX-Setup/selfheal/wslg-broken.flag ]; then
+    date '+%m-%d %H:%M:%S' > /mnt/c/GCX-Setup/selfheal/wslg-broken.flag; log "WSLg display not answering — asked Windows to restart Ubuntu"
+  fi
+  exit 0                                                     # don't respawn GUI apps into a dead display
+fi
+rm -f /mnt/c/GCX-Setup/selfheal/wslg-broken.flag
 
 # tmux session + its windows
 if ! tmux has-session -t gcx 2>/dev/null; then

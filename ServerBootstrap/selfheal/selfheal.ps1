@@ -26,6 +26,13 @@ if (-not (& $dash)) { Start-Sleep 5
 $wsl = (wsl.exe -l --running 2>$null | Out-String) -replace "`0", ""
 if ($wsl -notmatch "Ubuntu") { Start-ScheduledTask -TaskName "WSL-KeepAlive"; Start-Sleep 15; $fixed += "Ubuntu (WSL)"; L "WSL started" }
 elseif ((Get-ScheduledTask -TaskName "WSL-KeepAlive").State -ne "Running") { Start-ScheduledTask -TaskName "WSL-KeepAlive" }
+# Ubuntu reported a frozen WSLg display (no window can open) → restart Ubuntu from here, at most once per 30 min
+$flag = "C:\GCX-Setup\selfheal\wslg-broken.flag"; $last = "C:\GCX-Setup\selfheal\wslg-restart.last"
+if ((Test-Path $flag) -and (-not (Test-Path $last) -or ((Get-Date) - (Get-Item $last).LastWriteTime).TotalMinutes -gt 30)) {
+  L "WSLg display frozen -> restarting Ubuntu"; Set-Content $last (Get-Date); Remove-Item $flag -Force
+  wsl.exe --shutdown; Start-Sleep 8; Start-ScheduledTask -TaskName "WSL-KeepAlive"; Start-Sleep 20; Start-ScheduledTask -TaskName "GCX-Live"
+  $fixed += "Ubuntu restarted (its display had frozen, so Chrome / Zendesk could not open)"
+}
 # Ubuntu side (it alerts for what it restarts itself)
 wsl.exe -d Ubuntu -u kevinkim -e bash -lc "bash ~/Desktop/GCX/ServerBootstrap/selfheal/gcx_selfheal.sh" 2>$null | Out-Null
 if ($fixed.Count) {
