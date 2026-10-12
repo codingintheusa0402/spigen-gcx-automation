@@ -239,7 +239,13 @@ def main() -> int:
         # than relying solely on a manually-passed --ticket-id (user rule 2026-09-16 —
         # every monitor-mode send before this had no --ticket-id, so no thread mapping
         # was ever written and thread replies couldn't resolve back to a ticket).
+        # Exception (2026-10-12): a TCT (Lazada/Shopee) report has no Zendesk link of its
+        # own but may cite Zendesk precedents (#N links) in [비고]; its explicit non-numeric
+        # --ticket-id (e.g. 261006NN2Y33) must win, otherwise the thread gets mapped to a
+        # precedent ticket and a /voucher reply misroutes to Zendesk.
         m = re.search(r"agent/tickets/(\d+)", html)
+        if ticket_id and not ticket_id.isdigit():
+            m = None
         if m:
             if ticket_id and ticket_id != m.group(1):
                 print(f"WARN: --ticket-id {ticket_id} != link ticket {m.group(1)} in body; "
