@@ -118,7 +118,7 @@ class Collector {
 
   refreshPs() {
     return new Promise(res => {
-      execFile('/bin/ps', ['-axo', 'pid=,ppid=,tty=,%cpu=,rss=,etime='], { maxBuffer: 8e6 }, (err, so) => {
+      execFile('ps', [process.platform === 'darwin' ? '-axo' : '-eo', 'pid=,ppid=,tty=,%cpu=,rss=,etime='], { maxBuffer: 8e6 }, (err, so) => {
         if (!err) {
           const m = new Map();
           for (const line of so.split('\n')) {
@@ -343,7 +343,7 @@ class Collector {
       for (const [ptyId, ptyPid] of ptyMap) if (this.descends(pid, ptyPid)) owner = ptyId;
       sessions.push({
         pid, sid: j.sessionId, name: sessionName(j, s), cwd: j.cwd, kind: j.kind,
-        status: j.status, health, tty: p.tty && p.tty !== '??' ? '/dev/' + p.tty : null,
+        status: j.status, health, tty: p.tty && !/^\?+$/.test(p.tty) ? '/dev/' + p.tty : null,   // macOS prints ??, Linux ? for none
         cpu: p.cpu || 0, rssMb: Math.round((p.rss || 0) / 1024), etime: p.etime || '',
         startedAt: j.startedAt, version: j.version, remote: !!j.bridgeSessionId,
         model, family: fam, ctx: s.lastCtx, ctxMax: ctxWindow(model),

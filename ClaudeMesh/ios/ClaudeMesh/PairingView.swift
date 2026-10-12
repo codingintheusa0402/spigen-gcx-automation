@@ -3,6 +3,7 @@ import AVFoundation
 
 struct PairingView: View {
     @EnvironmentObject var pairing: Pairing
+    var onDone: (() -> Void)? = nil           // set when shown as a sheet (adding a second host)
     @State private var scanning = false
     @State private var pasted = ""
     @State private var error: String?
@@ -14,7 +15,7 @@ struct PairingView: View {
                 Image("AppIconImage").resizable().frame(width: 84, height: 84).clipShape(RoundedRectangle(cornerRadius: 20))
                     
                 Text("GCX Mesh").font(.system(size: 22, weight: .semibold)).foregroundStyle(Color(red: 0.925, green: 0.922, blue: 0.902))
-                Text("On your Mac open GCX Mesh, click 📱, turn on phone access, then scan the QR code.\nUse the Tailscale code to connect from anywhere.")
+                Text("On your Mac open GCX Mesh, click 📱, turn on phone access, then scan the QR code.\nUse the Tailscale code to connect from anywhere.\nFor the server, paste the link from `mesh-server.js --pair`.")
                     .font(.footnote).multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.65)).padding(.horizontal, 28)
                 Button { scanning = true } label: {
                     Label("Scan QR code", systemImage: "qrcode.viewfinder").font(.headline).padding(.horizontal, 26).padding(.vertical, 13)
@@ -24,7 +25,7 @@ struct PairingView: View {
                 VStack(spacing: 8) {
                     TextField("…or paste the pairing link", text: $pasted).textInputAutocapitalization(.never).autocorrectionDisabled()
                         .padding(12).background(RoundedRectangle(cornerRadius: 14).fill(.white.opacity(0.08))).foregroundStyle(.white)
-                    Button("Connect") { if !pairing.add(pasted) { error = "That isn't a GCX Mesh pairing link." } }.disabled(pasted.isEmpty)
+                    Button("Connect") { if pairing.add(pasted) { onDone?() } else { error = "That isn't a GCX Mesh pairing link." } }.disabled(pasted.isEmpty)
                 }.padding(.horizontal, 28)
                 if let error { Text(error).font(.footnote).foregroundStyle(.red.opacity(0.85)) }
             }
@@ -32,7 +33,7 @@ struct PairingView: View {
         .sheet(isPresented: $scanning) {
             QRScanner { code in
                 scanning = false
-                if !pairing.add(code) { error = "That QR code isn't a GCX Mesh pairing code." }
+                if pairing.add(code) { onDone?() } else { error = "That QR code isn't a GCX Mesh pairing code." }
             }
             .ignoresSafeArea()
         }

@@ -12,6 +12,7 @@ input, textarea { font: inherit; font-size: 16px; color: var(--text); background
 #top > * { pointer-events: auto; }
 .logo { width: 24px; height: 24px; border-radius: 6px; }
 .brand { letter-spacing: -.01em; font-weight: 600; font-size: 15px; }
+.hosttag { margin-left: 8px; padding: 2px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; color: #ffb3f5; background: rgba(224, 85, 220, .18); border: 1px solid rgba(224, 85, 220, .45); }
 .spacer { flex: 1; }
 .today { font-variant-numeric: tabular-nums; font-weight: 300; font-size: 15px; }
 .conn { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 8px var(--warn); }

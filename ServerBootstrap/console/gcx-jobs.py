@@ -87,6 +87,9 @@ if up:
 up = unit_up("gcx-owner-watch")
 if up:
     print(f"run|Mac hand-over guard|{up}|svc:gcx-owner-watch:user")
+up = unit_up("gcx-mesh")
+if up:
+    print(f"run|GCX Mesh for iPhone (server copy)|{up}|svc:gcx-mesh:user")
 print("run|Health checks|watchdog " + ago(f"{H}/.gcx-watchdog.json") + " · heartbeat " + ago(f"{H}/.gcx-heartbeat.json")
       + " · self-heal every 2m · git sync " + ago(f"{H}/.gcx-autosync.heartbeat") + "|health")
 

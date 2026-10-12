@@ -50,6 +50,7 @@
       "main.js",
       "preload.js",
       "collector.js",
+      "core.js",
       "phone-server.js",
       "schedules.js",
       "gasConstants.js",

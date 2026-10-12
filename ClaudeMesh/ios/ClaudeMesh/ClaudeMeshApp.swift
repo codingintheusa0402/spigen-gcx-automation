@@ -1,7 +1,8 @@
 import SwiftUI
 
-// GCX Mesh for iPhone — a native shell around the live mesh your Mac serves
-// (GCX Mesh → 📱). The app remembers the paired address(es) and opens straight into the mesh.
+// GCX Mesh for iPhone — a native shell around the live mesh served by GCX Mesh on your Mac (📱 button)
+// or by the server program on gcx-server. The app remembers one pairing link per host and opens the
+// first that answers: the Mac when it's up, the server when the Mac is off.
 @main
 struct ClaudeMeshApp: App {
     @StateObject private var pairing = Pairing()
@@ -16,22 +17,28 @@ struct ClaudeMeshApp: App {
     }
 }
 
-/// Saved pairing links, e.g. http://100.x.y.z:47320/?t=KEY (Tailscale) and http://192.168.x.y:47320/?t=KEY (Wi-Fi).
+/// Saved pairing links in the order they are tried, e.g. the Mac over Tailscale, the Mac on Wi-Fi, then the server.
+/// Each host keeps its own key (the Mac app and the server program each issue one).
 final class Pairing: ObservableObject {
     @Published var urls: [URL] { didSet { UserDefaults.standard.set(urls.map(\.absoluteString), forKey: "pairing.urls") } }
     init() { urls = (UserDefaults.standard.stringArray(forKey: "pairing.urls") ?? []).compactMap(URL.init(string:)) }
 
-    /// Accepts the link from the Mac's QR code / copy. Returns false if it isn't a GCX Mesh pairing link.
+    /// Accepts a link from the Mac's QR code / copy or the server's `--pair` output. Returns false if it isn't a
+    /// GCX Mesh pairing link. A link for a host already paired replaces that host's old link; other hosts stay.
     @discardableResult func add(_ text: String) -> Bool {
         guard let u = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)),
-              let scheme = u.scheme, scheme.hasPrefix("http"), u.host != nil, u.port == 47320,
+              let scheme = u.scheme, scheme.hasPrefix("http"), let host = u.host, u.port == 47320,
               let q = URLComponents(url: u, resolvingAgainstBaseURL: false)?.queryItems,
               q.contains(where: { $0.name == "t" && !($0.value ?? "").isEmpty }) else { return false }
-        // a new key replaces old links that carried a different key
-        let key = q.first { $0.name == "t" }?.value
-        urls.removeAll { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "t" }?.value != key || $0.host == u.host }
-        urls.insert(u, at: 0)
+        urls.removeAll { $0.host == host }
+        urls.append(u)
         return true
     }
+    func remove(_ u: URL) { urls.removeAll { $0 == u } }
+    /// Put this host first so it is tried before the others.
+    func prefer(_ u: URL) { guard let i = urls.firstIndex(of: u) else { return }; urls.remove(at: i); urls.insert(u, at: 0) }
     func reset() { urls = [] }
+
+    /// Short label for a host, for menus: "Mac · 100.112.43.88" / "Server · 100.121.202.126".
+    static func label(_ u: URL) -> String { (u.host ?? "?") }
 }

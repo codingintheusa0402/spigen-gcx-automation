@@ -2,7 +2,7 @@
 # GCX server self-heal (Ubuntu side). Every 2 min from cron (# mesh:selfheal) AND from the Windows task GCX-SelfHeal
 # (which also starts Ubuntu itself if it stopped). Restarts whatever is down and tells the GCX Server room once:
 #   system services cron / tailscaled / gcx-relogin · user services mock-trader (unless the Mac owns it) /
-#   gcx-owner-watch · tmux session gcx: Claude gcx-main, Zendesk Chrome (CDP 9222), ticket monitor (unless Mac owns it)
+#   gcx-owner-watch · gcx-mesh (iPhone GCX Mesh, server copy) · tmux session gcx: Claude gcx-main, Zendesk Chrome (CDP 9222), ticket monitor (unless Mac owns it)
 # A thing restarted 3× within 30 min is left alone (crash loop) and reported instead.
 exec 9>/tmp/gcx-selfheal.lock; flock -n 9 || exit 0
 export PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin DISPLAY=:0 WAYLAND_DISPLAY=wayland-0
@@ -32,7 +32,7 @@ for s in cron tailscaled gcx-relogin; do
   systemctl list-unit-files "$s.service" >/dev/null 2>&1 || continue
   systemctl is-active -q $s || heal "$s" "sudo systemctl restart $s"
 done
-for s in gcx-owner-watch; do
+for s in gcx-owner-watch gcx-mesh; do
   [ -f ~/.config/systemd/user/$s.service ] && ! systemctl --user is-active -q $s && heal "$s" "systemctl --user restart $s"
 done
 if [ -f ~/.config/systemd/user/mock-trader.service ] && [ ! -f ~/.gcx-owner/aitrader.stopped ] && \

@@ -21,6 +21,11 @@ function offline(msg) { const o = $('#offline'); if (msg) { o.innerHTML = msg; o
 const realDPR = window.devicePixelRatio || 1;
 Object.defineProperty(window, 'devicePixelRatio', { get: () => Math.min(2, realDPR) });
 let snap = { sessions: [], models: [], agents: [] }, selected = null, openTab = 'mesh';
+// which machine serves this page: the Mac app, or the server program (server/mesh-server.js) — wording follows it
+const onServer = () => !!(snap.host && snap.host.kind === 'server');
+const HOSTN = () => onServer() ? 'the server' : 'your Mac', INAPP = () => onServer() ? 'tmux' : 'in-app', TERMN = () => onServer() ? 'shell' : 'Terminal.app';
+// the native iPhone shell listens here: 'offline' → it tries the next paired host (Mac ↔ server)
+const native = msg => { try { webkit.messageHandlers.mesh.postMessage(msg); } catch { } };
 const viz = new Mesh($('#mesh'), { onSelect: sid => sid && tapSession(sid), onHub: () => openBroadcast() });
 viz.wheelZoom = e => e.preventDefault();
 if (innerWidth < 700) { viz.cam.ts = viz.cam.s = .66; viz.clampCam(); viz.cam.tx = viz.cam.ttx; viz.cam.ty = viz.cam.tty; }
@@ -82,21 +87,23 @@ function resetScroll() { const go = () => { scrollTo(0, 0); document.documentEle
   go(); setTimeout(go, 120); setTimeout(go, 400); }
 
 // ---------- live data ----------
-let es = null, lastMsg = 0;
+let es = null, lastMsg = 0, offlineTold = false;
 function connect() {
   if (!TOKEN) return offline('Not paired yet.<br>On your Mac open <b>GCX Mesh → 📱</b> and scan the QR code.');
   es && es.close();
   es = new EventSource('/api/events?t=' + encodeURIComponent(TOKEN));
   es.addEventListener('telemetry', ev => {
     lastMsg = Date.now(); offline(); $('#conn').classList.add('on');
-    snap = JSON.parse(ev.data); viz.update(snap); render();
+    snap = JSON.parse(ev.data); viz.update(snap); render(); offlineTold = false;
+    const tag = $('#hostTag'); tag.textContent = onServer() ? 'SERVER' : 'MAC'; tag.classList.toggle('hidden', !onServer());
   });
   es.onerror = () => { $('#conn').classList.remove('on'); };
 }
 setInterval(() => {
   if (Date.now() - lastMsg > 8000) {
     $('#conn').classList.remove('on');
-    if (lastMsg) offline('Can’t reach your Mac.<br><span style="font-size:13px">Is GCX Mesh open and awake, with phone access on? Away from home, turn on Tailscale on this phone.</span>');
+    if (lastMsg) offline(`Can’t reach ${HOSTN()}.<br><span style="font-size:13px">${onServer() ? 'Is the server on and on Tailscale?' : 'Is GCX Mesh open and awake, with phone access on?'} Away from home, turn on Tailscale on this phone.</span>`);
+    if (lastMsg && !offlineTold && Date.now() - lastMsg > 20000) { offlineTold = true; native('offline'); }
     if (!es || es.readyState === 2) connect();
   }
 }, 3000);
@@ -144,7 +151,7 @@ function renderSessions(open) {
   const S = snap.sessions, A = snap.agents || [];
   const html = `<div class="sh-h"><h2>Sessions · ${S.length}</h2><button class="x">×</button></div>` +
     (S.map(s => `<div class="item" data-sid="${s.sid}"><span class="dot ${s.health}"></span><div class="t"><div class="n">${esc(s.name)}</div>
-      <div class="m">${esc((s.model || '—').replace('claude-', ''))} · ${fmt$(s.todayUsd)} · ${s.health === 'working' ? Math.round(s.tps) + ' tok/s' : s.health}${s.owner ? ' · in-app' : ''}</div></div>›</div>`).join('') || '<div class="m" style="padding:14px 4px;color:var(--dim)">No Claude Code sessions running.</div>') +
+      <div class="m">${esc((s.model || '—').replace('claude-', ''))} · ${fmt$(s.todayUsd)} · ${s.health === 'working' ? Math.round(s.tps) + ' tok/s' : s.health}${s.owner ? ' · ' + INAPP() : ''}</div></div>›</div>`).join('') || '<div class="m" style="padding:14px 4px;color:var(--dim)">No Claude Code sessions running.</div>') +
     (A.length ? `<h3>Agents</h3>` + A.map(a => `<div class="item"><span class="dot ${a.state === 'running' ? 'working' : 'waiting'}"></span><div class="t"><div class="n">${esc(a.name || a.id)}</div><div class="m">${esc(a.state || '')}</div></div></div>`).join('') : '');
   if (open || sheetKind === 'sessions') { sheet('sessions', html); document.querySelectorAll('#sheetBody .item[data-sid]').forEach(el => el.onclick = () => openSession(el.dataset.sid)); }
 }
@@ -157,7 +164,7 @@ function renderSession(first) {
   const s = cur();
   if (!s) { if (first) sheet('session', `<div class="sh-h"><h2>Session ended</h2><button class="x">×</button></div>`); return; }
   const can = !!(s.owner || (s.tty && s.kind !== 'bg')), col = FAMILY_COLOR[s.family] || '#9fb4d8', pct = s.ctxMax ? s.ctx / s.ctxMax * 100 : 0;
-  const stats = `<div class="meta"><span style="color:${col}">${esc(s.model || 'no model yet')}</span><span style="color:${HEALTH_COLOR[s.health]}">${esc(s.health)}</span><span>${s.owner ? 'in-app' : s.kind === 'bg' ? 'background' : 'Terminal.app'}</span><span>${esc((s.cwd || '').replace(/^\/Users\/[^/]+/, '~'))}</span></div>
+  const stats = `<div class="meta"><span style="color:${col}">${esc(s.model || 'no model yet')}</span><span style="color:${HEALTH_COLOR[s.health]}">${esc(s.health)}</span><span>${s.owner ? INAPP() : s.kind === 'bg' ? 'background' : TERMN()}</span><span>${esc((s.cwd || '').replace(/^\/Users\/[^/]+/, '~'))}</span></div>
     <div class="kpis"><div class="kpi"><div class="l">Speed</div><div class="v">${Math.round(s.tps)}<small> t/s</small></div></div>
       <div class="kpi"><div class="l">Today</div><div class="v">${fmt$(s.todayUsd)}</div></div><div class="kpi"><div class="l">Session</div><div class="v">${fmt$(s.totalUsd)}</div></div></div>
     <div class="meta" style="justify-content:space-between;margin:0"><span>Context</span><span>${Math.round(pct)}%</span></div>
@@ -180,7 +187,7 @@ function renderSession(first) {
   }
   $('#sRen').onclick = async () => { const n = prompt('Rename session', s.name); if (n && n.trim()) { const r = await api('/api/rename', { sid: s.sid, name: n.trim() }); toast(r.ok === false ? 'Rename failed' : 'Renamed'); } };
   $('#sAg').onclick = async () => {
-    if (!confirm(`Continue "${s.name}" as a background agent on your Mac?` + (s.owner ? '\n(its in-app terminal will close)' : s.tty ? '\n(a copy starts; the Terminal one keeps running)' : ''))) return;
+    if (!confirm(`Continue "${s.name}" as a background agent on ${HOSTN()}?` + (s.owner && !onServer() ? '\n(its in-app terminal will close)' : (s.tty || s.owner) ? '\n(a copy starts; the running one keeps going)' : ''))) return;
     const task = prompt('Task for the agent (optional)', '') || '';
     toast('Starting agent…'); const r = await api('/api/convert', { sid: s.sid, task }); toast(r.ok ? 'Agent started' : 'Convert failed');
   };
@@ -227,9 +234,9 @@ async function openHistory() {
     document.querySelectorAll('#hl .item').forEach(el => el.onclick = async () => {
       const sid = el.dataset.h;
       if (live.has(sid)) return openSession(sid);
-      if (!confirm(`Resume "${title(hist.find(h => h.sid === sid))}" on your Mac?`)) return;
-      const r = await api('/api/resume', { sid }); if (r.ok === false) return toast('Mac didn’t respond');
-      toast('Resuming on your Mac…');
+      if (!confirm(`Resume "${title(hist.find(h => h.sid === sid))}" on ${HOSTN()}?`)) return;
+      const r = await api('/api/resume', { sid }); if (r.ok === false) return toast(`${HOSTN()} didn’t respond`);
+      toast(`Resuming on ${HOSTN()}…`);
       const t0 = Date.now(), iv = setInterval(() => { if (snap.sessions.some(s => s.sid === sid)) { clearInterval(iv); openSession(sid); } else if (Date.now() - t0 > 25000) clearInterval(iv); }, 700);
     });
   };
@@ -366,7 +373,7 @@ function renderSplit(force) {
   const on = $('#switch .chip.on'); if (on) on.scrollIntoView({ inline: 'center', block: 'nearest' });
 }
 const paneStats = s => { const pct = s.ctxMax ? s.ctx / s.ctxMax * 100 : 0;
-  return `<div class="meta"><span style="color:${FAMILY_COLOR[s.family] || '#9fb4d8'}">${esc((s.model || '—').replace('claude-', ''))}</span><span>${s.kind === 'bg' ? 'background' : 'Terminal.app'}</span><span>context ${Math.round(pct)}%</span><span>${fmt$(s.totalUsd)} session</span></div>`; };
+  return `<div class="meta"><span style="color:${FAMILY_COLOR[s.family] || '#9fb4d8'}">${esc((s.model || '—').replace('claude-', ''))}</span><span>${s.kind === 'bg' ? 'background' : TERMN()}</span><span>context ${Math.round(pct)}%</span><span>${fmt$(s.totalUsd)} session</span></div>`; };
 const paneLog = s => `<div class="log">${s.log.slice(-8).reverse().map(l => `<div class="${l.kind}">${l.kind === 'tool' ? '⚙ ' : l.kind === 'you' ? '› ' : ''}${esc(l.text)}</div>`).join('') || '<div>—</div>'}</div>`;
 
 // sparkline as an SVG path (cheap to redraw every telemetry tick)
@@ -396,7 +403,7 @@ function renderGrid() {
     const last = [...s.log].reverse().find(l => l.kind === 'claude' || l.kind === 'you' || l.kind === 'tool');
     c.className = 'gcard ' + s.health;
     c.innerHTML = `<div class="gh"><span class="dot ${s.health}"></span><span class="gn">${esc(s.name)}</span></div>
-      <div class="gm"><span style="color:${col}">${esc((s.model || '—').replace('claude-', '').replace(/-\d.*$/, ''))}</span><span>${s.owner ? 'in-app' : s.kind === 'bg' ? 'bg' : 'terminal'}</span>${s.serverUses ? '<span>⇄ server</span>' : ''}</div>
+      <div class="gm"><span style="color:${col}">${esc((s.model || '—').replace('claude-', '').replace(/-\d.*$/, ''))}</span><span>${s.owner ? INAPP() : s.kind === 'bg' ? 'bg' : 'terminal'}</span>${s.serverUses ? '<span>⇄ server</span>' : ''}</div>
       <div class="gv"><b>${work ? Math.round(s.tps) : fmt$(s.todayUsd)}</b><small>${work ? ' tok/s' : ' today'}</small><span class="gs">${work ? fmt$(s.todayUsd) : ago(s.sinceWrite) + ' ago'}</span></div>
       <svg class="gsp" viewBox="0 0 100 26" preserveAspectRatio="none"><path d="${sparkPath(s.spark || [0, 0], s.sparkPeak, 100, 26)}" stroke="${col}" /></svg>
       <div class="gbar"><div style="width:${pct}%;background:${pct > 85 ? 'var(--err)' : pct > 60 ? 'var(--warn)' : col}"></div></div>

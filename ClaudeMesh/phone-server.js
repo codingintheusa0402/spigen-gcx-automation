@@ -13,7 +13,9 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 
 function createPhoneServer(ctx) {
   // ctx: { root, userData, getSnap, getHistory, sendToSession, interruptSession, resumeOnMac, rename, convert,
-  //        commandsFor, ptys, ptyBus }
+  //        commandsFor, ptys, ptyBus, termOpen?, termClose?, bind? }
+  // Mac: ptys are node-pty terminals. Server (server/mesh-server.js): ptys are tmux panes, termOpen/termClose
+  // start and stop streaming a pane while a phone is watching it; bind limits the listening address.
   const cfgFile = path.join(ctx.userData, 'phone.json');
   let cfg = { enabled: false, token: '' };
   try { cfg = { ...cfg, ...JSON.parse(fs.readFileSync(cfgFile, 'utf8')) }; } catch { }
@@ -57,7 +59,7 @@ function createPhoneServer(ctx) {
         icons: [{ src: '/apple-touch-icon.png', sizes: '1024x1024', type: 'image/png' }] }));
     }
     if (!p.startsWith('/api/')) { res.writeHead(404); return res.end(); }
-    if (!okToken(tok)) return json(res, 401, { error: 'not paired — scan the QR code in GCX Mesh on your Mac' });
+    if (!okToken(tok)) return json(res, 401, { error: 'not paired — scan the QR code in GCX Mesh on your Mac (or pair with the server link)' });
 
     if (p === '/api/events' && req.method === 'GET') {
       sse(res); const c = { res }; clients.add(c);
@@ -69,10 +71,12 @@ function createPhoneServer(ctx) {
     if (p === '/api/commands') return json(res, 200, await ctx.commandsFor(u.searchParams.get('cwd') || ''));
     if (p.startsWith('/api/term/') && req.method === 'GET') {           // live terminal of an in-app session
       const id = p.slice(10), pt = ctx.ptys.get(id); if (!pt) return json(res, 404, { error: 'no such terminal' });
-      sse(res); send(res, 'init', { cols: pt.proc.cols, rows: pt.proc.rows, backlog: pt.buf || '' });
+      sse(res);
+      if (ctx.termOpen) await ctx.termOpen(id);                           // server: start streaming the tmux pane
+      send(res, 'init', { cols: pt.proc.cols, rows: pt.proc.rows, backlog: pt.buf || '' });
       const on = (pid, d) => { if (pid === id) send(res, 'data', d); }, off = pid => { if (pid === id) send(res, 'exit', {}); };
       ctx.ptyBus.on('data', on); ctx.ptyBus.on('exit', off);
-      req.on('close', () => { ctx.ptyBus.off('data', on); ctx.ptyBus.off('exit', off); }); return;
+      req.on('close', () => { ctx.ptyBus.off('data', on); ctx.ptyBus.off('exit', off); if (ctx.termClose) ctx.termClose(id); }); return;
     }
     if (req.method !== 'POST') return json(res, 405, {});
     const b = await body(req);
@@ -92,7 +96,7 @@ function createPhoneServer(ctx) {
     if (server) return;
     server = http.createServer((req, res) => handle(req, res).catch(e => { try { json(res, 500, { error: String(e.message || e) }); } catch { } }));
     server.on('error', e => { console.error('phone server', e.message); server = null; });
-    server.listen(PORT, '0.0.0.0');
+    server.listen(PORT, ctx.bind || '0.0.0.0');
   }
   function stop() { if (!server) return; for (const c of clients) try { c.res.end(); } catch { } clients.clear(); server.close(); server = null; }
 

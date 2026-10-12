@@ -1,75 +1,93 @@
 import SwiftUI
 import WebKit
 
-/// Full-screen live mesh. Tries each paired address in turn (e.g. Tailscale, then Wi-Fi);
-/// if none answers, shows a native retry / re-pair screen.
+/// Full-screen live mesh. Tries each paired host in turn (Mac over Tailscale, Mac on Wi-Fi, server …);
+/// if none answers, shows a native retry / re-pair screen. While a page is open and reports that its
+/// host stopped answering (window.webkit → 'offline'), the next host is tried automatically.
 struct MeshScreen: View {
     @EnvironmentObject var pairing: Pairing
     @State private var failed = false
     @State private var attempt = 0
+    @State private var startAt = 0            // which paired host the next load starts from
     @State private var showMenu = false
+    @State private var showAdd = false
     @Environment(\.scenePhase) private var phase
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            MeshWebView(urls: pairing.urls, attempt: attempt, failed: $failed).ignoresSafeArea()
+            MeshWebView(urls: pairing.urls, attempt: attempt, startAt: startAt, failed: $failed).ignoresSafeArea()
             if failed {
                 VStack(spacing: 14) {
                     Image(systemName: "wifi.exclamationmark").font(.system(size: 40)).foregroundStyle(.white.opacity(0.7))
-                    Text("Can’t reach your Mac").font(.headline).foregroundStyle(.white)
-                    Text("GCX Mesh must be open on the Mac with phone access on.\nAway from home, turn on Tailscale on this iPhone.")
+                    Text(pairing.urls.count > 1 ? "Can’t reach your Mac or the server" : "Can’t reach your Mac").font(.headline).foregroundStyle(.white)
+                    Text("GCX Mesh must be open on the Mac with phone access on, or the server must be running.\nAway from home, turn on Tailscale on this iPhone.")
                         .font(.footnote).multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.65))
-                    HStack { Button("Retry") { failed = false; attempt += 1 }.buttonStyle(.borderedProminent)
-                             Button("Re-pair") { pairing.reset() }.buttonStyle(.bordered) }
+                    HStack { Button("Retry") { reload(from: 0) }.buttonStyle(.borderedProminent)
+                             Button("Hosts…") { showMenu = true }.buttonStyle(.bordered) }
                 }.padding(30).background(RoundedRectangle(cornerRadius: 16).fill(Color(white: 0.06)).overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.14))))
             }
         }
-        .onChange(of: phase) { _, p in if p == .active && failed { failed = false; attempt += 1 } }
+        .onChange(of: phase) { _, p in if p == .active && failed { reload(from: 0) } }
         // long-press with three fingers anywhere → connection menu
         .overlay(ThreeFingerHold { showMenu = true }.allowsHitTesting(true).opacity(0.001))
         .confirmationDialog("GCX Mesh", isPresented: $showMenu) {
-            Button("Reload") { attempt += 1 }
-            Button("Re-pair with Mac", role: .destructive) { pairing.reset() }
+            Button("Reload") { reload(from: 0) }
+            ForEach(Array(pairing.urls.enumerated()), id: \.offset) { i, u in
+                Button("Connect to \(Pairing.label(u))") { reload(from: i) }
+            }
+            Button("Add a host (pairing link)") { showAdd = true }
+            Button("Forget all hosts", role: .destructive) { pairing.reset() }
         }
+        .sheet(isPresented: $showAdd) { PairingView(onDone: { showAdd = false; reload(from: pairing.urls.count - 1) }) }
     }
+    private func reload(from i: Int) { failed = false; startAt = max(0, min(i, pairing.urls.count - 1)); attempt += 1 }
 }
 
 struct MeshWebView: UIViewRepresentable {
-    let urls: [URL]; let attempt: Int
+    let urls: [URL]; let attempt: Int; let startAt: Int
     @Binding var failed: Bool
 
     func makeCoordinator() -> Coord { Coord(self) }
     func makeUIView(context: Context) -> WKWebView {
         let cfg = WKWebViewConfiguration()
         cfg.allowsInlineMediaPlayback = true
-        cfg.websiteDataStore = .default()                       // keeps the pairing key + saved orbits
+        cfg.websiteDataStore = .default()                       // keeps the pairing key + saved orbits (per host)
+        cfg.userContentController.add(context.coordinator, name: "mesh")
         let wv = WKWebView(frame: .zero, configuration: cfg)
         wv.isOpaque = false; wv.backgroundColor = UIColor.black
         wv.scrollView.bounces = false; wv.scrollView.contentInsetAdjustmentBehavior = .never
         wv.allowsBackForwardNavigationGestures = false
         wv.navigationDelegate = context.coordinator; wv.uiDelegate = context.coordinator
-        context.coordinator.web = wv; context.coordinator.load(index: 0)
+        context.coordinator.web = wv; context.coordinator.load(index: startAt)
         return wv
     }
     func updateUIView(_ wv: WKWebView, context: Context) {
-        if context.coordinator.lastAttempt != attempt { context.coordinator.lastAttempt = attempt; context.coordinator.load(index: 0) }
+        context.coordinator.parent = self
+        if context.coordinator.lastAttempt != attempt { context.coordinator.lastAttempt = attempt; context.coordinator.tried = 0; context.coordinator.load(index: startAt) }
     }
 
-    final class Coord: NSObject, WKNavigationDelegate, WKUIDelegate {
-        var parent: MeshWebView; weak var web: WKWebView?; var index = 0; var lastAttempt = 0; var lastError = ""
+    final class Coord: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+        var parent: MeshWebView; weak var web: WKWebView?; var index = 0; var tried = 0; var lastAttempt = 0; var lastError = ""
         init(_ p: MeshWebView) { parent = p; lastAttempt = p.attempt }
+        /// Load host `i`; after every host has been tried once without an answer, show the failed screen.
         func load(index i: Int) {
-            index = i
-            guard i < parent.urls.count else { DispatchQueue.main.async { self.parent.failed = true }; return }
-            var r = URLRequest(url: parent.urls[i]); r.timeoutInterval = 12
-            NSLog("GCXMESH load %@", parent.urls[i].absoluteString.replacingOccurrences(of: #"t=[^&]+"#, with: "t=…", options: .regularExpression))
+            let n = parent.urls.count
+            guard n > 0, tried < n else { DispatchQueue.main.async { self.parent.failed = true }; return }
+            index = i % n; tried += 1
+            var r = URLRequest(url: parent.urls[index]); r.timeoutInterval = 12
+            NSLog("GCXMESH load %@", parent.urls[index].absoluteString.replacingOccurrences(of: #"t=[^&]+"#, with: "t=…", options: .regularExpression))
             web?.load(r)
         }
         // address didn't answer → try the next paired one
         func webView(_ w: WKWebView, didFailProvisionalNavigation n: WKNavigation!, withError e: Error) { NSLog("GCXMESH fail-prov %@", "\(e)"); lastError = e.localizedDescription; load(index: index + 1) }
         func webView(_ w: WKWebView, didFail n: WKNavigation!, withError e: Error) { NSLog("GCXMESH fail %@", "\(e)"); lastError = e.localizedDescription; load(index: index + 1) }
-        func webView(_ w: WKWebView, didFinish n: WKNavigation!) { DispatchQueue.main.async { self.parent.failed = false } }
+        func webView(_ w: WKWebView, didFinish n: WKNavigation!) { DispatchQueue.main.async { self.parent.failed = false }; tried = 0 }
+        // the page says its host stopped answering (20 s without data) → move on to the next host
+        func userContentController(_ u: WKUserContentController, didReceive m: WKScriptMessage) {
+            guard m.name == "mesh", let s = m.body as? String, s == "offline", parent.urls.count > 1 else { return }
+            NSLog("GCXMESH host offline → next"); tried = 0; load(index: index + 1)
+        }
 
         // the page's alert / confirm / prompt dialogs, shown natively
         private var top: UIViewController? { UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.rootViewController.flatMap { var v = $0; while let p = v.presentedViewController { v = p }; return v } }
