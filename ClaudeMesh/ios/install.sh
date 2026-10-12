@@ -3,7 +3,7 @@
 # Needs: Apple ID signed in at Xcode → Settings → Accounts; iPhone connected (cable or same Wi-Fi), unlocked.
 set -e
 cd "$(dirname "$0")"
-DEV=$(xcrun devicectl list devices 2>/dev/null | awk '/physical/ && /(connected|available)/ {for(i=1;i<=NF;i++) if ($i ~ /^[0-9A-F]{8}-[0-9A-F]{16}$/) print $i}' | head -1)
+DEV=$(xcrun devicectl list devices 2>/dev/null | awk '/physical/ && / (connected|available) / {for(i=1;i<=NF;i++) if ($i ~ /^[0-9A-F]{8}-[0-9A-F]{16}$/) print $i}' | head -1)
 [ -z "$DEV" ] && { echo "Connect the iPhone (cable or same Wi-Fi) and unlock it."; exit 1; }
 xcodegen generate >/dev/null
 xcodebuild -project ClaudeMesh.xcodeproj -scheme ClaudeMesh -configuration Release -derivedDataPath build \

@@ -57,6 +57,7 @@
       "renderer/**",
       "phone/**",
       "build/icon.png",
+      "build/icon-ios.png",
       "node_modules/**",
       "package.json"
     ],

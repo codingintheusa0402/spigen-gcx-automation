@@ -28,7 +28,7 @@ function createPhoneServer(ctx) {
   // static files: phone/ app + the shared renderer engine + xterm
   const STATIC = {
     '/': 'phone/index.html', '/phone.js': 'phone/phone.js', '/phone.css': 'phone/phone.css', '/icon.png': 'renderer/icon.png',
-    '/apple-touch-icon.png': 'build/icon.png',
+    '/apple-touch-icon.png': 'build/icon-ios.png',
     '/mesh.js': 'renderer/mesh.js', '/mother.js': 'renderer/mother.js', '/bubbles.js': 'renderer/bubbles.js', '/organism.js': 'renderer/organism.js', '/pixel.js': 'renderer/pixel.js', '/md.js': 'renderer/md.js',
     '/xterm.js': 'node_modules/@xterm/xterm/lib/xterm.js', '/xterm.css': 'node_modules/@xterm/xterm/css/xterm.css', '/addon-fit.js': 'node_modules/@xterm/addon-fit/lib/addon-fit.js',
   };

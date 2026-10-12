@@ -12,7 +12,7 @@ exp=$(security cms -D -i "$APP/embedded.mobileprovision" 2>/dev/null | plutil -e
 left=$(( ( $(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$exp" +%s 2>/dev/null || echo 0) - $(date +%s) ) / 3600 ))
 echo "$(date '+%F %T') signature expires $exp (${left}h left)" >> "$LOG"
 [ "$left" -gt 72 ] && [ ! -f "$FORCE" ] && exit 0
-rm -f "$FORCE"
+forced=$([ -f "$FORCE" ] && echo 1); rm -f "$FORCE"
 # Xcode reuses a still-valid profile, so drop the cached GCX Mesh profile to force a fresh 7-day one
 for f in "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/"*.mobileprovision; do
   [ -f "$f" ] || continue
@@ -23,6 +23,6 @@ if ./install.sh >> "$LOG" 2>&1; then
   new=$(security cms -D -i "$APP/embedded.mobileprovision" | plutil -extract ExpirationDate raw -o - -)
   echo "$(date '+%F %T') renewed → expires $new" >> "$LOG"; note "Renewed on your iPhone — good until ${new%%T*}"
 else
-  echo "$(date '+%F %T') renew FAILED (iPhone not reachable?)" >> "$LOG"
+  echo "$(date '+%F %T') renew FAILED (iPhone not reachable?)" >> "$LOG"; [ -n "$forced" ] && touch "$FORCE"   # retry next run
   note "Can't reach your iPhone to renew (expires in ${left}h). Connect it by cable or same Wi-Fi and unlock it."
 fi
