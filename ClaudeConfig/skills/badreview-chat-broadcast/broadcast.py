@@ -31,62 +31,24 @@ report.py scripts take:
 """
 import argparse, importlib.util, json, os, sys, datetime, urllib.request, urllib.error, time
 
-KEY = "AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI"
+# All secrets (key, test room, and the full room list incl. tokens) live in the
+# gitignored ~/.config/gcx_webhooks.json — this file is tracked in the (public) GCX
+# repo, so no token may be hardcoded here (2026-10-12, see memory
+# feedback_secrets_and_skills_in_git). Source of truth for room names/ids/tokens is
+# still memory gcx_team_gchat_webhooks.md; keep that and this config in sync.
+_CFG = json.load(open(os.path.expanduser("~/.config/gcx_webhooks.json")))
+
+KEY = _CFG["badreview_broadcast_key"]
 BASE = "https://chat.googleapis.com/v1/spaces/{sid}/messages?key=" + KEY + "&token={tok}"
 
-TEST_ROOM = {"name": "TEST (실장님&GCX test)", "sid": "AAQAc9NQmJQ",
-             "token": "T_rTrPKTYq6biglb8kRL3GOVfQg3AAOH-JPKELutbAY"}
+TEST_ROOM = _CFG["badreview_test_room"]
 
 # Broadcast targets — the rooms the user enumerated for "share the bad review scraped data".
-# (Source of truth: memory gcx_team_gchat_webhooks.md. Keep in sync.)
 # `token` = default webhook (used by the Pixel 11 card, and by Z8/iPhone18 where no override).
 # `glxz8` = OPTIONAL per-room override token used for BOTH the Galaxy Z8 card AND (per
 # explicit user instruction, 2026-09-21) the iPhone 18 card — same room, one separate
 # incoming webhook shared by both products rather than a third dedicated one.
-ROOMS = [
- {"name": "GCX전략 x SDA (아마존직판)", "sid": "AAAAe96DDIs",
-  "token": "fqRQJsNX1O8LDUyjmFsKdBJo5VCPXuFA2KX2OfAuLXk",
-  "glxz8": "k5bXiLIJgrjaLdjzyQR1ae0QhNjYble8eLgDGnxnFUc"},
- {"name": "GCX전략 x ADS1", "sid": "AAAAFjWzr40",
-  "token": "Xv5J3ipKs_mIOem7OMHzhhmPwHcTrC-wDgYlMSZHAzs",
-  "glxz8": "O6gHRrVCB3-X31BJgpUTncKObq2tCLEdk4cMXmwLiR0"},
- {"name": "GCX전략 x ADS2", "sid": "AAAATOmW7HU",
-  "token": "GsprARTa_2ga2mkdz8lEFe2K4DTTRl7zfpBW6qEvlOU",
-  "glxz8": "sgex588AiCc0FqI_XOEEHK-lOsWhRlw8QdVKkcDsM9g"},
- {"name": "GCX전략 x ADS3", "sid": "AAAAKwBoZPU",
-  "token": "zW6cEhLwMozY2v3DvH9nvk4eFW8kSpwlx3MFLYbFFBE",
-  "glxz8": "IdYKJJunaaQKTzqFBU2BJaVAASk5MgIdLpzTyd0HC_0"},
- {"name": "GCX전략 x ADS5 (CP)", "sid": "AAAACMOrahk",
-  "token": "sV1IIpqIWGQMZIItCEnHyDObAPAjsEZUvah2NKY4iC8",
-  "glxz8": "uG4lD7n5oYOn3smRQo7zGGENRPgpeHSEMr-xU2RXPac"},
- {"name": "GCX전략 x JP Sales", "sid": "AAAA9VYH3s4",
-  "token": "HLse4WgYcISsdtHF3zNYIi2I5BtEnR6zuGamlCF0cQY",
-  "glxz8": "MzwxfPqlWxKLLI1t-R782YnF5RZco8r6m-NypiUZBeo"},
- {"name": "GCX전략 x IN Sales", "sid": "AAAAhqi-tNo",
-  "token": "OwCl9xRwf3e4b9hFk6Ieu2h3RDMFv82TkfJmBcvSVvE",
-  "glxz8": "PWEne2_aAL8eyK_VKtf4bdhb2mEjFwHInQxK0Nnnm9g"},
- {"name": "GCX전략 x 모바일제품개발팀", "sid": "AAAAwixNbdc",
-  "token": "P2vgJp4v0mt1rbAJQmSROlDwmHnf5bKbNryqf_iWDYc",
-  "glxz8": "ujAd5HUFylFysq0zGnTcYmqtb7P9GTLUKdHTUk5YHO8"},
- {"name": "실장님 & GCX", "sid": "AAQAb-u6r7s",
-  "token": "AOJntA_PdElbBaGzQaCQhhr0aBvPAy1k3ImqQK0V9_E",
-  "glxz8": "pyyBw1Gh-X4djUTd2utbHUxs7pVDJu2YCuce1Evf7tk"},
- {"name": "GCX x 클리어프로텍션 개발팀", "sid": "AAAAZcIQG8k",
-  "token": "tb4sDPPPaWeP83HPMH0IUnz96T2D6azY1TAoXdiWqGg",
-  "glxz8": "0Tw7OvEG60guBwAkLnjRLs6AWm6avHQBoMrewzP6cdE"},
- {"name": "[CQ] SPIGEN 국내&해외 CS", "sid": "AAAA45iXDL0",
-  "token": "zh67JI0vK1DIeoet937rQ2byrOin9gV98FQddSSvfmY",
-  "glxz8": "Bplrki7kUVeXMMCkkpplYn4QK1g-aMR0X-0RPYgqCOs"},
- # 리더들방 — one webhook for every card (no per-product override).
- {"name": "리더들방", "sid": "AAAALqHjZHo",
-  "token": "Z8696aOLrUlGk7zUUgjNywb8PIMbmKqrKaQd5JnofT0"},
- # GCX전략 Spigen x TCK — added 2026-09-29, no per-product override (same as 리더들방).
- {"name": "GCX전략 Spigen x TCK", "sid": "AAAAlxfKOYE",
-  "token": "TtxdDkyX3Q5QGgKRWGKeedQk5R9z8IQ4mn_4m5oLhu4"},
- # 안준서 부문장 해외사업부문 — added 2026-10-12, no per-product override (same as 리더들방).
- {"name": "안준서 부문장 해외사업부문", "sid": "_vLUhqAAAAE",
-  "token": "CWZaIMDTpJFmjINKDnoUuAzWmPL2hXXEuGv_lo3vqXk"},
-]
+ROOMS = _CFG["badreview_rooms"]
 
 # product_key -> (skill folder, --*-data dest, short log label). Order here is send order.
 PRODUCTS = {
