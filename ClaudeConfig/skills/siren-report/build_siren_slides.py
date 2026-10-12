@@ -407,7 +407,19 @@ def build_overview_slide(b: DeckBuilder, data: dict):
     if p.get("asin"):
         product_links[(1, 1)] = f"https://www.amazon.de/dp/{p['asin']}"
     pairs = _sku_asin_pairs(p)
-    labels = [f"{sk} / {a}" if a else sk for sk, a in pairs]
+    # each SKU shows how many of this deck's claims + bad reviews are for it (user rule 2026-10-12)
+    import re as _re
+    cnt = {}
+    for it in data.get("claims", []):
+        k = (it.get("sku") or "")[:8]
+        if not k:
+            m = _re.match(r"\s*\[([A-Z]{3}\d{5})", it.get("detail_text", "") or "")
+            k = m.group(1) if m else ""
+        if k:
+            cnt[k] = cnt.get(k, 0) + 1
+    def _n(sk):
+        return f" ({cnt.get(sk[:8], 0)}건)" if cnt else ""
+    labels = [(f"{sk} / {a}" if a else sk) + _n(sk) for sk, a in pairs]
     # Multi-SKU line-ups (2026-10-02): one pair per line at 11pt in a 130pt column wrapped every pair
     # and pushed table 1 under table 2. Single SKU keeps the original layout; 2-6 pairs: 9pt one per
     # line; 7-12: 8pt two per line; >12: first 10 + "외 N종". Multi-SKU decks use a wider SKU column
@@ -427,7 +439,7 @@ def build_overview_slide(b: DeckBuilder, data: dict):
     if not manufacturer or manufacturer == "-":
         manufacturer = lookup_manufacturer([sk for sk, _ in pairs]) or "-"
     compact = len(labels) > 1
-    widths = [95, 140, 95, 220, 100] if compact else [130] * 5  # sums to 650
+    widths = [95, 130, 80, 255, 90] if compact else [130] * 5  # sums to 650; SKU col fits 2 'SKU/ASIN (N건)' per line
     # rendered line height ≈ 1.5 × font size (Noto Sans) + ~14pt cell padding
     body_h = max([_est_lines(v, w, 11) * 16.5 for v, w in zip(
         [p.get("device", ""), p.get("product_name", ""), p.get("defect_type", ""), manufacturer],

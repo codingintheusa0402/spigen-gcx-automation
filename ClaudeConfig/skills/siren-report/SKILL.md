@@ -95,6 +95,9 @@ reusing the original session-gated URL.
   if you renumber an existing deck with replaceAllText, re-apply these colours (replace recolours the run). **상세 내용 always
   starts with the SKU**: `[ACS08964] 일주일 만에 뒷면이 벗겨짐` — pass `sku` on every claim/review item (claim = ticket ★문의SKU,
   review = product-master SKU of its ASIN); `_with_sku()` adds the prefix (2026-10-12).
+- **SKU/ASIN cell shows per-SKU counts (user rule 2026-10-12)**: `ACS08964/B0DJ9SYLMJ (13건)` = claims + bad reviews in this deck
+  for that SKU (from each item's `sku`, else a leading `[ACS…` in detail_text); SKUs with none show `(0건)`. Multi-SKU column
+  widths are 95/130/80/255/90 so two counted pairs fit per line at 8pt.
 - **Global 리뷰 평점 value (user rule 2026-10-08)** = the star rating on the Amazon page the 제품명 cell hyperlinks to
   (`amazon.de/dp/<product.asin>`, the `#acrPopover` average next to the title), written as `4.5(DE)`. If amazon.de shows no
   rating (out of stock / not sold there / blocked), try amazon.com → amazon.co.uk → amazon.co.jp and label with that country
