@@ -15,6 +15,7 @@
 //
 // Admin / integration endpoints (separate secrets):
 //   POST /admin/pidx   ← GAS buildProductIndex_ pushes the product index (x-push-key: PIDX_PUSH_KEY)
+//   POST /ac/log       ← panel autocomplete telemetry batches (x-gcx-key); GET /ac/log?days=7[&raw=1] (x-push-key) reads them
 //   POST /prefetch     ← Zendesk webhook on ticket create / end-user update (Bearer ZD_WEBHOOK_TOKEN)
 //   GET  /health       ← no auth, no data
 //
@@ -457,6 +458,109 @@ async function handlePrefetch(request, env, ctx) {
   return json({ ok: true });
 }
 
+// ── Autocomplete telemetry (TM v3.9.1) ──────────────────────────────────────
+// The panel POSTs small batches of de-identified autocomplete events (see the
+// "Telemetry" block in GCX Reply.user.js). Stored per day / agent / tab in KV
+// (`aclog:<day>:<agentId>:<tab>`, 60-day TTL). Read back with
+//   GET /ac/log?days=7            → aggregate summary
+//   GET /ac/log?days=7&raw=1      → every event
+// (x-push-key: PIDX_PUSH_KEY). Nothing here is on the panel's lookup path.
+const ACLOG_TTL_SEC = 60 * 86400;
+const ACLOG_MAX_PER_KEY = 6000;
+const ACLOG_STR_KEYS = new Set(['e', 'k', 'lv', 'o', 'sg', 'at', 'v', 'os']);
+const ACLOG_NUM_KEYS = new Set(['t', 'src', 'sl', 'tl', 'ms', 'tt', 'ac', 'w', 'len', 'keys', 'nosug', 'ep', 'acc', 'dur', 'c', 'hist', 'macro']);
+function sanitizeAcEvent(e) {
+  if (!e || typeof e !== 'object') return null;
+  const out = {};
+  for (const k of Object.keys(e)) {
+    if (ACLOG_STR_KEYS.has(k) && typeof e[k] === 'string') out[k] = e[k].slice(0, 200);
+    else if (ACLOG_NUM_KEYS.has(k) && typeof e[k] === 'number' && isFinite(e[k])) out[k] = e[k];
+  }
+  if (!out.e || !out.t) return null;
+  return out;
+}
+async function handleAcLogWrite(request, env, ctx) {
+  if (!safeEq(request.headers.get('x-gcx-key') || '', env.GCX_KEY)) return json({ error: 'unauthorized' }, 401);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
+  const agent = String(body.agent || 'anon').replace(/[^\w-]/g, '').slice(0, 24) || 'anon';
+  const tab = String(body.tab || '0').replace(/[^\w-]/g, '').slice(0, 16) || '0';
+  const ver = String(body.ver || '').slice(0, 16);
+  const events = (Array.isArray(body.events) ? body.events : []).slice(0, 500).map(sanitizeAcEvent).filter(Boolean)
+    .map(e => Object.assign(e, { a: agent, v: e.v || ver }));
+  if (!events.length) return json({ ok: true, stored: 0 });
+  const day = new Date().toISOString().slice(0, 10);
+  const key = `aclog:${day}:${agent}:${tab}`;
+  ctx.waitUntil((async () => {
+    let existing = [];
+    try { existing = (await env.GCX_KV.get(key, 'json')) || []; } catch {}
+    if (!Array.isArray(existing)) existing = [];
+    const merged = existing.concat(events);
+    if (merged.length > ACLOG_MAX_PER_KEY) merged.splice(0, merged.length - ACLOG_MAX_PER_KEY);
+    await env.GCX_KV.put(key, JSON.stringify(merged), { expirationTtl: ACLOG_TTL_SEC });
+  })());
+  return json({ ok: true, stored: events.length });
+}
+function pct(arr, p) {
+  if (!arr.length) return null;
+  const s = arr.slice().sort((a, b) => a - b);
+  return s[Math.min(s.length - 1, Math.floor(p * s.length))];
+}
+function summarizeAcLog(events) {
+  const eps = events.filter(e => e.e === 's');
+  const msgs = events.filter(e => e.e === 'm');
+  const hbs = events.filter(e => e.e === 'h');
+  const ACCEPT = o => o === 'tab' || o === 'word';
+  const bucket = () => ({ episodes: 0, tab: 0, word: 0, esc: 0, typed: 0, ign: 0, other: 0, acceptedChars: 0, typedThroughChars: 0, ms: [] });
+  const fill = (b, e) => {
+    b.episodes++;
+    if (e.o === 'tab') b.tab++; else if (e.o === 'word' || (e.w > 0 && e.o !== 'esc')) b.word++; else if (e.o === 'esc') b.esc++; else if (e.o === 'typed') b.typed++; else if (e.o === 'ign' || e.o === 'swap') b.ign++; else b.other++;
+    b.acceptedChars += e.ac || 0; b.typedThroughChars += e.tt || 0; if (typeof e.ms === 'number') b.ms.push(e.ms);
+  };
+  const finish = b => ({ episodes: b.episodes, tab: b.tab, word: b.word, esc: b.esc, typed: b.typed, ign: b.ign, other: b.other,
+    acceptRate: b.episodes ? +((b.tab + b.word) / b.episodes).toFixed(3) : null,
+    usefulRate: b.episodes ? +((b.tab + b.word + b.typed) / b.episodes).toFixed(3) : null,
+    acceptedChars: b.acceptedChars, typedThroughChars: b.typedThroughChars,
+    msP50: pct(b.ms, 0.5), msP95: pct(b.ms, 0.95), msMax: b.ms.length ? Math.max(...b.ms) : null });
+  const group = (keyFn) => { const m = {}; for (const e of eps) { const k = keyFn(e) ?? 'na'; (m[k] = m[k] || bucket()); fill(m[k], e); } const o = {}; for (const k in m) o[k] = finish(m[k]); return o; };
+  const total = bucket(); eps.forEach(e => fill(total, e));
+  const top = (filter, n) => { const m = {}; for (const e of eps) { if (!filter(e) || !e.sg) continue; const k = e.sg; m[k] = m[k] || { sg: k, n: 0, at: [] }; m[k].n++; if (e.at && m[k].at.length < 3 && !m[k].at.includes(e.at)) m[k].at.push(e.at); } return Object.values(m).sort((a, b) => b.n - a.n).slice(0, n); };
+  const msgAgg = { messages: msgs.length, chars: 0, acceptedChars: 0, keystrokes: 0, nosug: 0, withAccept: 0 };
+  for (const m of msgs) { msgAgg.chars += m.len || 0; msgAgg.acceptedChars += m.acc || 0; msgAgg.keystrokes += m.keys || 0; msgAgg.nosug += m.nosug || 0; if (m.acc > 0) msgAgg.withAccept++; }
+  msgAgg.acceptedShare = msgAgg.chars ? +(msgAgg.acceptedChars / msgAgg.chars).toFixed(3) : null;
+  msgAgg.coverage = msgAgg.keystrokes ? +(1 - msgAgg.nosug / msgAgg.keystrokes).toFixed(3) : null;
+  const agents = {};
+  for (const h of hbs) { const a = agents[h.a] = agents[h.a] || { loads: 0 }; a.loads++; if (!a.last || h.t > a.last) { a.last = h.t; a.version = h.v; a.corpus = h.c; a.hist = h.hist; a.macro = h.macro; a.os = h.os; } }
+  return {
+    events: events.length, agentsSeen: Object.keys(agents).length,
+    overall: finish(total), byAgent: group(e => e.a), byLevel: group(e => e.lv), byKind: group(e => e.k), bySource: group(e => e.src),
+    messages: msgAgg, messagesByKind: { p: msgs.filter(m => m.k === 'p').length, n: msgs.filter(m => m.k === 'n').length },
+    topAccepted: top(e => ACCEPT(e.o) || e.o === 'typed', 15),
+    topIgnored: top(e => e.o === 'ign' || e.o === 'swap' || e.o === 'esc', 25),
+    agents,
+  };
+}
+async function handleAcLogRead(request, env, url) {
+  if (!safeEq(request.headers.get('x-push-key') || '', env.PIDX_PUSH_KEY)) return json({ error: 'unauthorized' }, 401);
+  const days = Math.min(60, Math.max(1, parseInt(url.searchParams.get('days') || '7', 10) || 7));
+  const since = Date.now() - days * 86400000;
+  const names = [];
+  let cursor;
+  do {
+    const r = await env.GCX_KV.list({ prefix: 'aclog:', cursor });
+    for (const k of r.keys) { const day = Date.parse(k.name.split(':')[1]); if (day >= since - 86400000) names.push(k.name); }
+    cursor = r.list_complete ? null : r.cursor;
+  } while (cursor);
+  const all = [];
+  for (let i = 0; i < names.length; i += 10) {
+    const chunk = await Promise.all(names.slice(i, i + 10).map(n => env.GCX_KV.get(n, 'json').catch(() => null)));
+    for (const arr of chunk) if (Array.isArray(arr)) all.push(...arr);
+  }
+  const events = all.filter(e => e && e.t >= since).sort((a, b) => a.t - b.t);
+  if (url.searchParams.get('raw') === '1') return json({ days, keys: names.length, events });
+  return json(Object.assign({ days, keys: names.length }, summarizeAcLog(events)));
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -464,6 +568,8 @@ export default {
     if (request.method === 'GET' && url.pathname === '/') return handleRead(request, env, ctx, url);
     if (request.method === 'POST' && url.pathname === '/admin/pidx') return handlePidxPush(request, env);
     if (request.method === 'POST' && url.pathname === '/prefetch') return handlePrefetch(request, env, ctx);
+    if (request.method === 'POST' && url.pathname === '/ac/log') return handleAcLogWrite(request, env, ctx);
+    if (request.method === 'GET' && url.pathname === '/ac/log') return handleAcLogRead(request, env, url);
     return json({ error: 'not found' }, 404);
   },
 };
