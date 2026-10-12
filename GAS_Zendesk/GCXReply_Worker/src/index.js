@@ -15,7 +15,8 @@
 //
 // Admin / integration endpoints (separate secrets):
 //   POST /admin/pidx   ← GAS buildProductIndex_ pushes the product index (x-push-key: PIDX_PUSH_KEY)
-//   POST /ac/log       ← panel autocomplete telemetry batches (x-gcx-key); GET /ac/log?days=7[&raw=1] (x-push-key) reads them
+//   POST /ac/log       ← panel autocomplete telemetry batches (x-gcx-key); GET /ac/log?days=7[&raw=1] (x-push-key) reads them,
+//                        DELETE /ac/log?agent=<id> (x-push-key) purges one agent, GET /ac/log/view?k=<ACLOG_VIEW_KEY> = HTML dashboard
 //   POST /prefetch     ← Zendesk webhook on ticket create / end-user update (Bearer ZD_WEBHOOK_TOKEN)
 //   GET  /health       ← no auth, no data
 //
@@ -560,6 +561,75 @@ async function handleAcLogRead(request, env, url) {
   if (url.searchParams.get('raw') === '1') return json({ days, keys: names.length, events });
   return json(Object.assign({ days, keys: names.length }, summarizeAcLog(events)));
 }
+// Shared loader for the read/view handlers.
+async function loadAcLogEvents(env, days) {
+  const since = Date.now() - days * 86400000;
+  const names = [];
+  let cursor;
+  do {
+    const r = await env.GCX_KV.list({ prefix: 'aclog:', cursor });
+    for (const k of r.keys) { const day = Date.parse(k.name.split(':')[1]); if (day >= since - 86400000) names.push(k.name); }
+    cursor = r.list_complete ? null : r.cursor;
+  } while (cursor);
+  const all = [];
+  for (let i = 0; i < names.length; i += 10) {
+    const chunk = await Promise.all(names.slice(i, i + 10).map(n => env.GCX_KV.get(n, 'json').catch(() => null)));
+    for (const arr of chunk) if (Array.isArray(arr)) all.push(...arr);
+  }
+  return { names, events: all.filter(e => e && e.t >= since).sort((a, b) => a.t - b.t) };
+}
+// Admin: DELETE /ac/log?agent=<id> (x-push-key) removes that agent's batches (test data cleanup).
+async function handleAcLogPurge(request, env, url) {
+  if (!safeEq(request.headers.get('x-push-key') || '', env.PIDX_PUSH_KEY)) return json({ error: 'unauthorized' }, 401);
+  const agent = String(url.searchParams.get('agent') || '').replace(/[^\w-]/g, '');
+  if (!agent) return json({ error: 'agent required' }, 400);
+  const names = [];
+  let cursor;
+  do {
+    const r = await env.GCX_KV.list({ prefix: 'aclog:', cursor });
+    for (const k of r.keys) if (k.name.split(':')[2] === agent) names.push(k.name);
+    cursor = r.list_complete ? null : r.cursor;
+  } while (cursor);
+  await Promise.all(names.map(n => env.GCX_KV.delete(n)));
+  return json({ ok: true, deleted: names });
+}
+// Human-readable page: GET /ac/log/view?k=<ACLOG_VIEW_KEY>&days=7 — read-only, de-identified data only.
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function renderAcLogPage(days, sum) {
+  const pctS = v => v == null ? '–' : (v * 100).toFixed(0) + '%';
+  const outcomeCols = ['episodes', 'tab', 'word', 'typed', 'esc', 'ign', 'other', 'acceptRate', 'usefulRate', 'acceptedChars', 'msP50', 'msP95'];
+  const table = (title, rows, labelMap) => {
+    const keys = Object.keys(rows);
+    if (!keys.length) return `<h3>${esc(title)}</h3><p class="muted">데이터 없음</p>`;
+    let h = `<h3>${esc(title)}</h3><table><thead><tr><th></th>${outcomeCols.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>`;
+    for (const k of keys) {
+      const r = rows[k];
+      h += `<tr><td class="lbl">${esc(labelMap ? (labelMap[k] || k) : k)}</td>` + outcomeCols.map(c => `<td>${c.endsWith('Rate') ? pctS(r[c]) : esc(r[c] == null ? '–' : r[c])}</td>`).join('') + '</tr>';
+    }
+    return h + '</tbody></table>';
+  };
+  const list = (title, items) => `<h3>${esc(title)}</h3>` + (items.length ? '<ol>' + items.map(i => `<li><span class="n">${i.n}×</span> <code>${esc(i.sg)}</code>${i.at && i.at.length ? `<div class="at">대신 입력: ${i.at.map(a => `<code>${esc(a)}</code>`).join(' · ')}</div>` : ''}</li>`).join('') + '</ol>' : '<p class="muted">데이터 없음</p>');
+  const o = sum.overall, m = sum.messages;
+  const agentsRows = Object.entries(sum.agents || {}).map(([id, a]) => `<tr><td>${esc(id)}</td><td>${esc(a.version)}</td><td>${a.loads}</td><td>${a.corpus} (내 답변 ${a.hist} / 매크로 ${a.macro})</td><td>${esc(a.os)}</td><td>${new Date(a.last).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</td></tr>`).join('');
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GCX Reply 자동완성 로그</title>
+<style>body{font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;margin:0;padding:24px;background:#f6f7fb;color:#1c1c1e}h1{font-size:20px;margin:0 0 4px}h3{margin:28px 0 8px;font-size:15px}.muted{color:#888}.cards{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}.card{background:#fff;border-radius:12px;padding:12px 16px;min-width:150px;box-shadow:0 1px 3px rgba(0,0,0,.06)}.card b{display:block;font-size:22px}.card span{color:#666;font-size:12px}table{border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);font-size:13px}th,td{padding:6px 10px;text-align:right;border-bottom:1px solid #eef}th{background:#eef0f7;font-weight:600}td.lbl,th:first-child{text-align:left}ol{padding-left:22px}li{margin:4px 0}code{background:#fff;border:1px solid #e3e5ee;border-radius:5px;padding:1px 5px;font-size:12.5px}.n{color:#5b6dc8;font-weight:600}.at{color:#777;font-size:12px;margin-left:4px}nav a{margin-right:10px}.help{background:#fff;border-radius:10px;padding:10px 14px;font-size:12.5px;color:#555;margin-top:8px}</style></head><body>
+<h1>GCX Reply 자동완성 로그</h1><div class="muted">최근 ${days}일 · 이벤트 ${sum.events}개 · 상담원 ${sum.agentsSeen}명 · ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} 기준</div>
+<nav>기간: <a href="?days=1">1일</a><a href="?days=7">7일</a><a href="?days=14">14일</a><a href="?days=30">30일</a><a href="?days=60">60일</a></nav>
+<div class="cards"><div class="card"><b>${o.episodes}</b><span>제안 표시 횟수</span></div><div class="card"><b>${pctS(o.acceptRate)}</b><span>채택률 (Tab/단어)</span></div><div class="card"><b>${pctS(o.usefulRate)}</b><span>유효율 (채택 + 그대로 타이핑)</span></div><div class="card"><b>${o.acceptedChars}</b><span>Tab으로 입력된 글자 수</span></div><div class="card"><b>${m.messages}</b><span>전송된 답변/메모</span></div><div class="card"><b>${pctS(m.acceptedShare)}</b><span>전송 글자 중 자동완성 비율</span></div><div class="card"><b>${pctS(m.coverage)}</b><span>제안이 있던 입력 비율</span></div><div class="card"><b>${o.msP95 == null ? '–' : o.msP95 + ' ms'}</b><span>계산 시간 p95</span></div></div>
+<div class="help">tab = Tab으로 전체 채택 · word = Alt+→ 단어 채택 · typed = 제안과 같은 내용을 직접 타이핑 · esc = Esc로 닫음 · ign = 다른 내용을 입력(무시) · other = 탭 이동/전송/포커스 아웃 등. a = 문단 매칭, b = 문장 매칭, c = 단어 예측.</div>
+${table('상담원별', sum.byAgent)}${table('매칭 방식별', sum.byLevel, { a: 'a 문단', b: 'b 문장', c: 'c 단어 예측' })}${table('채널별', sum.byKind, { p: '공개 답변', n: '내부 메모' })}${table('학습 출처별', sum.bySource, { 0: '직접 보낸 답변', 1: '과거 티켓', 2: '매크로', '-1': '단어 예측' })}
+${list('가장 많이 채택된 제안', sum.topAccepted || [])}${list('가장 많이 무시된 제안', sum.topIgnored || [])}
+<h3>상담원 (최근 접속)</h3><table><thead><tr><th>ID</th><th>버전</th><th>페이지 로드</th><th>학습 문장</th><th>OS</th><th>마지막</th></tr></thead><tbody>${agentsRows || '<tr><td colspan="6" class="muted">없음</td></tr>'}</tbody></table>
+</body></html>`;
+}
+async function handleAcLogView(request, env, url) {
+  const k = url.searchParams.get('k') || '';
+  if (!env.ACLOG_VIEW_KEY || !safeEq(k, env.ACLOG_VIEW_KEY)) return new Response('unauthorized', { status: 401 });
+  const days = Math.min(60, Math.max(1, parseInt(url.searchParams.get('days') || '7', 10) || 7));
+  const { events } = await loadAcLogEvents(env, days);
+  const html = renderAcLogPage(days, summarizeAcLog(events));
+  return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' } });
+}
 
 export default {
   async fetch(request, env, ctx) {
@@ -570,6 +640,8 @@ export default {
     if (request.method === 'POST' && url.pathname === '/prefetch') return handlePrefetch(request, env, ctx);
     if (request.method === 'POST' && url.pathname === '/ac/log') return handleAcLogWrite(request, env, ctx);
     if (request.method === 'GET' && url.pathname === '/ac/log') return handleAcLogRead(request, env, url);
+    if (request.method === 'DELETE' && url.pathname === '/ac/log') return handleAcLogPurge(request, env, url);
+    if (request.method === 'GET' && url.pathname === '/ac/log/view') return handleAcLogView(request, env, url);
     return json({ error: 'not found' }, 404);
   },
 };

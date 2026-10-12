@@ -35,7 +35,9 @@ The panel's Smart Autocomplete POSTs small de-identified event batches to `POST 
 `x-gcx-key`). Stored in KV as `aclog:<day>:<agentId>:<tab>` (60-day TTL). Nothing here touches the
 order/product read path.
 
-Read it back (header `x-push-key` = `PIDX_PUSH_KEY`, value in `~/.config/gcx_reply_worker/secrets.json`):
+**Dashboard (no tools needed):** `GET /ac/log/view?k=<ACLOG_VIEW_KEY>&days=7` renders the summary as an HTML page for the whole team + per agent (key in `~/.config/gcx_reply_worker/secrets.json`, read-only, de-identified data only; keep the link private). `DELETE /ac/log?agent=<id>` (x-push-key) purges one agent's batches (test cleanup).
+
+Read it back as JSON (header `x-push-key` = `PIDX_PUSH_KEY`, value in `~/.config/gcx_reply_worker/secrets.json`):
 ```bash
 PK=$(python3 -c "import json;print(json.load(open('$HOME/.config/gcx_reply_worker/secrets.json'))['PIDX_PUSH_KEY'])")
 curl -s "https://gcx-reply.kjw-55b.workers.dev/ac/log?days=7" -H "x-push-key: $PK" | python3 -m json.tool   # summary
@@ -49,7 +51,7 @@ n note) / `bySource` (0 typed, 1 history, 2 macro, -1 n-gram) each with episode 
 
 ## Secrets / bindings
 `wrangler secret put` (values live only in Cloudflare and `~/.config/gcx_reply_worker/` on the Mac,
-never in git): `GCX_KEY`, `PIDX_PUSH_KEY`, `ZD_WEBHOOK_TOKEN`, `AWS_ACCESS_KEY_ID`,
+never in git): `GCX_KEY`, `PIDX_PUSH_KEY`, `ZD_WEBHOOK_TOKEN`, `ACLOG_VIEW_KEY`, `AWS_ACCESS_KEY_ID`,
 `AWS_SECRET_ACCESS_KEY`, `LWA_CLIENT_ID[_JP|_IN]`, `LWA_CLIENT_SECRET[_JP|_IN]`, `LWA_REFRESH_TOKEN[_JP|_IN]`.
 KV binding `GCX_KV`. Var `GAS_URL`.
 
