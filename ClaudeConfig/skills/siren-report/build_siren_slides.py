@@ -515,6 +515,16 @@ def _claim_link_url(claim: dict):
     return None
 
 
+def _with_sku(item: dict) -> str:
+    """상세 내용 always starts with the item's SKU: '[ACS08964] 일주일 만에 뒷면이 벗겨짐' (user rule 2026-10-12).
+    Uses item['sku'] (claim: ticket ★문의SKU; review: product-master SKU of its ASIN); kept as-is if already prefixed."""
+    text = item.get("detail_text", "") or ""
+    sku = (item.get("sku") or "")[:8]
+    if sku and not text.lstrip().startswith(f"[{sku}"):
+        text = f"[{sku}] {text.lstrip()}"
+    return text
+
+
 def build_claim_slide(b: DeckBuilder, idx: int, claim: dict):
     sid = b.new_slide()
     label = claim.get("label") or f"클레임 #{idx:02d}"
@@ -547,7 +557,7 @@ def build_claim_slide(b: DeckBuilder, idx: int, claim: dict):
         [None, claim.get("country", "-"), claim.get("purchase_date", "-"),
          claim.get("inflow_date", "-"), claim.get("days_elapsed", "-"),
          claim.get("link_label", "클레임")],
-        ["상세 내용", claim.get("detail_text", ""), None, None, None, None],
+        ["상세 내용", _with_sku(claim), None, None, None, None],
         last_row,
     ]
     link_url = _claim_link_url(claim)

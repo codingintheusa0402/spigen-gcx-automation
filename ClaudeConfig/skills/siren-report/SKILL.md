@@ -91,6 +91,10 @@ reusing the original session-gated URL.
   `spigen-slides.md`) instead of the usual black header fill — user request 2026-09-21 to
   visually distinguish the one Global/cross-market metric from the other three
   Zendesk-sourced counts.
+- **Claim / bad-review slides (user rules)**: title `#NN` is **blue** (`#0000FF`) for 클레임 and **red** (`#FF0000`) for 배드 리뷰 —
+  if you renumber an existing deck with replaceAllText, re-apply these colours (replace recolours the run). **상세 내용 always
+  starts with the SKU**: `[ACS08964] 일주일 만에 뒷면이 벗겨짐` — pass `sku` on every claim/review item (claim = ticket ★문의SKU,
+  review = product-master SKU of its ASIN); `_with_sku()` adds the prefix (2026-10-12).
 - **Global 리뷰 평점 value (user rule 2026-10-08)** = the star rating on the Amazon page the 제품명 cell hyperlinks to
   (`amazon.de/dp/<product.asin>`, the `#acrPopover` average next to the title), written as `4.5(DE)`. If amazon.de shows no
   rating (out of stock / not sold there / blocked), try amazon.com → amazon.co.uk → amazon.co.jp and label with that country

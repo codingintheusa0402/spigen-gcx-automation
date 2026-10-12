@@ -379,11 +379,13 @@ def export_case(c, pm):
     for t in c["claims"]:
         items.append({"label": "클레임", "country": t["country"], "purchase_date": t["purchase"] or "-",
                       "inflow_date": t["created"], "days_elapsed": t["elapsed"], "link_label": t["id"],
-                      "detail_text": f"[{t['sku']} / {t['asin']}] ", "image_urls": []})
+                      "detail_text": f"[{t['sku']} / {t['asin']}] ", "image_urls": [],
+                      "sku": t["sku"][:8]})   # siren-report prefixes 상세 내용 with [SKU]
     for r in c["reviews"]:
         items.append({"label": "배드 리뷰", "country": r["country"], "purchase_date": "-",
                       "inflow_date": r["created"], "days_elapsed": "-", "link_label": r["id"], "link_url": r["url"],
                       "detail_text": f"[{r['asin']} / ★{r['rating']}] {r['ko']}", "original_text": r["original"],
+                      "sku": (pm.by_asin.get(r["asin"]) or {}).get("sku", "")[:8],
                       "image_urls": [r["image"]] if r["image"] else []})
     by_z, by_r = defaultdict(int), defaultdict(int)
     for t in c["claims"]:
