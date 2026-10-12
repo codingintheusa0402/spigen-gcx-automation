@@ -4,6 +4,8 @@
   zendesk_session.py            print whether the Zendesk window is signed in
   zendesk_session.py --alert    cron, weekdays every 30 min 08:20–17:50 (# mesh:zendesk-session): if signed out, post one
                                 🔴 "Zendesk login needed" card with a re-login button (→ KakaoTalk via KakaoRelay)
+  zendesk_session.py --popup    Windows task GCX-ZendeskPopup (weekdays 08:30, ServerBootstrap/windows/gcx-zendesk-popup.ps1):
+                                if signed out, put the sign-in page up and raise the window on top of the GCX Server dashboard
 
 Signing in is done ONLY by the user, on the Tailscale-only re-login page (relogin_server.py, target
 "zendesk"): they type email + password (+ code); login() below drives the already-open Zendesk window
@@ -105,7 +107,40 @@ async def check_page(page):
     return bool(u.get("id")) and u.get("role") not in (None, "end-user")
 
 
+async def popup():
+    """--popup (Windows task GCX-ZendeskPopup, weekdays 08:30): if signed out, put the monitor's Chrome on the
+    sign-in page and bring its window forward so the user can log in on the server screen. Exit 1 = popped."""
+    import subprocess
+    ok, _ = await check()
+    if ok:
+        return 0
+    # the window must be on the real WSLg screen — a copy on a stray Xvfb (:99, 10-13) is invisible there
+    pid = subprocess.run(["pgrep", "-f", "remote-debugging-port=9222"], capture_output=True, text=True).stdout.split()
+    env = open(f"/proc/{pid[0]}/environ", "rb").read().split(b"\0") if pid else []
+    if pid and b"DISPLAY=:0" not in env:
+        chrome = ("export DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir; /opt/google/chrome/chrome "
+                  f"--user-data-dir={os.path.expanduser('~')}/.chrome-zendesk-profile --remote-debugging-port=9222 --no-first-run "
+                  f"--no-default-browser-check --window-size=1500,960 {VIEW}; exec bash")
+        subprocess.run(["pkill", "-f", "remote-debugging-port=9222"]); await asyncio.sleep(3)
+        subprocess.run(["tmux", "respawn-window", "-k", "-t", "gcx:zendesk-chrome", chrome]); await asyncio.sleep(10)
+    from playwright.async_api import async_playwright
+    async with async_playwright() as pw:
+        browser, page = await _page(pw)
+        await page.goto(VIEW, wait_until="domcontentloaded", timeout=45000)      # signed out → Zendesk shows its sign-in page
+        cdp = await browser.contexts[0].new_cdp_session(page)
+        wid = (await cdp.send("Browser.getWindowForTarget"))["windowId"]
+        await cdp.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {"left": 40, "top": 40, "width": 1500, "height": 960, "windowState": "normal"}})
+        await page.bring_to_front()
+    print("zendesk: SIGNED OUT — sign-in page is up on the server screen")
+    return 1
+
+
 def main():
+    if "--popup" in sys.argv:
+        try:
+            sys.exit(asyncio.run(popup()))
+        except Exception as e:
+            print(f"popup failed: {e}"); sys.exit(2)
     try:
         ok, who = asyncio.run(check())
     except Exception as e:
