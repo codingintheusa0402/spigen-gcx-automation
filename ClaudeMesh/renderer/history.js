@@ -129,7 +129,6 @@ function openSessMenu(sid, x, y, agent) {
     ['Stop agent', () => stopAgent(ag), true],
   ] : [
     [live ? 'Go to live session' : 'Resume here', () => resumeSession(sid)],
-    [histPins.includes(sid) ? 'Unpin' : '📌 Pin to top', () => togglePin(sid)],
     ['Rename…', () => renameSession(sid, h ? histTitle(h) : live && live.name)],
     ['Convert to background agent…', () => convertToAgent(sid)],
     histHidden.has(sid) && !live ? ['Show in list again', () => { histHidden.delete(sid); saveHidden(); renderHistory(); }]
