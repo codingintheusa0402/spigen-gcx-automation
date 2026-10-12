@@ -16,14 +16,14 @@ NAMES = [  # (regex on command line, friendly name)
     (r"phase_g\.py", "Photo check (Phase G)"),
     (r"fill_asin_blanks|scheduler_gate", "SKU/ASIN filler"),
     (r"gcx-autosync", "Git auto-sync"),
-    (r"health_check\.py", "Apify scraper health check"),
+    (r"health_check(_gate)?\.py", "Apify scraper health check"),
     (r"gcx_watchdog\.py", "Server health check (watchdog)"),
     (r"gcx_selfheal\.sh", "Self-heal check"),
     (r"gcx_heartbeat\.py", "Heartbeat"),
     (r"daily_cron_gate\.py", "SC propagate (daily gate)"),
     (r"tmux_start", "Start tmux sessions"),
 ]
-QUIET = {"Bad-review catch-up", "Git auto-sync", "Server health check (watchdog)", "Self-heal check", "Heartbeat"}          # every few minutes — not worth listing as "up next"
+QUIET = {"Bad-review catch-up", "Git auto-sync", "Apify scraper health check", "Server health check (watchdog)", "Self-heal check", "Heartbeat"}          # every few minutes — not worth listing as "up next"
 
 def name_of(cmd):
     for rx, n in NAMES:
@@ -85,7 +85,7 @@ if up:
 up = unit_up("gcx-owner-watch")
 if up:
     print(f"run|Mac hand-over guard|{up}")
-print("run|Health checks|watchdog " + ago(f"{H}/.gcx-watchdog.json") + " · heartbeat " + ago(f"{H}/.gcx-heartbeat.log")
+print("run|Health checks|watchdog " + ago(f"{H}/.gcx-watchdog.json") + " · heartbeat " + ago(f"{H}/.gcx-heartbeat.json")
       + " · self-heal every 2m · git sync " + ago(f"{H}/.gcx-autosync.log"))
 
 # running: only real job processes (python/bash actually executing the job script) —
