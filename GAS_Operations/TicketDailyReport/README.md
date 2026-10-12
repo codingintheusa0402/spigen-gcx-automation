@@ -20,7 +20,7 @@ Google Apps Script project that generates the Spigen GCX daily Zendesk ticket re
 | `retryRunner.js` | Resilient runner: per-step retry, resume-from-crash, auto catch-up scheduling |
 | `ZendeskAPI.js` | Zendesk API helpers — `zendeskApiGet_()` (retrying GET), tickets-by-view, tagger option→name map, `fetchZendeskViewToKsheet()` |
 | `All_GraphGen.js` | `appendZendeskDailyStatus()` (one `All_Graph` row/day), `collapseOldRowsIfNeeded()`, `getKoreanFormattedDate()` |
-| `K_시트Gen.js` | `kSheetToChat()` — builds + posts the `K_시트` monospace-table cardsV2 card; shared row-cleanup / table helpers |
+| `K_시트Gen.js` | `kSheetToChat()` — posts the `K_시트` cardsV2 card; `buildKSheetCard_` / `buildKSheetCardSections_` (shared with `chatApp.js`) + row-cleanup helpers |
 | `KSheetHistory.js` | `archiveKSheetHistory()` — appends today's `K_시트` rows to the `K_시트_history` sheet (source for the `/report` date picker) |
 | `chatApp.js` | Google Chat app — `/report` slash command → `onMessage` shows an "Update 날짜" date-picker card; `loadDayReport` handles the button |
 | `sendChat.js` | `all_GraphChartToGoogleChat()` — exports the first `All_Graph` chart as PNG, uploads it to freeimage.host (`uploadToFreeImageHost`), posts a `[오전 보고]` image card |
@@ -78,8 +78,12 @@ consent — run it once after granting any new scope.
 
 Step 1 reads views `360102672972`, `360121546552`, `360121545992`, `360108214671`,
 `28990066416793`, `360096790151`, `19940259463705`, `360103290632`, `37502606662809`.
-The `K_시트` card shows at most 25 rows (note line if truncated), header title from `K_시트!B3`,
-`All: <G3 or sum> | KJW: <n>` totals and a `Start Zendesk` button (filter `360103290632`).
+The `K_시트` card (redesigned 2026-10-12) has a header from `K_시트!B3`, then a summary
+section — **Total Pending** (`G3`, else row sum), per-Category counts, per-country counts
+with flags, and `Start Zendesk` (filter `360103290632`) + `K_시트 열기` buttons — followed by
+one section per Category (Product Issue first, red) listing each ticket as
+`#n 🇩🇪 CC · BRAND · Qty n` / **Device** / 인입사유. Up to 60 rows (note line if truncated).
+**No PIC / owner is shown** — T2 Escalated tickets are no longer assigned a person in charge.
 
 ### `K_시트` table columns (view `49523632520985`, `pending` tickets only)
 
@@ -90,15 +94,14 @@ The `K_시트` card shows at most 25 rows (note line if truncated), header title
 | D | Brand | field `5495572594201` |
 | E | Category | field `900006613446` |
 | F | Qty | group count |
-| G | Owner | PIC — always `KJW` (LYS left the company 2026-09-10; was week-alternating LYS/KJW by country group) |
+| G | Owner | still written as `KJW` but **not shown** on any card since 2026-10-12 (no PIC tagging for T2 Escalated) |
 | H | Device | field `360022185671` (raw value → agent-UI name) |
 | I | 1차 Defect Reason or Inquiries | field `360022182831` — shown on the Chat card as **인입사유** |
 
 Rows are grouped by Country + Brand + Category + Device + Reason; `Qty` is the group size.
 
-The Chat card renders these as one column-aligned `<pre>` monospace table
-(`# | CC | Brand | Category | Device | 인입사유 | Qty | PIC`). Card-only cleanups
-applied in `kSheetToChat()` (the sheet keeps its raw values):
+The Chat card (and the `/report` picker in `chatApp.js`) groups these rows by Category.
+Card-only cleanups applied in `cleanKSheetDisplayRow_()` (the sheet keeps its raw values):
 
 - Brand: strip `spigen_` / `Spigen` / `(` / `)`, then upper-case → `NEW BIZ`, `SDA`
 - Category: drop the leading `N. ` → `Product Inquiry`

@@ -38,7 +38,8 @@ const KSHEET_ZENDESK_URL = 'https://spigenhelp.zendesk.com/agent/filters/3601032
 const KSHEET_SHEET_URL = 'https://docs.google.com/spreadsheets/d/10VYnysCGztKWMXfvXIWBVcE2_zENnRxvXUr9nicHkpo/edit#gid=1528385180';
 const KSHEET_CARD_MAX_ROWS = 60; // 1 widget per ticket row; cards drop sections past 100 widgets
 
-// Category order + accent colour/icon (unknown categories go last, grey)
+// Category order + accent colour/icon (unknown categories go last, orange).
+// Note: Chat ignores some font colours (blue renders as plain text) — red/orange show.
 const KSHEET_CATEGORY_STYLE = {
   'Product Issue':   { order: 1, color: '#D93025', icon: 'report' },
   'Product Inquiry': { order: 2, color: '#1A73E8', icon: 'help' }
@@ -152,7 +153,6 @@ function buildKSheetCardSections_(rawRows, opts) {
 
   if (items.length > maxRows) {
     sections.push({ widgets: [{ decoratedText: {
-      startIcon: { materialIcon: { name: 'info' } },
       topLabel: 'Note',
       text: '상위 ' + maxRows + '행만 표시 (전체 ' + items.length + '행) — 전체는 K_시트를 확인하세요.',
       wrapText: true
