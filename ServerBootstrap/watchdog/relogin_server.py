@@ -9,6 +9,7 @@ lives only in memory for the duration of the sign-in.
 
 Targets:  amazon:<tld>          Amazon customer account (photo check / scraper image fetch)
           sellercentral:<US|EU|JP|IN>   Seller Central (SC scraper)
+          zendesk               the ticket monitor's Zendesk window (signed in over CDP — zendesk_session.py)
 """
 import sys, asyncio, html, json, os, subprocess, time
 from aiohttp import web
@@ -76,6 +77,25 @@ def saved_login(target):
 
 async def do_login(tok, target, email, password):
     j = jobs[tok]
+    if target == "zendesk":
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import zendesk_session
+
+        async def ask_code():
+            j.update(state="otp", msg="Zendesk is asking for the verification code.")
+            try:
+                await asyncio.wait_for(j["otp_event"].wait(), timeout=300)
+                return j["otp"]
+            except asyncio.TimeoutError:
+                return None
+        try:
+            ok, msg = await zendesk_session.login(email, password, ask_code, say=lambda m: j.update(msg=m))
+            j.update(state="done" if ok else "failed", msg=html.escape(msg))
+            if ok:
+                mark_used(tok)
+        except Exception as e:
+            j.update(state="failed", msg=html.escape(str(e)[:200]))
+        return
     from playwright.async_api import async_playwright
     prof, url = profile_and_url(target)
     if subprocess.run(["pgrep", "-f", f"user-data-dir={prof}"], capture_output=True).returncode == 0:

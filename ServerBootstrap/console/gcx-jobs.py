@@ -21,6 +21,7 @@ NAMES = [  # (regex on command line, friendly name)
     (r"gcx_selfheal\.sh", "Self-heal check"),
     (r"gcx_heartbeat\.py", "Heartbeat"),
     (r"daily_cron_gate\.py", "SC propagate (daily gate)"),
+    (r"zendesk_session\.py", "Zendesk login check"),
     (r"tmux_start", "Start tmux sessions"),
 ]
 QUIET = {"Bad-review catch-up", "Git auto-sync", "Apify scraper health check", "Server health check (watchdog)", "Self-heal check", "Heartbeat"}          # every few minutes — not worth listing as "up next"
