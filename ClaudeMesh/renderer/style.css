@@ -498,3 +498,12 @@ body[data-size="mini"] #rail { display: flex; flex: none; gap: 6px; padding: 6px
 .rchip.on { color: var(--text) !important; border-color: var(--star, #ede6d6) !important; background: rgba(255,255,255,.08) !important; }
 .rchip.home, .rchip.add { padding: 3px 9px !important; }
 @media (max-height: 300px) { body[data-size="mini"] #rail { padding: 4px 6px; } }
+
+/* header: when space runs out, the model chips and health pills give way — buttons (Mesh/Split/Grid, PIXEL…) never get cut */
+#top > * { flex-shrink: 0; }
+#top > .models, #top > .health { flex-shrink: 1; min-width: 0; overflow: hidden; }
+#top > .spacer { flex-shrink: 1; min-width: 0; }
+.seg button { white-space: nowrap; flex: none; }
+/* a pill that doesn't fit drops out whole (wraps to a hidden 2nd line) instead of being sliced */
+#top > .models, #top > .health { flex-wrap: wrap; align-items: center; align-content: flex-start; }
+#top > .models { height: 29px; } #top > .health { height: 25px; }   /* exactly one row of pills */
