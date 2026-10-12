@@ -12,10 +12,12 @@ foreach ($s in "sshd", "Tailscale", "tvnserver") {
   if ($x -and $x.Status -ne "Running") { Start-Service $s; Start-Sleep 3; $ok = (Get-Service $s).Status -eq "Running"
     $fixed += "$s service" + $(if ($ok) { "" } else { " (restart FAILED)" }); L "service $s -> $((Get-Service $s).Status)" }
 }
-# GCX dashboard: the shell.ps1 loop relaunches GCXConsole; if the loop itself is gone, start it again
-$ps = Get-CimInstance Win32_Process -Filter "Name='powershell.exe'"
-if (-not ($ps | Where-Object { $_.CommandLine -like "*console\shell.ps1*" })) {
-  if (-not ($ps | Where-Object { $_.CommandLine -like "*GCXConsole.ps1*" })) {
+# GCX dashboard: normally the shell.ps1 loop relaunches GCXConsole. If no dashboard is running (twice, 5 s apart),
+# restart the loop itself — it can hang waiting on a leftover child of a killed dashboard (seen 10-12)
+$dash = { Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -like "*GCXConsole.ps1*" } }
+if (-not (& $dash)) { Start-Sleep 5
+  if (-not (& $dash)) {
+    Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -like "*console\shell.ps1*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
     Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\GCX-Setup\console\shell.ps1" -WindowStyle Hidden
     $fixed += "GCX SERVER dashboard"; L "dashboard restarted"
   }
