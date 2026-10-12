@@ -70,7 +70,7 @@ ipcMain.handle('pty:spawn', (_e, opts) => {
   ptys.set(id, entry);
   proc.onData(d => {
     win && win.webContents.send('pty:data', id, d);
-    entry.buf = (entry.buf + d).slice(-200000);                 // backlog for a phone that opens this terminal later
+    entry.buf = (entry.buf + d).slice(-1500000);                 // backlog for a phone that opens this terminal later
     ptyBus.emit('data', id, d);
   });
   proc.onExit(({ exitCode }) => {

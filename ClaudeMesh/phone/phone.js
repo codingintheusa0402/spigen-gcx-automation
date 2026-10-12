@@ -244,22 +244,55 @@ const termControls = () => `<div class="keys">${KEYS.map(([l, k]) => `<button da
 function mountTerm(host, id, box) {
   termId = id; tes && tes.close(); term && term.dispose();
   const W = host.clientWidth - 8;
-  term = new Terminal({ fontFamily: 'Menlo, monospace', fontSize: 9, convertEol: false, disableStdin: false, scrollback: 5000,
+  term = new Terminal({ fontFamily: 'Menlo, monospace', fontSize: 9, convertEol: false, disableStdin: false, scrollback: 20000,
     theme: { background: '#000000', foreground: '#e6e9f2', cursor: '#ede6d6' } });
-  term.open(host);
+  term.open(host); touchScroll(host);
   const write = d => api('/api/term/' + id, { data: d });
   term.onData(write);
   tes = new EventSource('/api/term/' + id + '?t=' + encodeURIComponent(TOKEN));
   tes.addEventListener('init', ev => {
     const i = JSON.parse(ev.data), fs = Math.max(6.5, Math.min(11, W / (i.cols * .6)));   // fit the Mac's columns; if still too wide, scroll sideways
-    term.options.fontSize = fs; term.resize(i.cols, i.rows); term.reset(); term.write(i.backlog);
+    term.options.fontSize = fs; term.resize(i.cols, i.rows); term.reset(); term.write(keepHist(i.backlog));
     host.scrollTop = host.scrollHeight;
   });
-  tes.addEventListener('data', ev => term.write(JSON.parse(ev.data)));
+  tes.addEventListener('data', ev => term.write(keepHist(JSON.parse(ev.data))));
   tes.addEventListener('exit', () => term.write('\r\n\x1b[90m[process exited]\x1b[0m\r\n'));
   box.querySelectorAll('.keys button').forEach(b => b.onclick = () => write(decodeURIComponent(b.dataset.k)));
   const inp = box.querySelector('.tIn'), go = () => { const v = inp.value; write(v); setTimeout(() => write('\r'), 60); inp.value = ''; };
   box.querySelector('.tGo').onclick = go; inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); go(); } };
+}
+// Claude Code's full redraws erase the scrollback (ESC[3J) — on the phone, keep the history so you can scroll back
+const keepHist = d => String(d).replace(/\x1b\[3J/g, '');
+// one-finger vertical drag scrolls the terminal itself (iOS won't scroll xterm's history natively): the box first,
+// then the history, with a little momentum; sideways drags still pan a wide terminal natively
+function touchScroll(host) {
+  if (host._ts) return; host._ts = 1;
+  let y = null, x0 = 0, acc = 0, v = 0, lastT = 0, axis = null, raf = 0;
+  const lh = () => { const r = host.querySelector('.xterm-rows'); return r && r.firstElementChild ? r.firstElementChild.getBoundingClientRect().height || 10 : (term ? term.options.fontSize * 1.2 : 10); };
+  const by = dy => {                       // dy > 0: show older lines
+    if (!term) return false;
+    const b = term.buffer.active;
+    if (dy > 0) {
+      if (host.scrollTop > 0) { host.scrollTop -= dy; return true; }
+      acc += dy; const n = Math.trunc(acc / lh()); if (n) { acc -= n * lh(); term.scrollLines(-n); }
+      return b.viewportY > 0 || host.scrollTop > 0;
+    }
+    if (b.viewportY < b.baseY) { acc += dy; const n = Math.trunc(acc / lh()); if (n) { acc -= n * lh(); term.scrollLines(-n); } return true; }
+    const m = host.scrollHeight - host.clientHeight; if (host.scrollTop < m) { host.scrollTop -= dy; return true; }
+    return false;
+  };
+  host.addEventListener('touchstart', e => { cancelAnimationFrame(raf); if (e.touches.length !== 1) { y = null; return; }
+    y = e.touches[0].clientY; x0 = e.touches[0].clientX; axis = null; v = 0; acc = 0; lastT = performance.now(); }, { passive: true, capture: true });
+  host.addEventListener('touchmove', e => { if (y == null || e.touches.length !== 1) return;
+    const t = e.touches[0], dy = t.clientY - y;
+    if (!axis) { if (Math.abs(dy) < 6 && Math.abs(t.clientX - x0) < 6) return; axis = Math.abs(dy) >= Math.abs(t.clientX - x0) ? 'y' : 'x'; }
+    if (axis !== 'y') return;
+    e.preventDefault(); e.stopPropagation();
+    const now = performance.now(); v = dy / Math.max(8, now - lastT); lastT = now; y = t.clientY; by(dy);
+  }, { passive: false, capture: true });
+  host.addEventListener('touchend', () => { if (axis !== 'y') return; y = null;
+    const fl = () => { v *= .94; if (Math.abs(v) < .02 || !by(v * 16)) return; raf = requestAnimationFrame(fl); };
+    if (Math.abs(v) > .15) raf = requestAnimationFrame(fl); }, { capture: true });
 }
 function openTerminal(id) {
   $('#termTab').classList.remove('hidden'); setTab('term', true);
