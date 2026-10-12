@@ -261,6 +261,11 @@ body.pixel #cmdMenu .cm-i.on, body.pixel .cmd-ac div.on { background: #29466f; }
 .hrow:hover .more, .arow:hover .more { opacity: 1; }
 .hrow .rm { padding: 0 5px; border-radius: 6px; color: var(--dim); opacity: 0; font-size: 14px; line-height: 1; } .hrow:hover .rm { opacity: .8; } .hrow .rm:hover { color: var(--err); background: rgba(255,93,108,.12); opacity: 1; }
 .hrow.live .t { color: var(--ok); }
+/* finished, not looked at yet: red title + a slow soft glow */
+.hrow.done .t, .srow.done .n span.t { color: #ff5d6c !important; }
+.hrow.done, .srow.done { animation: doneBlink 2.4s ease-in-out infinite; }
+@keyframes doneBlink { 0%, 100% { background: rgba(255,93,108,0); box-shadow: none; } 50% { background: rgba(255,93,108,.10); box-shadow: inset 0 0 0 1px rgba(255,93,108,.35); } }
+@media (prefers-reduced-motion: reduce) { .hrow.done, .srow.done { animation: none; background: rgba(255,93,108,.08); } }
 .hmore { margin: 4px 18px; font-size: 11.5px; color: var(--dim); cursor: pointer; }
 .arow { margin: 2px 8px; padding: 7px 10px; border-radius: 12px; cursor: pointer; border: 1px solid rgba(160,175,255,.18); }
 .arow:hover { background: rgba(60,56,150,.22); }

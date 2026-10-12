@@ -11,6 +11,10 @@ let snap = { sessions: [], models: [], ptys: [] };
 let selected = null;
 let bell = store.get('bell', true);
 const prevHealth = new Map();
+// sessions that finished (or stopped to ask you something) and you haven't looked at yet → red title, soft blink
+const doneSids = new Set(store.get('doneSids', []));
+const saveDone = () => store.set('doneSids', [...doneSids]);
+function seen(sid) { if (sid && doneSids.delete(sid)) { saveDone(); renderList(); typeof renderHistory === 'function' && renderHistory(); } }
 const terms = new Map();   // ptyId -> {term, fit, el, title, kind}
 let activeTerm = null;
 
@@ -45,7 +49,7 @@ function renderHeader() {
 
 function renderList() {
   $('#sessCount').textContent = `· ${snap.sessions.length}`;
-  $('#list').innerHTML = snap.sessions.map(s => `<div class="srow ${s.sid === selected ? 'sel' : ''}" data-sid="${s.sid}">
+  $('#list').innerHTML = snap.sessions.map(s => `<div class="srow ${s.sid === selected ? 'sel' : ''} ${doneSids.has(s.sid) ? 'done' : ''}" data-sid="${s.sid}">
     <div class="n"><span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span>${s.owner ? '<span class="tag">app</span>' : s.kind === 'bg' ? '<span class="tag">bg</span>' : ''}<span class="more" data-more="${s.sid}" title="Commands (or right-click)">⋯</span></div>
     <div class="m"><span style="color:${FAMILY_COLOR[s.family]}">${esc((s.model || '—').replace('claude-', ''))}</span><span>${fmt$(s.todayUsd)}</span><span>${s.health === 'working' ? Math.round(s.tps) + ' tok/s' : ago(s.sinceWrite)}</span></div>
   </div>`).join('');
@@ -63,6 +67,7 @@ function renderToday() {
 
 // ---------------- detail panel ----------------
 function select(sid) {
+  seen(sid);
   const ms = sid && snap.sessions.find(x => x.sid === sid);
   if (isMini() && ms && ms.owner && terms.has(ms.owner)) { selected = sid; viz.selected = sid; $('#panel').classList.add('hidden'); miniShow('term'); activate(ms.owner); renderList(); return; }
   selected = sid; viz.selected = sid;
@@ -304,6 +309,7 @@ function closeTerm(id) {
 
 function activate(id) {
   activeTerm = id;
+  { const s = snap.sessions.find(x => x.owner === id); if (s) seen(s.sid); }
   for (const [k, t] of terms) t.el.classList.toggle('on', k === id);
   renderTabs(); markFocus();
   requestAnimationFrame(() => { fitAll(); const t = terms.get(id); if (t) t.term.focus(); });
@@ -389,8 +395,16 @@ addEventListener('keydown', e => {
 
 // ---------------- notifications ----------------
 function notifyTransitions() {
+  const live = new Set(snap.sessions.map(s => s.sid));
+  for (const sid of doneSids) if (!live.has(sid)) { doneSids.delete(sid); saveDone(); }
   for (const s of snap.sessions) {
     const p = prevHealth.get(s.sid);
+    if (p && p !== s.health) {
+      const busy = h => h === 'working' || h === 'quiet';
+      const watching = document.hasFocus() && (s.sid === selected || (s.owner && s.owner === activeTerm && document.body.dataset.view !== 'mesh'));
+      if (busy(p) && (s.health === 'idle' || s.health === 'waiting' || s.health === 'error') && !watching) { doneSids.add(s.sid); saveDone(); renderList(); }
+      else if (busy(s.health) && doneSids.delete(s.sid)) { saveDone(); renderList(); }   // picked up again elsewhere
+    }
     if (p && p !== s.health && bell) {
       if (p === 'working' && s.health === 'idle') window.api.notify(`✓ ${s.name}`, `Finished · ${fmt$(s.todayUsd)} today`);
       if (s.health === 'error') window.api.notify(`⚠ ${s.name}`, s.lastError || 'API error');
@@ -465,3 +479,6 @@ $('#mesh').addEventListener('pointerdown', () => document.body.classList.remove(
 addEventListener('keydown', e => { if (e.metaKey && e.key === '0') { e.preventDefault(); $('#drawerBtn').click(); } else if (e.key === 'Escape') document.body.classList.remove('drawer'); });
 addEventListener('resize', sizeMode);
 sizeMode();
+
+// coming back to the window with a finished session's terminal already in front counts as looking at it
+addEventListener('focus', () => { if (document.body.dataset.view === 'mesh') return; const s = snap.sessions.find(x => x.owner && x.owner === activeTerm); if (s) seen(s.sid); });
