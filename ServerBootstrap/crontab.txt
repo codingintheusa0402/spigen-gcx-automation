@@ -27,5 +27,5 @@ G=/home/kevinkim/Desktop/GCX
 # Double sends are blocked by the shared run ledger (fallback/gcx_ledger.py, tab `ledger` of the heartbeat sheet).
 # Self-heal (2026-10-11): */2 gcx_selfheal.sh (# mesh:selfheal, adds itself) + Windows task GCX-SelfHeal (selfheal/selfheal.ps1)
 # restart whatever stopped. Mac fallback also covers the AI Trader engine + ticket monitor (fallback/gcx_owner.py).
-# Zendesk session check (2026-10-12): weekdays 08:20 — signed out → 🔴 alert with re-login button (user types the password)
-20 8 * * 1-5  python3 $HOME/Desktop/GCX/ServerBootstrap/watchdog/zendesk_session.py --alert >> $HOME/.gcx-zendesk-session.log 2>&1  # mesh:zendesk-session
+# Zendesk session check (2026-10-12): weekdays every 30 min 08:20-17:50 — signed out → 🔴 alert with re-login button (user types the password)
+20,50 8-17 * * 1-5  python3 $HOME/Desktop/GCX/ServerBootstrap/watchdog/zendesk_session.py --alert >> $HOME/.gcx-zendesk-session.log 2>&1  # mesh:zendesk-session

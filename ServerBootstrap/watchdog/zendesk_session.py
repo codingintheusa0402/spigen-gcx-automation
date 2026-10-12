@@ -2,7 +2,7 @@
 """Zendesk session of the server's ticket-monitor Chrome (~/.chrome-zendesk-profile, CDP 9222).
 
   zendesk_session.py            print whether the Zendesk window is signed in
-  zendesk_session.py --alert    cron, weekdays 08:20 (# mesh:zendesk-session): if signed out, post one
+  zendesk_session.py --alert    cron, weekdays every 30 min 08:20–17:50 (# mesh:zendesk-session): if signed out, post one
                                 🔴 "Zendesk login needed" card with a re-login button (→ KakaoTalk via KakaoRelay)
 
 Signing in is done ONLY by the user, on the Tailscale-only re-login page (relogin_server.py, target
@@ -117,15 +117,16 @@ def main():
             st = json.load(open(STATE))
         except Exception:
             st = {}
-        today = time.strftime("%Y-%m-%d")
-        if st.get("alerted") != today:
+        if not st.get("alerted"):                         # once per signed-out spell (reset when signed in again)
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             from gcx_alert import alert
             alert("Zendesk login needed (ticket monitor)",
                   "The server's Zendesk window is signed out, so the ticket monitor can't read the pending views. "
                   "Tap the re-login button (iPhone on Tailscale), type the Zendesk email + password (and the code if asked) — "
                   "the server signs the window back in and the monitor resumes by itself.", level="bad", relogin="zendesk")
-            json.dump({"alerted": today}, open(STATE, "w"))
+            json.dump({"alerted": time.strftime("%Y-%m-%d %H:%M")}, open(STATE, "w"))
+    if ok and os.path.exists(STATE):
+        os.remove(STATE)                                  # signed in again → next sign-out alerts again
     sys.exit(0 if ok else 1)
 
 
