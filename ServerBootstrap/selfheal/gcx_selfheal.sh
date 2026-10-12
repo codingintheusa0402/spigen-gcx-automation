@@ -55,7 +55,8 @@ else
   win() { tmux list-windows -t gcx -F '#W' | grep -qx "$1"; }
   run() { if win "$1"; then tmux respawn-window -k -t "gcx:$1" "$2"; else tmux new-window -d -t gcx -n "$1" "$2"; fi; }
   MAIN="cd $G && claude --remote-control gcx-main; exec bash"
-  CHROME="/opt/google/chrome/chrome --user-data-dir=$HOME/.chrome-zendesk-profile --remote-debugging-port=9222 --no-first-run --no-default-browser-check https://spigenhelp.zendesk.com/agent/filters/360103290632; exec bash"
+  # always on the real WSLg screen (:0): on 10-13 a copy started on a stray Xvfb :99 was invisible on the server desktop
+  CHROME="export DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir; /opt/google/chrome/chrome --user-data-dir=$HOME/.chrome-zendesk-profile --remote-debugging-port=9222 --no-first-run --no-default-browser-check --window-size=1500,960 https://spigenhelp.zendesk.com/agent/filters/360103290632; exec bash"
   TM="cd ~ && python3 $F/gcx_owner.py gate ticket-monitor; claude --remote-control gcx-ticket-monitor \"\$(cat ~/.gcx-tasks/ticket-monitor.prompt)\"; echo; echo [session ended]; exec bash"
   pgrep -f -- "--remote-control gcx-main" >/dev/null || heal "Claude session gcx-main" 'run main "$MAIN"'
   if ! curl -s -m 5 http://127.0.0.1:9222/json/version >/dev/null; then
