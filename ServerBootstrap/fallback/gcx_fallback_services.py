@@ -19,8 +19,15 @@ MT = os.path.expanduser("~/mock-trader")
 AIT = os.path.join(FB, "aitrader")
 SKILL_STATE = os.path.expanduser("~/.claude/skills/ticket-reporter/state")
 HERE = os.path.dirname(os.path.abspath(__file__))
-SSH = ["ssh", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes", "kevinkim@gcx-server"]
-RSH = "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+# Ubuntu is reached THROUGH the Windows OpenSSH (key auth): Ubuntu's own Tailscale SSH asks for a browser re-check
+# now and then, which would break this unattended. Commands go to `wsl.exe … bash -l` on stdin; rsync runs via
+# --rsync-path. Remote paths are therefore absolute Ubuntu paths.
+WIN = ["ssh", "-i", os.path.expanduser("~/.ssh/id_ed25519_gcx_server"), "-o", "ConnectTimeout=10", "-o", "BatchMode=yes",
+       "user@claude-server"]
+WSL = "wsl.exe -d Ubuntu -u kevinkim -e"
+RSH = "ssh -i " + os.path.expanduser("~/.ssh/id_ed25519_gcx_server") + " -o ConnectTimeout=10 -o BatchMode=yes"
+RSYNC = ["rsync", "-e", RSH, f"--rsync-path={WSL} rsync"]
+U = "user@claude-server:/home/kevinkim/"                     # rsync remote prefix
 MAX_MIRROR_AGE = {"aitrader": 30, "ticket-monitor": 60}    # minutes; older → don't take over (could double-act)
 SESSION = {"aitrader": "gcx-fb-aitrader", "ticket-monitor": "gcx-fb-ticket"}
 LABEL = {"aitrader": "AI Trader engine", "ticket-monitor": "Zendesk ticket monitor"}
@@ -39,7 +46,10 @@ def sh(cmd, timeout=120):
 
 
 def ssh(remote, timeout=120):
-    return sh(SSH + [remote], timeout)
+    try:
+        return subprocess.run(WIN + [f"{WSL} bash -l"], input=remote + "\n", capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        return subprocess.CompletedProcess(remote, 124, "", f"timeout: {e}")
 
 
 def session_alive(svc):
@@ -63,13 +73,13 @@ def mirror(st):
     """Copy the server's live state to the Mac (only while the server owns the services)."""
     os.makedirs(MIRROR, exist_ok=True)
     m = st.setdefault("mirror", {})
-    r = sh(["rsync", "-az", "--delete", "--exclude", "logs/", "--exclude", "app/.lock", "--exclude", "app/port",
-            "-e", RSH, "kevinkim@gcx-server:mock-trader/state/", os.path.join(MIRROR, "aitrader-state") + "/"])
+    r = sh(RSYNC + ["-az", "--delete", "--exclude", "logs/", "--exclude", "app/.lock", "--exclude", "app/port",
+            U + "mock-trader/state/", os.path.join(MIRROR, "aitrader-state") + "/"])
     if r.returncode == 0:
         m["aitrader"] = time.time()
     os.makedirs(os.path.join(MIRROR, "ticket-reporter"), exist_ok=True)
-    r = sh(["rsync", "-az", "-e", RSH, "--include", "*.json", "--exclude", "*",
-            "kevinkim@gcx-server:.claude/skills/ticket-reporter/state/", os.path.join(MIRROR, "ticket-reporter") + "/"])
+    r = sh(RSYNC + ["-az", "--include", "*.json", "--exclude", "*",
+            U + ".claude/skills/ticket-reporter/state/", os.path.join(MIRROR, "ticket-reporter") + "/"])
     if r.returncode == 0:
         m["ticket-monitor"] = time.time()
     return bool(m)
@@ -189,16 +199,18 @@ def handback(svc, st, log):
     if svc == "aitrader":
         src = os.path.join(AIT, "state") + "/"
         dest = "mock-trader/state/" if lease_ok else f"mock-trader/state-mac-failover-{ts}/"
-        r = sh(["rsync", "-az", "--exclude", "logs/", "--exclude", "app/.lock", "--exclude", "app/port", "--exclude", "app/remote.json",
-                "-e", RSH, src, f"kevinkim@gcx-server:{dest}"], 300)
-        sh(["rsync", "-az", "-e", RSH, os.path.join(AIT, "state", "logs") + "/",
-            f"kevinkim@gcx-server:mock-trader/state/logs/mac-failover-{ts}/"], 300)
+        ssh(f"mkdir -p ~/{dest} ~/mock-trader/state/logs/mac-failover-{ts}", 60)
+        r = sh(RSYNC + ["-az", "--exclude", "logs/", "--exclude", "app/.lock", "--exclude", "app/port", "--exclude", "app/remote.json",
+                src, U + dest], 300)
+        sh(RSYNC + ["-az", os.path.join(AIT, "state", "logs") + "/",
+            U + f"mock-trader/state/logs/mac-failover-{ts}/"], 300)
         rj = os.path.join(MT, "state", "app", "remote.json")
         if os.path.exists(rj + ".server"):
             os.replace(rj + ".server", rj)
     else:
-        r = sh(["rsync", "-az", "-e", RSH, "--include", "*.json", "--exclude", "*", SKILL_STATE + "/",
-                f"kevinkim@gcx-server:.gcx-fallback-in/ticket-{ts}/"], 120)
+        ssh(f"mkdir -p ~/.gcx-fallback-in/ticket-{ts}", 60)
+        r = sh(RSYNC + ["-az", "--include", "*.json", "--exclude", "*", SKILL_STATE + "/",
+                U + f".gcx-fallback-in/ticket-{ts}/"], 120)
         if r.returncode == 0 and lease_ok:
             r = ssh(f"python3 ~/Desktop/GCX/ServerBootstrap/fallback/merge_state.py ~/.gcx-fallback-in/ticket-{ts} "
                     f"~/.claude/skills/ticket-reporter/state", 60)
