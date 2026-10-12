@@ -16,9 +16,14 @@ NAMES = [  # (regex on command line, friendly name)
     (r"phase_g\.py", "Photo check (Phase G)"),
     (r"fill_asin_blanks|scheduler_gate", "SKU/ASIN filler"),
     (r"gcx-autosync", "Git auto-sync"),
+    (r"health_check\.py", "Apify scraper health check"),
+    (r"gcx_watchdog\.py", "Server health check (watchdog)"),
+    (r"gcx_selfheal\.sh", "Self-heal check"),
+    (r"gcx_heartbeat\.py", "Heartbeat"),
+    (r"daily_cron_gate\.py", "SC propagate (daily gate)"),
     (r"tmux_start", "Start tmux sessions"),
 ]
-QUIET = {"Bad-review catch-up", "Git auto-sync"}          # every few minutes — not worth listing as "up next"
+QUIET = {"Bad-review catch-up", "Git auto-sync", "Server health check (watchdog)", "Self-heal check", "Heartbeat"}          # every few minutes — not worth listing as "up next"
 
 def name_of(cmd):
     for rx, n in NAMES:
@@ -27,6 +32,61 @@ def name_of(cmd):
     return None
 
 now = dt.datetime.now(KST)
+H = os.path.expanduser("~")
+
+
+def sh(*a):
+    return subprocess.run(list(a), capture_output=True, text=True).stdout.strip()
+
+
+def since(ts):
+    m = max(0, int((now - ts).total_seconds() // 60))
+    return f"{m // 1440}d {m % 1440 // 60}h" if m >= 1440 else (f"{m // 60}h {m % 60}m" if m >= 60 else f"{m}m")
+
+
+def unit_up(unit, user=True):
+    """'up 3h 12m' for an active systemd unit, else None."""
+    a = ["systemctl"] + (["--user"] if user else []) + ["show", unit, "-p", "ActiveState", "-p", "ActiveEnterTimestamp"]
+    kv = dict(l.split("=", 1) for l in sh(*a).splitlines() if "=" in l)
+    if kv.get("ActiveState") != "active":
+        return None
+    try:
+        t = dt.datetime.strptime(kv["ActiveEnterTimestamp"].rsplit(" ", 1)[0], "%a %Y-%m-%d %H:%M:%S").replace(tzinfo=KST)
+        return f"up {since(t)}"
+    except Exception:
+        return "up"
+
+
+def ago(path):
+    try:
+        return since(dt.datetime.fromtimestamp(os.path.getmtime(path), KST)) + " ago"
+    except Exception:
+        return "never"
+
+
+# ---- always-on services (listed first) ----
+up = unit_up("mock-trader")
+if up:
+    try:
+        plans = json.load(open(f"{H}/mock-trader/state/app/engine.json")).get("plans", {})
+        act = [p for p in plans.values() if p.get("status") not in ("done", "merged", "halted", "settled")]
+        real = sum(1 for p in act if p.get("mode") == "real")
+        detail = f"{up} · {len(act)} plan(s) active ({real} real · {len(act) - real} mock)"
+    except Exception:
+        detail = up
+    print(f"run|AI Trader engine|{detail}")
+elif sh("systemctl", "--user", "is-active", "mock-trader") == "activating":
+    print("run|AI Trader engine|waiting — the Mac fallback is running it")
+if subprocess.run(["curl", "-s", "-m", "2", "-o", "/dev/null", "http://127.0.0.1:9222/json/version"]).returncode == 0:
+    print("run|Zendesk Chrome (for ticket monitor)|open · CDP 9222")
+up = unit_up("gcx-relogin", user=False)
+if up:
+    print(f"run|Re-login page (Tailscale)|{up}")
+up = unit_up("gcx-owner-watch")
+if up:
+    print(f"run|Mac hand-over guard|{up}")
+print("run|Health checks|watchdog " + ago(f"{H}/.gcx-watchdog.json") + " · heartbeat " + ago(f"{H}/.gcx-heartbeat.log")
+      + " · self-heal every 2m · git sync " + ago(f"{H}/.gcx-autosync.log"))
 
 # running: only real job processes (python/bash actually executing the job script) —
 # not Claude sessions whose prompt merely mentions a script name
@@ -62,6 +122,8 @@ for f in os.listdir(sess_dir) if os.path.isdir(sess_dir) else []:
         print("run|Ticket monitor (Claude loop)|" + ("checking now" if d.get("status") == "busy" else "watching · every minute"))
     elif d.get("status") == "busy":
         print(f"run|Claude: {label}|working")
+    elif label == "main":
+        print("run|Claude: main (Remote Control)|idle · ready")
 
 # upcoming: next fire time of each cron line
 cron = subprocess.run(["crontab", "-l"], capture_output=True, text=True).stdout.splitlines()
