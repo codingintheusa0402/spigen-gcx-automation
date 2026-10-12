@@ -14,7 +14,17 @@ const prevHealth = new Map();
 // sessions that finished (or stopped to ask you something) and you haven't looked at yet → red title, soft blink
 const doneSids = new Set(store.get('doneSids', []));
 const saveDone = () => store.set('doneSids', [...doneSids]);
-function seen(sid) { if (sid && doneSids.delete(sid)) { saveDone(); renderList(); typeof renderHistory === 'function' && renderHistory(); } }
+const doneFade = new Map();   // sid → when it was looked at; fades out over FADE_MS instead of vanishing
+const FADE_MS = 900, BLINK_MS = 2400;
+// lists re-render every second, so the animations are pinned to the clock (negative delay) instead of restarting
+function doneCls(sid) {
+  if (doneSids.has(sid)) return ` done" style="animation-delay:-${(Date.now() % BLINK_MS) / 1000}s`;
+  const f = doneFade.get(sid); if (!f) return '';
+  const el = Date.now() - f.t; if (el >= FADE_MS) { doneFade.delete(sid); return ''; }
+  return ` done-out" style="--a:${f.a.toFixed(3)};animation-delay:-${el / 1000}s`;
+}
+function seen(sid) { if (sid && doneSids.delete(sid)) { saveDone(); { const t = Date.now(); doneFade.set(sid, { t, a: .5 - .5 * Math.cos(2 * Math.PI * (t % BLINK_MS) / BLINK_MS) }); /* start from where the glow is now */ } renderList(); typeof renderHistory === 'function' && renderHistory();
+  setTimeout(() => { renderList(); typeof renderHistory === 'function' && renderHistory(); }, FADE_MS + 50); } }
 const terms = new Map();   // ptyId -> {term, fit, el, title, kind}
 let activeTerm = null;
 
@@ -49,7 +59,7 @@ function renderHeader() {
 
 function renderList() {
   $('#sessCount').textContent = `· ${snap.sessions.length}`;
-  $('#list').innerHTML = snap.sessions.map(s => `<div class="srow ${s.sid === selected ? 'sel' : ''} ${doneSids.has(s.sid) ? 'done' : ''}" data-sid="${s.sid}">
+  $('#list').innerHTML = snap.sessions.map(s => `<div class="srow ${s.sid === selected ? 'sel' : ''}${doneCls(s.sid)}" data-sid="${s.sid}">
     <div class="n"><span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span>${s.owner ? '<span class="tag">app</span>' : s.kind === 'bg' ? '<span class="tag">bg</span>' : ''}<span class="more" data-more="${s.sid}" title="Commands (or right-click)">⋯</span></div>
     <div class="m"><span style="color:${FAMILY_COLOR[s.family]}">${esc((s.model || '—').replace('claude-', ''))}</span><span>${fmt$(s.todayUsd)}</span><span>${s.health === 'working' ? Math.round(s.tps) + ' tok/s' : ago(s.sinceWrite)}</span></div>
   </div>`).join('');
@@ -403,7 +413,7 @@ function notifyTransitions() {
       const busy = h => h === 'working' || h === 'quiet';
       const watching = document.hasFocus() && (s.sid === selected || (s.owner && s.owner === activeTerm && document.body.dataset.view !== 'mesh'));
       if (busy(p) && (s.health === 'idle' || s.health === 'waiting' || s.health === 'error') && !watching) { doneSids.add(s.sid); saveDone(); renderList(); }
-      else if (busy(s.health) && doneSids.delete(s.sid)) { saveDone(); renderList(); }   // picked up again elsewhere
+      else if (busy(s.health) && doneSids.has(s.sid)) seen(s.sid);   // picked up again elsewhere
     }
     if (p && p !== s.health && bell) {
       if (p === 'working' && s.health === 'idle') window.api.notify(`✓ ${s.name}`, `Finished · ${fmt$(s.todayUsd)} today`);

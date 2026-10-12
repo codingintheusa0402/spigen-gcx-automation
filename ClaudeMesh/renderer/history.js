@@ -38,7 +38,7 @@ function renderHistory() {
   let shown = 0;
   const rowHtml = (h, g) => {
     const live = liveSids.has(h.sid), ag = agentSids.has(h.sid), pinned = pins.has(h.sid);
-    return `<div class="hrow ${live ? 'live' : ''} ${pinned ? 'pinned' : ''} ${live && doneSids.has(h.sid) ? 'done' : ''}" draggable="true" data-group="${g}" data-hsid="${h.sid}" title="${esc(histTitle(h))}\n${esc(h.cwd)}${h.last ? '\nlast: ' + esc(h.last) : ''}\n(drag to reorder)">
+    return `<div class="hrow ${live ? 'live' : ''} ${pinned ? 'pinned' : ''}${live ? doneCls(h.sid) : ''}" draggable="true" data-group="${g}" data-hsid="${h.sid}" title="${esc(histTitle(h))}\n${esc(h.cwd)}${h.last ? '\nlast: ' + esc(h.last) : ''}\n(drag to reorder)">
       <div class="n"><span class="t">${esc(histTitle(h))}</span>${live ? '<span class="tag">live</span>' : ag ? '<span class="tag">agent</span>' : ''}<span class="pin ${pinned ? 'on' : ''}" data-pin="${h.sid}" title="${pinned ? 'Unpin' : 'Pin'}">📌</span><span class="more" data-hmore="${h.sid}">⋯</span><span class="rm" data-hrm="${h.sid}" title="${live ? 'Stop and remove from Running' : 'Remove from list'}">×</span></div>
       <div class="m">${esc(projName(h.cwd))}${h.branch && h.branch !== 'HEAD' ? ' · ' + esc(h.branch) : ''} · ${agoT(h.mtime)} · ${h.size > 1e6 ? (h.size / 1e6).toFixed(1) + 'MB' : Math.round(h.size / 1e3) + 'kB'}</div></div>`;
   };
@@ -243,7 +243,7 @@ async function stopAgent(a) {
 let lastHistKey = '', lastAgKey = '';
 window.api.onTelemetry(() => {
   const ak = JSON.stringify(snap.agents || []); if (ak !== lastAgKey) { lastAgKey = ak; renderAgents(); }
-  const hk = snap.sessions.map(s => s.sid).join() + '|' + [...doneSids].join() + '|' + (snap.agents || []).map(a => a.sessionId).join() + '|' + hist.length + '|' + Math.floor(Date.now() / 60000);
+  const hk = snap.sessions.map(s => s.sid).join() + '|' + [...doneSids].join() + '|' + doneFade.size + '|' + (snap.agents || []).map(a => a.sessionId).join() + '|' + hist.length + '|' + Math.floor(Date.now() / 60000);
   if (hist.length && hk !== lastHistKey && !$('#hList').matches(':hover')) { lastHistKey = hk; renderHistory(); }
 });
 loadHistory(); setInterval(loadHistory, 20000);
