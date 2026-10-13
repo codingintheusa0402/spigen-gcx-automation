@@ -23,7 +23,17 @@ function onOpen() {
 
 // Manual "Run Now" from the menu, and also the function the weekly
 // time-based trigger calls every Monday 8AM KST.
+//
+// DISABLED 2026-10-13: replaced by the unified daily ASIN rating-fetch job
+// (actor 2AuZCyLxKZuO2OyNY). The old paid axesso_data task
+// (QWtvKi7oXZ6YYR92G, "LJH") was costing money for data no longer needed
+// from here. Weekly trigger left installed on purpose; this just no-ops
+// the refresh. Restore the body below from git history if ever needed again.
 function runApifyRatingRefreshNow() {
+  Logger.log('runApifyRatingRefreshNow: skipped (decommissioned 2026-10-13, superseded by rating_fetch_daily.py)');
+}
+
+function _runApifyRatingRefreshNowImpl_() {
   const props = PropertiesService.getScriptProperties();
   const pendingRunId = props.getProperty('RATING_LAST_RUN_ID');
 

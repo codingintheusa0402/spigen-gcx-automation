@@ -24,12 +24,12 @@ function onOpen() {
 // The function the daily time-based trigger calls — skips Sat/Sun, otherwise
 // kicks off the same refresh as the manual "Run Now" menu item.
 function dailyWeekdayKickoff() {
-  const dow = Number(Utilities.formatDate(new Date(), CONFIG.timezone, 'u')); // 1=Mon ... 7=Sun
-  if (dow === 6 || dow === 7) {
-    Logger.log('Skipping weekend run (ISO day=%s).', dow);
-    return;
-  }
-  runApifyRatingRefreshNow();
+  // DISABLED 2026-10-13: replaced by the unified daily ASIN rating-fetch job
+  // (actor 2AuZCyLxKZuO2OyNY). The old paid axesso_data task
+  // (CLQ3G6Sokyr7AJtQi) was costing money for data no longer needed from
+  // here. Trigger left installed on purpose; this just no-ops the kickoff.
+  // Manual "Run Now" from the menu still works if ever needed again.
+  Logger.log('dailyWeekdayKickoff: skipped (decommissioned 2026-10-13, superseded by rating_fetch_daily.py)');
 }
 
 // Manual "Run Now" from the menu, and also called by dailyWeekdayKickoff() on weekdays.
