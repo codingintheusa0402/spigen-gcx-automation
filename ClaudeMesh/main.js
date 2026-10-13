@@ -78,7 +78,10 @@ ipcMain.handle('pty:spawn', (_e, opts) => {
   return { id, pid: proc.pid, title, cwd };
 });
 ipcMain.on('pty:write', (_e, id, data) => { const p = ptys.get(id); if (p) p.proc.write(data); });
-ipcMain.on('pty:resize', (_e, id, c, r) => { const p = ptys.get(id); if (p && c > 0 && r > 0) try { p.proc.resize(c, r); } catch { } });
+ipcMain.on('pty:resize', (_e, id, c, r) => {
+  const p = ptys.get(id);
+  if (p && c > 0 && r > 0 && (c !== p.proc.cols || r !== p.proc.rows)) try { p.proc.resize(c, r); ptyBus.emit('resize', id, c, r); } catch { }
+});
 ipcMain.on('pty:kill', (_e, id) => { const p = ptys.get(id); if (p) try { p.proc.kill(); } catch { } });
 
 // ---------------- control of sessions running in Terminal.app ----------------

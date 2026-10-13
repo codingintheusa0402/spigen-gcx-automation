@@ -89,8 +89,9 @@ function createPhoneServer(ctx) {
       if (ctx.termOpen) await ctx.termOpen(id);                           // server: start streaming the tmux pane
       send(res, 'init', { cols: pt.proc.cols, rows: pt.proc.rows, backlog: pt.buf || '' });
       const on = (pid, d) => { if (pid === id) send(res, 'data', d); }, off = pid => { if (pid === id) send(res, 'exit', {}); };
-      ctx.ptyBus.on('data', on); ctx.ptyBus.on('exit', off);
-      req.on('close', () => { ctx.ptyBus.off('data', on); ctx.ptyBus.off('exit', off); if (ctx.termClose) ctx.termClose(id); }); return;
+      const sz = (pid, cols, rows) => { if (pid === id) send(res, 'size', { cols, rows }); };   // the terminal was resized on the host
+      ctx.ptyBus.on('data', on); ctx.ptyBus.on('exit', off); ctx.ptyBus.on('resize', sz);
+      req.on('close', () => { ctx.ptyBus.off('data', on); ctx.ptyBus.off('exit', off); ctx.ptyBus.off('resize', sz); if (ctx.termClose) ctx.termClose(id); }); return;
     }
     if (req.method !== 'POST') return json(res, 405, {});
     const b = await body(req);

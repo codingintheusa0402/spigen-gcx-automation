@@ -43,6 +43,8 @@ async function refreshPanes() {
   for (const l of (out || '').split('\n')) {
     const [id, pid, w, h, title] = l.split('\t'); if (!id) continue;
     m.set(id, { pid: +pid, cols: +w || 120, rows: +h || 32, title });
+    const o = panes.get(id);
+    if (o && (o.cols !== m.get(id).cols || o.rows !== m.get(id).rows)) ptyBus.emit('resize', id, m.get(id).cols, m.get(id).rows);
   }
   panes = m;
 }

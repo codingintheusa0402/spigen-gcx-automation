@@ -269,10 +269,12 @@ function mountTerm(host, id, box) {
   term.onData(write);
   tes = new EventSource('/api/term/' + encodeURIComponent(id) + '?t=' + encodeURIComponent(TOKEN));
   tes.addEventListener('init', ev => {
-    const i = JSON.parse(ev.data), fs = Math.max(6.5, Math.min(11, W / (i.cols * .6)));   // fit the Mac's columns; if still too wide, scroll sideways
-    term.options.fontSize = fs; term.resize(i.cols, i.rows); term.reset(); term.write(keepHist(i.backlog));
+    const i = JSON.parse(ev.data); fitTo(i.cols, i.rows); term.reset(); term.write(keepHist(i.backlog));
     host.scrollTop = host.scrollHeight;
   });
+  // always the host terminal's exact size: a narrower/wider xterm garbles Claude's redraws
+  const fitTo = (cols, rows) => { term.options.fontSize = Math.max(6.5, Math.min(11, W / (cols * .6))); term.resize(cols, rows); };   // too wide → scroll sideways
+  tes.addEventListener('size', ev => { const i = JSON.parse(ev.data); fitTo(i.cols, i.rows); });
   tes.addEventListener('data', ev => term.write(keepHist(JSON.parse(ev.data))));
   tes.addEventListener('exit', () => term.write('\r\n\x1b[90m[process exited]\x1b[0m\r\n'));
   box.querySelectorAll('.keys button').forEach(b => b.onclick = () => write(decodeURIComponent(b.dataset.k)));
