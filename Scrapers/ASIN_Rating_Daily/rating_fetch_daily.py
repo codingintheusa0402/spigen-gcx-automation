@@ -498,6 +498,11 @@ def process_group_a_tab(svc, product, sid, tab, dry_run, pilot_mode, asin_to_sku
             stats["unresolved_rows"] += 1
             row_info.append((row_num, asin, None))
             continue
+        # Placeholder text in ASIN cells ('-', 'TBD', '리스팅 필요', 'BNaN') makes the actor 400.
+        if not (len(asin) == 10 and asin.isascii() and asin.isalnum()):
+            stats["placeholder_asin_rows"] = stats.get("placeholder_asin_rows", 0) + 1
+            row_info.append((row_num, asin, None))
+            continue
 
         needed_by_market.setdefault(market, set()).add(asin)
         row_info.append((row_num, asin, market))
