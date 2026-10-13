@@ -11,6 +11,7 @@ from curl_cffi.requests import AsyncSession
 from parsel import Selector
 
 ASIN_RE = re.compile(r'(?:/dp/|/gp/product/|^)([A-Z0-9]{10})(?:[/?#]|$)', re.I)
+DOMAIN_RE = re.compile(r'amazon\.([a-z.]+?)(?:/|$)', re.I)
 MAX_ATTEMPTS = 6
 DATACENTER_ATTEMPTS = 2
 MAX_CONCURRENCY = 50
@@ -21,6 +22,15 @@ SESSION_MAX_PAGES = 40  # rotate IP/cookies after this many pages, like a real v
 def to_asin(s: str) -> str | None:
     m = ASIN_RE.search(s.strip())
     return m.group(1).upper() if m else None
+
+
+def to_item(s: str, default_domain: str) -> tuple[str, str] | None:
+    """(asin, domain). A product URL carries its own marketplace; a bare ASIN uses the input default."""
+    asin = to_asin(s)
+    if not asin:
+        return None
+    d = DOMAIN_RE.search(s.strip())
+    return asin, (d.group(1).lower() if d else default_domain)
 
 
 def num(text: str | None) -> float | None:
@@ -126,8 +136,9 @@ class Worker:
 async def main() -> None:
     async with Actor:
         inp = await Actor.get_input() or {}
-        domain = inp.get('marketplace', 'com')
-        asins = list(dict.fromkeys(a for a in (to_asin(x) for x in inp.get('asins', [])) if a))
+        default_domain = inp.get('marketplace', 'com')
+        # Items are (asin, domain): one run may mix marketplaces when the input lists product URLs.
+        asins = list(dict.fromkeys(i for i in (to_item(x, default_domain) for x in inp.get('asins', [])) if i))
         if not asins:
             await Actor.fail(status_message='No valid ASINs in input')
             return
@@ -144,13 +155,13 @@ async def main() -> None:
         if requested > safe:
             Actor.log.info(f'maxConcurrency {requested} capped to {safe} for {memory_mb} MB memory — give the run more memory for more speed')
         queue: asyncio.Queue = asyncio.Queue()
-        for a in asins:
-            queue.put_nowait((a, 0))
+        for item in asins:
+            queue.put_nowait((item, 0))
         done = 0
         blocks = 0  # recent blocks; workers back off when Amazon pushes back
         lock = asyncio.Lock()
 
-        async def finish(asin: str, result: dict) -> None:
+        async def finish(asin: str, domain: str, result: dict) -> None:
             nonlocal done
             result['marketplace'] = f'amazon.{domain}'
             await Actor.push_data(result)
@@ -170,7 +181,7 @@ async def main() -> None:
             try:
                 while True:
                     try:
-                        asin, attempt = queue.get_nowait()
+                        (asin, domain), attempt = queue.get_nowait()
                     except asyncio.QueueEmpty:
                         return
                     residential = bool(fallback) and attempt >= DATACENTER_ATTEMPTS
@@ -192,14 +203,14 @@ async def main() -> None:
                         Actor.log.info(f'{asin}: attempt {attempt + 1} error {e}')
                     if result:
                         blocks = max(0, blocks - 1)
-                        await finish(asin, result)
+                        await finish(asin, domain, result)
                     else:
                         blocks += 1
                         await w.retire(residential)
                         if attempt + 1 >= MAX_ATTEMPTS:
-                            await finish(asin, {'asin': asin, 'found': None, 'error': f'Blocked after {MAX_ATTEMPTS} attempts'})
+                            await finish(asin, domain, {'asin': asin, 'found': None, 'error': f'Blocked after {MAX_ATTEMPTS} attempts'})
                         else:
-                            queue.put_nowait((asin, attempt + 1))
+                            queue.put_nowait(((asin, domain), attempt + 1))
                         # adaptive backoff: the more blocks recently, the longer this worker cools down
                         await asyncio.sleep(min(30, 0.5 * 2 ** min(blocks, 6)) * random.uniform(0.5, 1.0))
                         continue
@@ -207,5 +218,9 @@ async def main() -> None:
             finally:
                 await w.close()
 
-        Actor.log.info(f'{len(asins)} ASINs on amazon.{domain} with {concurrency} parallel sessions ({memory_mb} MB)')
+        per_domain: dict[str, int] = {}
+        for _, d in asins:
+            per_domain[d] = per_domain.get(d, 0) + 1
+        markets = ', '.join(f'amazon.{d}: {n}' for d, n in sorted(per_domain.items()))
+        Actor.log.info(f'{len(asins)} ASINs ({markets}) with {concurrency} parallel sessions ({memory_mb} MB)')
         await asyncio.gather(*(run_worker(Worker(i, proxy, fallback)) for i in range(concurrency)))

@@ -7,7 +7,7 @@
       "title": "ASINs",
       "type": "array",
       "editor": "stringList",
-      "description": "Amazon ASINs (10 chars) or product URLs.",
+      "description": "Amazon ASINs (10 chars) or product URLs. A product URL (e.g. https://www.amazon.co.jp/dp/B0...) is scraped on its own marketplace, so one run can mix marketplaces; bare ASINs use the Marketplace field below.",
       "prefill": [
         "B0G7RYP439",
         "B0G7QZ7RMD"
@@ -43,7 +43,7 @@
         "com.br",
         "com.tr"
       ],
-      "description": "Amazon domain suffix (amazon.<marketplace>)."
+      "description": "Amazon domain suffix (amazon.<marketplace>) for bare ASINs. Product URLs keep their own domain."
     },
     "maxConcurrency": {
       "title": "Max concurrency",
