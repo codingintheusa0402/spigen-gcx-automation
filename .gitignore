@@ -31,3 +31,4 @@ _scratch*/
 
 # Claude Code skills/commands live in ClaudeConfig/ (symlinked from ~/.claude); account-synced skills stay local
 ClaudeConfig/skills/synced/
+Scrapers/ASIN_Rating_Daily/state_*.json
