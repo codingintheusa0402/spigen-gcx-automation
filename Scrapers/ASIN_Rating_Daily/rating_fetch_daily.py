@@ -67,13 +67,19 @@ GROUP_A_BOOKS = {
 }
 
 # ---- Group B: rating-only, with primary market + fallback cascade + notes.
+# Primary market = the tab's own "🔽국가 선택" dropdown (read live each run) when it has one,
+# else DE. Fallback order is DE → US → UK → JP minus whichever is primary.
+FALLBACK_ORDER = ["de", "com", "co.uk", "co.jp"]
+_SALES = "1XXIMDNVMPBut8WTCV-4gZt4DSxHmGaRR8GkRejAOGq0"
 GROUP_B_TABS = [
-    # (label, spreadsheet_id, tab, primary_market_code, fallback_codes_in_order)
-    ("iPhone Fold",    "1XXIMDNVMPBut8WTCV-4gZt4DSxHmGaRR8GkRejAOGq0", "iPhone Fold",    "de", ["com", "co.uk", "co.jp"]),
-    ("iPhone 18",      "1XXIMDNVMPBut8WTCV-4gZt4DSxHmGaRR8GkRejAOGq0", "iPhone 18",      "de", ["com", "co.uk", "co.jp"]),
-    ("Apple ETC(26)",  "1XXIMDNVMPBut8WTCV-4gZt4DSxHmGaRR8GkRejAOGq0", "Apple ETC(26)",  "co.uk", ["de", "com", "co.jp"]),
-    ("Pixel 11",       "1XXIMDNVMPBut8WTCV-4gZt4DSxHmGaRR8GkRejAOGq0", "Pixel 11",       "co.uk", ["de", "com", "co.jp"]),
-    ("SKU세일즈/리뷰",     "1_9O8oTHt-yHewG0aGeioeM0psZ2kprf3lgH77-BFLs8", "SKU세일즈/리뷰",     "de", ["com", "co.uk", "co.jp"]),
+    {"label": "iPhone Fold",   "sid": _SALES, "tab": "iPhone Fold",   "dropdown": "C4"},
+    {"label": "iPhone 18",     "sid": _SALES, "tab": "iPhone 18",     "dropdown": "C4"},
+    {"label": "Apple ETC(26)", "sid": _SALES, "tab": "Apple ETC(26)", "dropdown": "C4"},
+    {"label": "Pixel 11",      "sid": _SALES, "tab": "Pixel 11",      "dropdown": "C4"},
+    # Header row 4 says "Asin"; the rating column's label is a merged row-1 cell
+    # ("Amazon.de"), and rows 5-6 are sub-header/formula rows — fixed layout.
+    {"label": "SKU세일즈/리뷰", "sid": "1_9O8oTHt-yHewG0aGeioeM0psZ2kprf3lgH77-BFLs8", "tab": "SKU세일즈/리뷰",
+     "fixed": {"asin_col": "G", "rating_col": "I", "data_start": 7}},
 ]
 
 MARKET_LABEL = {"com": "amazon.com", "co.uk": "amazon.co.uk", "de": "amazon.de", "fr": "amazon.fr",
@@ -129,7 +135,7 @@ def col_idx(letter):
 
 
 HEADER_ALIASES = {
-    "asin": ["ASIN"],
+    "asin": ["ASIN", "Asin"],
     "sku": ["SKU", "SKU "],
     "country": ["국가"],
     "score": ["Score", "Rating"],
@@ -361,50 +367,127 @@ def process_group_a_tab(svc, product, sid, tab, dry_run, pilot_mode, asin_to_sku
             "global_col": global_col, "row_info": row_info}
 
 
+_SC_LATEST_CACHE = {}
+
+
+def load_sc_latest(svc, sid):
+    """Each Group A book still has its SC_latest tab (latest Product Rating / Ratings Count per
+    ASIN+국가, derived from review scraping) — used only as a fallback when the actor returns
+    nothing for a row, so a blocked/failed fetch never blanks a value the old formula had."""
+    if sid in _SC_LATEST_CACHE:
+        return _SC_LATEST_CACHE[sid]
+    out = {}
+    try:
+        resp = svc.spreadsheets().values().get(
+            spreadsheetId=sid, range="'SC_latest'!A1:E", valueRenderOption="UNFORMATTED_VALUE"
+        ).execute(num_retries=8)
+        rows = resp.get("values", [])
+        hdr = rows[0] if rows else []
+        ia, ic, ir, ik = (hdr.index(h) if h in hdr else None for h in ("ASIN", "국가", "Product Rating", "Ratings Count"))
+        if None not in (ia, ic, ir, ik):
+            for row in rows[1:]:
+                if len(row) <= max(ia, ic, ir, ik):
+                    continue
+                m = MARKET_CODE.get(str(row[ic]).strip().upper())
+                a = str(row[ia]).strip()
+                if a and m and row[ir] not in ("", None):
+                    out[(a, m)] = (row[ir], row[ik])
+    except Exception as e:
+        log(f"  SC_latest read failed for {sid}: {e}")
+    _SC_LATEST_CACHE[sid] = out
+    return out
+
+
+def _segments(row_values):
+    """[(row_num, value_or_None)] -> contiguous [(first_row, [values])] skipping None."""
+    segs, cur_start, cur = [], None, []
+    prev = None
+    for row_num, val in row_values:
+        if val is None or (prev is not None and row_num != prev + 1):
+            if cur:
+                segs.append((cur_start, cur))
+            cur_start, cur = None, []
+        if val is not None:
+            if cur_start is None:
+                cur_start = row_num
+            cur.append(val)
+        prev = row_num
+    if cur:
+        segs.append((cur_start, cur))
+    return segs
+
+
 def write_group_a_results(svc, sid, tab, info, results, dry_run, stats):
     score_col, global_col = info["score_col"], info["global_col"]
-    values_rows = []
+    sc_latest = None
+    row_values = []
     for row_num, asin, market in info["row_info"]:
-        rating, count = "", ""
+        val = None
         if asin and market:
             r = results.get(market, {}).get(asin)
             if r and r.get("found"):
-                rating, count = r.get("rating", ""), r.get("ratingsCount", "")
-        values_rows.append([rating, count])
-    if not values_rows:
+                val = [r.get("rating", ""), r.get("ratingsCount", "")]
+                stats["group_a_actor_values"] += 1
+            else:
+                if sc_latest is None:
+                    sc_latest = load_sc_latest(svc, sid)
+                fb = sc_latest.get((asin, market))
+                if fb:
+                    val = [fb[0], fb[1]]
+                    stats["group_a_sc_latest_fallback"] += 1
+                else:
+                    stats["group_a_kept_existing"] += 1
+        row_values.append((row_num, val))
+    segs = _segments(row_values)
+    stats["cells_written"] += sum(len(v) for _, v in segs) * 2
+    if dry_run or not segs:
         return
-    first_row = info["row_info"][0][0]
-    last_row = info["row_info"][-1][0]
-    stats["cells_written"] += len(values_rows) * 2
-    if dry_run:
-        return
-    svc.spreadsheets().values().update(
-        spreadsheetId=sid, range=f"'{tab}'!{score_col}{first_row}:{global_col}{last_row}",
-        valueInputOption="RAW", body={"values": values_rows}
+    data = [{"range": f"'{tab}'!{score_col}{start}:{global_col}{start + len(vals) - 1}", "values": vals}
+            for start, vals in segs]
+    svc.spreadsheets().values().batchUpdate(
+        spreadsheetId=sid, body={"valueInputOption": "RAW", "data": data}
     ).execute(num_retries=8)
 
 
 # ---------------------------------------------------------------- Group B
-def process_group_b_tab(svc, label, sid, tab, primary, fallbacks, dry_run, stats, needed_by_market):
-    header_row, cols = find_header(svc, sid, tab, want=("asin", "sku", "score"))
-    if header_row is None or "asin" not in cols or "score" not in cols:
-        log(f"[B:{label}] SKIP — header not found")
-        stats["skipped_tabs"].append(f"B:{label} (no header)")
-        return None
-    asin_col, rating_col = cols["asin"], cols["score"]
-    last_row = last_data_row(svc, sid, tab, asin_col, header_row)
-    if last_row <= header_row:
+def process_group_b_tab(svc, cfg, dry_run, stats, needed_by_market):
+    label, sid, tab = cfg["label"], cfg["sid"], cfg["tab"]
+    fixed = cfg.get("fixed")
+    if fixed:
+        asin_col, rating_col, data_start = fixed["asin_col"], fixed["rating_col"], fixed["data_start"]
+    else:
+        header_row, cols = find_header(svc, sid, tab, want=("asin", "sku", "score"))
+        if header_row is None or "asin" not in cols or "score" not in cols:
+            log(f"[B:{label}] SKIP — header not found")
+            stats["skipped_tabs"].append(f"B:{label} (no header)")
+            return None
+        asin_col, rating_col, data_start = cols["asin"], cols["score"], header_row + 1
+
+    primary = "de"
+    if cfg.get("dropdown"):
+        v = read_formula(svc, sid, tab, cfg["dropdown"])
+        primary = MARKET_CODE.get(str(v).strip().upper(), "de")
+    fallbacks = [m for m in FALLBACK_ORDER if m != primary]
+
+    last_row = last_data_row(svc, sid, tab, asin_col, data_start - 1)
+    if last_row < data_start:
         return None
     resp = svc.spreadsheets().values().get(
-        spreadsheetId=sid, range=f"'{tab}'!{asin_col}{header_row+1}:{asin_col}{last_row}",
+        spreadsheetId=sid, range=f"'{tab}'!{asin_col}{data_start}:{asin_col}{last_row}",
         valueRenderOption="UNFORMATTED_VALUE"
     ).execute(num_retries=8)
-    asins = [str(r[0]).strip() if r else "" for r in resp.get("values", [])]
+    vals = resp.get("values", [])
+    asins = []
+    for i in range(last_row - data_start + 1):
+        a = str(vals[i][0]).strip() if i < len(vals) and vals[i] else ""
+        # ASIN-shaped only (skips 'TBU', '#N/A', blanks from formula ASIN cells)
+        asins.append(a if len(a) == 10 and a.isalnum() else "")
     for a in asins:
         if a:
             needed_by_market.setdefault(primary, set()).add(a)
-    return {"header_row": header_row, "last_row": last_row, "asin_col": asin_col,
-            "rating_col": rating_col, "asins": asins, "primary": primary, "fallbacks": fallbacks}
+    log(f"[B:{label}] primary={primary} fallbacks={fallbacks} asins={sum(1 for a in asins if a)}")
+    return {"data_start": data_start, "last_row": last_row, "rating_col": rating_col,
+            "asins": asins, "primary": primary, "fallbacks": fallbacks}
 
 
 def resolve_group_b_value(asin, primary, fallbacks, results):
@@ -419,49 +502,46 @@ def resolve_group_b_value(asin, primary, fallbacks, results):
 
 
 def write_group_b_results(svc, sid, tab, info, results, dry_run, stats):
+    """Writes =HYPERLINK("https://www.amazon.<market used>/dp/<ASIN>", rating) — the same
+    format the old GAS jobs wrote — only on rows with a fresh result; rows with none keep
+    their existing cell untouched. Note set on fallback-sourced cells, cleared otherwise."""
     rating_col = info["rating_col"]
-    first_row = info["header_row"] + 1
-    last_row = info["last_row"]
-    cell_data = []
+    row_cells = []
     fallback_used = 0
-    for asin in info["asins"]:
+    for i, asin in enumerate(info["asins"]):
+        row_num = info["data_start"] + i
         if not asin:
-            cell_data.append({"userEnteredValue": {}, "note": None})
+            row_cells.append((row_num, None))
             continue
-        rating, used_market = resolve_group_b_value(asin, info["primary"], info["fallbacks"], results)
+        rating, used = resolve_group_b_value(asin, info["primary"], info["fallbacks"], results)
         if rating is None:
-            cell_data.append({"userEnteredValue": {}, "note": None})
+            stats["group_b_kept_existing"] += 1
+            row_cells.append((row_num, None))
             continue
-        cell = {"userEnteredValue": {"numberValue": float(rating)}}
-        if used_market != info["primary"]:
-            cell["note"] = f"Rating from {MARKET_LABEL.get(used_market, used_market)} — {MARKET_LABEL.get(info['primary'], info['primary'])} not found"
+        cell = {"userEnteredValue": {"formulaValue": f'=HYPERLINK("https://www.{MARKET_LABEL.get(used, "amazon." + used)}/dp/{asin}",{rating})'}}
+        if used != info["primary"]:
+            cell["note"] = (f"Rating from {MARKET_LABEL.get(used, used)} — "
+                            f"{MARKET_LABEL.get(info['primary'], info['primary'])} not found")
             fallback_used += 1
         else:
-            cell["note"] = None
-        cell_data.append(cell)
+            cell["note"] = ""
+        row_cells.append((row_num, cell))
 
-    stats["cells_written"] += len(cell_data)
+    segs = _segments(row_cells)
+    stats["cells_written"] += sum(len(v) for _, v in segs)
     stats["group_b_fallback_used"] += fallback_used
-    if dry_run:
+    if dry_run or not segs:
         return
-
     meta = svc.spreadsheets().get(spreadsheetId=sid, fields="sheets(properties(sheetId,title))").execute(num_retries=8)
     sheet_id = next(s["properties"]["sheetId"] for s in meta["sheets"] if s["properties"]["title"] == tab)
     col0 = col_idx(rating_col)
-    req = {
-        "requests": [{
-            "updateCells": {
-                "rows": [{"values": [c]} for c in cell_data],
-                "fields": "userEnteredValue,note",
-                "range": {
-                    "sheetId": sheet_id,
-                    "startRowIndex": first_row - 1, "endRowIndex": last_row,
-                    "startColumnIndex": col0, "endColumnIndex": col0 + 1,
-                }
-            }
-        }]
-    }
-    svc.spreadsheets().batchUpdate(spreadsheetId=sid, body=req).execute(num_retries=8)
+    reqs = [{"updateCells": {
+        "rows": [{"values": [c]} for c in cells],
+        "fields": "userEnteredValue,note",
+        "range": {"sheetId": sheet_id, "startRowIndex": start - 1, "endRowIndex": start - 1 + len(cells),
+                  "startColumnIndex": col0, "endColumnIndex": col0 + 1},
+    }} for start, cells in segs]
+    svc.spreadsheets().batchUpdate(spreadsheetId=sid, body={"requests": reqs}).execute(num_retries=8)
 
 
 # ---------------------------------------------------------------- Chat report
@@ -477,7 +557,10 @@ def post_chat_summary(stats, run_label, pilot_mode, dry_run):
                  (f" — {stats['migrated_tabs']}" if stats['migrated_tabs'] else ""))
     lines.append(f"Tabs skipped: {len(stats['skipped_tabs'])}" + (f" — {stats['skipped_tabs']}" if stats['skipped_tabs'] else ""))
     lines.append(f"ASIN_Master fallback resolved: {stats['asin_master_resolved']}, still unresolved: {stats['unresolved_rows']}")
-    lines.append(f"Group B fallback-market substitutions: {stats['group_b_fallback_used']}")
+    lines.append(f"Group A rows: actor value {stats['group_a_actor_values']}, "
+                 f"SC_latest fallback {stats['group_a_sc_latest_fallback']}, kept existing {stats['group_a_kept_existing']}")
+    lines.append(f"Group B fallback-market substitutions: {stats['group_b_fallback_used']} (noted on cell), "
+                 f"kept existing (no result anywhere): {stats['group_b_kept_existing']}")
     if stats["errors"]:
         lines.append(f"Errors: {stats['errors']}")
     if stats.get("pilot_failed"):
@@ -507,7 +590,9 @@ def main():
 
     stats = {"actor_calls": 0, "actor_calls_by_market": {}, "cells_written": 0,
              "migrated_tabs": [], "skipped_tabs": [], "asin_master_resolved": 0,
-             "unresolved_rows": 0, "group_b_fallback_used": 0, "errors": [], "pilot_failed": False}
+             "unresolved_rows": 0, "group_b_fallback_used": 0, "errors": [], "pilot_failed": False,
+             "group_a_actor_values": 0, "group_a_sc_latest_fallback": 0, "group_a_kept_existing": 0,
+             "group_b_kept_existing": 0}
 
     log(f"=== rating_fetch_daily.py start — label={args.run_label} pilot={args.pilot_only} commit={args.commit} ===")
     svc = get_sheets_service()
@@ -538,10 +623,10 @@ def main():
                 return 1
 
     if not args.pilot_only:
-        for label, sid, tab, primary, fallbacks in GROUP_B_TABS:
-            info = process_group_b_tab(svc, label, sid, tab, primary, fallbacks, dry_run, stats, needed_by_market)
+        for cfg in GROUP_B_TABS:
+            info = process_group_b_tab(svc, cfg, dry_run, stats, needed_by_market)
             if info:
-                tab_infos.append(("B", label, sid, tab, info))
+                tab_infos.append(("B", cfg["label"], cfg["sid"], cfg["tab"], info))
 
     # Fetch all primary-market needs
     results = {}
