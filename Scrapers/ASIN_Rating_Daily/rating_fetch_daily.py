@@ -797,8 +797,9 @@ def main():
                     log(f"  top-up marketplace={market}: {len(gap)} ASINs not in task results")
                     results.setdefault(market, {}).update(fetch_market(gap, market, stats))
 
-    # Group B fallback cascade: find not-found ASINs on primary, fetch fallbacks
-    if not args.pilot_only:
+    # Group B fallback cascade: find not-found ASINs on primary, fetch fallbacks.
+    # Skipped on dry-run: no primary results exist then, so every ASIN would look not-found (billed calls).
+    if not args.pilot_only and not dry_run:
         for kind, label, sid, tab, info in tab_infos:
             if kind != "B":
                 continue
