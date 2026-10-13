@@ -69,7 +69,33 @@ struct MeshWebView: UIViewRepresentable {
 
     final class Coord: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         var parent: MeshWebView; weak var web: WKWebView?; var index = 0; var tried = 0; var lastAttempt = 0; var lastError = ""
-        init(_ p: MeshWebView) { parent = p; lastAttempt = p.attempt }
+        init(_ p: MeshWebView) {
+            parent = p; lastAttempt = p.attempt; super.init()
+            // on a fallback host (e.g. the server while the Mac was off): every 60 s ask the hosts listed
+            // before it whether they answer again, and move back to the first one that does
+            preferTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.tryPreferred() }
+        }
+        deinit { preferTimer?.invalidate() }
+        private var preferTimer: Timer?
+        private var probing = false
+        func tryPreferred() {
+            guard index > 0, !probing, UIApplication.shared.applicationState == .active else { return }
+            let better = Array(parent.urls.prefix(index)); probing = true
+            func probe(_ k: Int) {
+                guard k < better.count else { probing = false; return }
+                var r = URLRequest(url: better[k]); r.timeoutInterval = 4; r.cachePolicy = .reloadIgnoringLocalCacheData
+                URLSession.shared.dataTask(with: r) { [weak self] _, resp, _ in
+                    DispatchQueue.main.async {
+                        guard let self else { return }
+                        if (resp as? HTTPURLResponse)?.statusCode == 200 {
+                            NSLog("GCXMESH preferred host back → %@", better[k].host ?? "?")
+                            self.probing = false; self.tried = 0; self.load(index: k)
+                        } else { probe(k + 1) }
+                    }
+                }.resume()
+            }
+            probe(0)
+        }
         /// Load host `i`; after every host has been tried once without an answer, show the failed screen.
         func load(index i: Int) {
             let n = parent.urls.count
