@@ -9,12 +9,7 @@ ssh -o ConnectTimeout=10 $H true || { echo "SERVER UNREACHABLE"; exit 2; }
 cd ~ && tar --exclude='*.bak-*' --exclude='__pycache__' --exclude='.DS_Store' -czf - \
   .claude/settings.json .claude/statusline.sh CLAUDE.md 2>/dev/null \
   | ssh $H 'tar xzf - -C ~ 2>/dev/null'
-# memory: merged both ways, per file the newer copy wins, nothing deleted (server-only notes survive)
-for m in -Users-kevinkim -Users-kevinkim-Desktop-GCX; do
-  t="-home-kevinkim${m#-Users-kevinkim}"; mkdir -p ~/.claude/projects/$m/memory
-  rsync -au --exclude=.DS_Store "$H:.claude/projects/$t/memory/" ~/.claude/projects/$m/memory/ 2>/dev/null
-  rsync -au --exclude=.DS_Store ~/.claude/projects/$m/memory/ "$H:.claude/projects/$t/memory/" 2>/dev/null
-done
+python3 ~/.claude/skills/run-on-server/sync_memory.py >/dev/null 2>&1 || echo "memory merge failed"   # two-way, never deletes
 cd ~ && tar --exclude='.DS_Store' -czf - .claude/plugins 2>/dev/null | ssh $H 'tar xzf - -C ~ 2>/dev/null'
 bash ~/.claude/skills/run-on-server/sync_transcripts.sh >/dev/null 2>&1 &   # session history, in the background
 echo "claude config/skills/plugins/memory: synced (transcripts syncing in background)"
