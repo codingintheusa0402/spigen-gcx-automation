@@ -142,7 +142,7 @@ def find_header(svc, sid, tab, max_rows=10, want=("asin", "sku", "country", "sco
     Returns (header_row_1based, {field: col_letter}) or (None, {}) if not found."""
     resp = svc.spreadsheets().values().get(
         spreadsheetId=sid, range=f"'{tab}'!A1:Z{max_rows}", valueRenderOption="UNFORMATTED_VALUE"
-    ).execute()
+    ).execute(num_retries=8)
     rows = resp.get("values", [])
     for r_idx, row in enumerate(rows):
         norm = {str(c).strip(): c_idx for c_idx, c in enumerate(row) if isinstance(c, str) and c.strip()}
@@ -160,7 +160,7 @@ def find_header(svc, sid, tab, max_rows=10, want=("asin", "sku", "country", "sco
 def read_formula(svc, sid, tab, a1_range):
     resp = svc.spreadsheets().values().get(
         spreadsheetId=sid, range=f"'{tab}'!{a1_range}", valueRenderOption="FORMULA"
-    ).execute()
+    ).execute(num_retries=8)
     vals = resp.get("values", [])
     return vals[0][0] if vals and vals[0] else ""
 
@@ -169,7 +169,7 @@ def last_data_row(svc, sid, tab, asin_col_letter, header_row):
     resp = svc.spreadsheets().values().get(
         spreadsheetId=sid, range=f"'{tab}'!{asin_col_letter}{header_row+1}:{asin_col_letter}5000",
         valueRenderOption="UNFORMATTED_VALUE"
-    ).execute()
+    ).execute(num_retries=8)
     vals = resp.get("values", [])
     last = header_row
     for i, row in enumerate(vals):
@@ -197,11 +197,11 @@ def migrate_arrayformula_if_present(svc, sid, tab, header_row, score_col, global
         migrated = True
         log(f"  [{tab}] migrating {label} col {col}: clearing ARRAYFORMULA at row {owner_row}, writing plain header")
         if not dry_run:
-            svc.spreadsheets().values().clear(spreadsheetId=sid, range=f"'{tab}'!{col}{owner_row}").execute()
+            svc.spreadsheets().values().clear(spreadsheetId=sid, range=f"'{tab}'!{col}{owner_row}").execute(num_retries=8)
             svc.spreadsheets().values().update(
                 spreadsheetId=sid, range=f"'{tab}'!{col}{header_row}",
                 valueInputOption="RAW", body={"values": [[label]]}
-            ).execute()
+            ).execute(num_retries=8)
     return migrated
 
 
@@ -214,7 +214,7 @@ def verify_no_errors(svc, sid, tab, score_col, global_col, header_row, last_row)
         resp = svc.spreadsheets().values().get(
             spreadsheetId=sid, range=f"'{tab}'!{col}{header_row}:{col}{last_row}",
             valueRenderOption="FORMATTED_VALUE"
-        ).execute()
+        ).execute(num_retries=8)
         for i, row in enumerate(resp.get("values", [])):
             v = row[0] if row else ""
             if isinstance(v, str) and v.startswith("#"):
@@ -267,7 +267,7 @@ def fetch_market(asins, marketplace, stats):
 def load_asin_master(svc):
     resp = svc.spreadsheets().values().get(
         spreadsheetId=ASIN_MASTER_ID, range=f"'{ASIN_MASTER_TAB}'!A1:J", valueRenderOption="UNFORMATTED_VALUE"
-    ).execute()
+    ).execute(num_retries=8)
     rows = resp.get("values", [])
     if not rows:
         return {}, {}
@@ -324,7 +324,7 @@ def process_group_a_tab(svc, product, sid, tab, dry_run, pilot_mode, asin_to_sku
     # Read ASIN/SKU/country columns for all data rows
     cols_needed = sorted(set(filter(None, [asin_col, sku_col, country_col])))
     read_range = f"'{tab}'!{cols_needed[0]}{header_row+1}:{cols_needed[-1]}{last_row}"
-    resp = svc.spreadsheets().values().get(spreadsheetId=sid, range=read_range, valueRenderOption="UNFORMATTED_VALUE").execute()
+    resp = svc.spreadsheets().values().get(spreadsheetId=sid, range=read_range, valueRenderOption="UNFORMATTED_VALUE").execute(num_retries=8)
     rows = resp.get("values", [])
 
     def rel(letter):
@@ -381,7 +381,7 @@ def write_group_a_results(svc, sid, tab, info, results, dry_run, stats):
     svc.spreadsheets().values().update(
         spreadsheetId=sid, range=f"'{tab}'!{score_col}{first_row}:{global_col}{last_row}",
         valueInputOption="RAW", body={"values": values_rows}
-    ).execute()
+    ).execute(num_retries=8)
 
 
 # ---------------------------------------------------------------- Group B
@@ -398,7 +398,7 @@ def process_group_b_tab(svc, label, sid, tab, primary, fallbacks, dry_run, stats
     resp = svc.spreadsheets().values().get(
         spreadsheetId=sid, range=f"'{tab}'!{asin_col}{header_row+1}:{asin_col}{last_row}",
         valueRenderOption="UNFORMATTED_VALUE"
-    ).execute()
+    ).execute(num_retries=8)
     asins = [str(r[0]).strip() if r else "" for r in resp.get("values", [])]
     for a in asins:
         if a:
@@ -445,7 +445,7 @@ def write_group_b_results(svc, sid, tab, info, results, dry_run, stats):
     if dry_run:
         return
 
-    meta = svc.spreadsheets().get(spreadsheetId=sid, fields="sheets(properties(sheetId,title))").execute()
+    meta = svc.spreadsheets().get(spreadsheetId=sid, fields="sheets(properties(sheetId,title))").execute(num_retries=8)
     sheet_id = next(s["properties"]["sheetId"] for s in meta["sheets"] if s["properties"]["title"] == tab)
     col0 = col_idx(rating_col)
     req = {
@@ -461,7 +461,7 @@ def write_group_b_results(svc, sid, tab, info, results, dry_run, stats):
             }
         }]
     }
-    svc.spreadsheets().batchUpdate(spreadsheetId=sid, body=req).execute()
+    svc.spreadsheets().batchUpdate(spreadsheetId=sid, body=req).execute(num_retries=8)
 
 
 # ---------------------------------------------------------------- Chat report
