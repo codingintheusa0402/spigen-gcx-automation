@@ -15,8 +15,8 @@ Get the **star rating** and **total ratings count** for any list of Amazon ASINs
 `found: false` = the ASIN doesn't exist / is delisted. `found: null` + `error` = Amazon blocked every retry (not charged).
 
 ## Input
-- **ASINs** — plain ASINs or product URLs (duplicates removed)
-- **Marketplace** — `com`, `co.uk`, `de`, `fr`, `it`, `es`, `co.jp`, `in`, `ca`, `com.au`, … (19 domains)
+- **ASINs** — plain ASINs or product URLs (duplicates removed). A product URL is scraped on its own marketplace, so one run can cover several countries: `https://www.amazon.de/dp/B0…`, `https://www.amazon.co.jp/dp/B0…`
+- **Marketplace** — for plain ASINs: `com`, `co.uk`, `de`, `fr`, `it`, `es`, `co.jp`, `in`, `ca`, `com.au`, … (19 domains)
 - **Max concurrency** — default 40 parallel sessions, max 50 (auto-capped to the run's memory: ~1 session per 12 MB)
 - **Proxy** — residential proxies recommended (default)
 
