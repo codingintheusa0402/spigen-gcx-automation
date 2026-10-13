@@ -113,7 +113,7 @@ def launch_pipeline():
     launch_cmd = f"""
 bash ~/tmux_start.sh >/dev/null 2>&1
 tmux kill-window -t gcx:{TASK_NAME} 2>/dev/null
-tmux new-window -t gcx -n {TASK_NAME} 'cd ~ && export PATH=$HOME/.local/bin:$PATH DISPLAY=:0 WAYLAND_DISPLAY=wayland-0; claude --remote-control gcx-{TASK_NAME} "$(cat {prompt_path})"; echo; echo "[session ended]"; exec bash'
+tmux new-window -t gcx: -n {TASK_NAME} 'cd ~ && export PATH=$HOME/.local/bin:$PATH DISPLAY=:0 WAYLAND_DISPLAY=wayland-0; claude --remote-control gcx-{TASK_NAME} "$(cat {prompt_path})"; echo; echo "[session ended]"; exec bash'
 """
     subprocess.run(["bash", "-c", launch_cmd], check=True)
     print(f"launched gcx:{TASK_NAME}")
@@ -154,7 +154,13 @@ def main():
     else:
         print(f"{today} on-time launch")
 
-    launch_pipeline()
+    try:
+        launch_pipeline()
+    except Exception:
+        # Launch failed -> un-mark today so the next 5-min tick retries instead of silently skipping.
+        state["last_run_date"] = None
+        save_state(state)
+        raise
 
 
 if __name__ == "__main__":
