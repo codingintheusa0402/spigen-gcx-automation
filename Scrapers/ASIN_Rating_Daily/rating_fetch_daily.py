@@ -28,7 +28,8 @@ os.makedirs(STATE_DIR, exist_ok=True)
 LOG_PATH = os.path.join(STATE_DIR, "run.log")
 
 APIFY_ACTOR = "2AuZCyLxKZuO2OyNY"
-APIFY_TOKEN = open(os.path.expanduser("~/.config/apify_asin_scraper/token")).read().strip()
+# Spigen org (VcBFJzbYkjQNDOtr0) so runs + billing show in the org console, not cosmic_meteorite's.
+APIFY_TOKEN = open(os.path.expanduser("~/.config/apify_spigen/token")).read().strip()
 APIFY_API = "https://api.apify.com/v2"
 
 GWS_TOKEN_PATH = os.path.expanduser("~/.config/gws_shim/token.json")
