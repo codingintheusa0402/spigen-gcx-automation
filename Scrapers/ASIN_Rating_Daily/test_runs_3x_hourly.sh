@@ -10,5 +10,5 @@ for n in $RUNS; do
   target=$((BASE + (n - 1) * 3600))
   now=$(date +%s)
   [ "$target" -gt "$now" ] && sleep $((target - now))
-  python3 -I rating_fetch_daily.py --commit --source tasks-run --run-label "test $n/3 (saved Apify tasks, Spigen org)" >> ~/.config/asin_rating_daily/run.log 2>&1
+  python3 -I rating_fetch_daily.py --commit --source tasks-run --run-label "test $n/3 (per-sheet Apify tasks, Spigen org)" >> ~/.config/asin_rating_daily/run.log 2>&1
 done
