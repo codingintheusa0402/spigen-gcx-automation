@@ -7,6 +7,7 @@ const pty = require('node-pty');
 const { Collector } = require('./collector');
 const { EventEmitter } = require('events');
 const { createPhoneServer } = require('./phone-server');
+const { createPeer } = require('./peer');             // the GCX server: one mesh on the iPhone whichever machine serves it
 const { createCore, cleanEnv, loginShell } = require('./core');
 const ptyBus = new EventEmitter(); ptyBus.setMaxListeners(50);   // pty output fan-out (desktop + phone terminals)
 let lastSnap = null, phone = null;
@@ -226,9 +227,11 @@ ipcMain.handle('clip:read', async () => {
 ipcMain.handle('usage:refresh', () => refreshUsage(true));
 
 // ---------------- phone access (phone-server.js) ----------------
+let peerLink = null;
 function initPhone() {
+  peerLink = createPeer({ userData: app.getPath('userData'), selfKind: 'mac' }); peerLink.start();
   phone = createPhoneServer({
-    root: __dirname, userData: app.getPath('userData'), ptys, ptyBus,
+    root: __dirname, userData: app.getPath('userData'), ptys, ptyBus, peer: peerLink,
     getSnap: () => lastSnap,
     getHistory: () => scanHistory(),
     details: sid => sessionDetails(sid),

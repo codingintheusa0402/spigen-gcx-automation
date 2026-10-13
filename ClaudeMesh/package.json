@@ -52,6 +52,7 @@
       "collector.js",
       "core.js",
       "phone-server.js",
+      "peer.js",
       "schedules.js",
       "gasConstants.js",
       "gas.js",
