@@ -23,7 +23,7 @@ const { createPhoneServer } = require(path.join(ROOT, 'phone-server'));
 const { createCore, linuxToken, HOME } = require(path.join(ROOT, 'core'));
 const { createPeer } = require(path.join(ROOT, 'peer'));
 
-const USERDATA = path.join(HOME, '.gcx-mesh');
+const USERDATA = process.env.MESH_USERDATA || path.join(HOME, '.gcx-mesh');   // env override: isolated test runs
 const PANES = path.join(USERDATA, 'panes');
 const TMUX_SESSION = 'gcx';
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
@@ -124,6 +124,12 @@ async function interruptSession(sid) {
 }
 // "Resume on the server": a new tmux window in the gcx session (same flags GCX Mesh gives every session)
 function resumeHere(sid) {
+  const live = liveSession(sid);                                     // already running here → never a second copy
+  if (live) return { ok: true, pane: live.owner || null, already: true };
+  const projDir = path.join(HOME, '.claude', 'projects');
+  const hasTranscript = !!core.histEntry(sid) || (fs.existsSync(projDir) &&
+    fs.readdirSync(projDir).some(d => fs.existsSync(path.join(projDir, d, sid + '.jsonl'))));
+  if (!/^[0-9a-f-]{36}$/.test(sid) || !hasTranscript) return { ok: false, err: 'history not on this machine yet' };
   const h = core.histEntry(sid), cwd = (h && h.cwd && fs.existsSync(h.cwd)) ? h.cwd : HOME;
   const name = ((h && (h.title || h.aiTitle || h.first)) || sid.slice(0, 8)).replace(/[^\w가-힣 -]/g, '').trim().slice(0, 18) || sid.slice(0, 8);
   if (!tmuxSync(['has-session', '-t', TMUX_SESSION]) && !panes.size) tmuxSync(['new-session', '-d', '-s', TMUX_SESSION]);

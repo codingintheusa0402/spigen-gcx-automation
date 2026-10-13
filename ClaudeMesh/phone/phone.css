@@ -135,3 +135,7 @@ body[data-view="grid"] #grid { display: grid; position: fixed; left: 0; right: 0
 .gbar { height: 2px; background: rgba(255,255,255,.1); border-radius: 1px; overflow: hidden; } .gbar > div { height: 100%; }
 .gl { font-size: 11.5px; color: var(--dim); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.7em; }
 #gAgents { grid-column: 1 / -1; }
+
+/* sessions from the other machine (peer.js) */
+.peerTag { color: #c9a7ff; font-weight: 600; }
+.dot.offline { background: #555b6e; box-shadow: none; }

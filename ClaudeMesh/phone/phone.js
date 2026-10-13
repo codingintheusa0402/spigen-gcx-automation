@@ -23,6 +23,8 @@ Object.defineProperty(window, 'devicePixelRatio', { get: () => Math.min(2, realD
 let snap = { sessions: [], models: [], agents: [] }, selected = null, openTab = 'mesh';
 // which machine serves this page: the Mac app, or the server program (server/mesh-server.js) — wording follows it
 const onServer = () => !!(snap.host && snap.host.kind === 'server');
+// a session running on the OTHER machine (merged in by peer.js): "on Mac" / "on server", greyed when offline
+const PEERTAG = s => s.onPeer ? ` · <b class="peerTag">on ${s.hostKind === 'mac' ? 'Mac' : 'server'}${s.offline ? ' (offline)' : ''}</b>` : '';
 const HOSTN = () => onServer() ? 'the server' : 'your Mac', INAPP = () => onServer() ? 'tmux' : 'in-app', TERMN = () => onServer() ? 'shell' : 'Terminal.app';
 // the native iPhone shell listens here: 'offline' → it tries the next paired host (Mac ↔ server)
 const native = msg => { try { webkit.messageHandlers.mesh.postMessage(msg); } catch { } };
@@ -151,7 +153,7 @@ function renderSessions(open) {
   const S = snap.sessions, A = snap.agents || [];
   const html = `<div class="sh-h"><h2>Sessions · ${S.length}</h2><button class="x">×</button></div>` +
     (S.map(s => `<div class="item" data-sid="${s.sid}"><span class="dot ${s.health}"></span><div class="t"><div class="n">${esc(s.name)}</div>
-      <div class="m">${esc((s.model || '—').replace('claude-', ''))} · ${fmt$(s.todayUsd)} · ${s.health === 'working' ? Math.round(s.tps) + ' tok/s' : s.health}${s.owner ? ' · ' + INAPP() : ''}</div></div>›</div>`).join('') || '<div class="m" style="padding:14px 4px;color:var(--dim)">No Claude Code sessions running.</div>') +
+      <div class="m">${esc((s.model || '—').replace('claude-', ''))} · ${fmt$(s.todayUsd)} · ${s.health === 'working' ? Math.round(s.tps) + ' tok/s' : s.health}${s.owner ? ' · ' + INAPP() : ''}${PEERTAG(s)}</div></div>›</div>`).join('') || '<div class="m" style="padding:14px 4px;color:var(--dim)">No Claude Code sessions running.</div>') +
     (A.length ? `<h3>Agents</h3>` + A.map(a => `<div class="item"><span class="dot ${a.state === 'running' ? 'working' : 'waiting'}"></span><div class="t"><div class="n">${esc(a.name || a.id)}</div><div class="m">${esc(a.state || '')}</div></div></div>`).join('') : '');
   if (open || sheetKind === 'sessions') { sheet('sessions', html); document.querySelectorAll('#sheetBody .item[data-sid]').forEach(el => el.onclick = () => openSession(el.dataset.sid)); }
 }
@@ -163,8 +165,17 @@ function openSession(sid) { selected = sid; viz.selected = sid; openTab = 'sessi
 function renderSession(first) {
   const s = cur();
   if (!s) { if (first) sheet('session', `<div class="sh-h"><h2>Session ended</h2><button class="x">×</button></div>`); return; }
+  if (s.onPeer && s.offline) {
+    const where = s.hostKind === 'mac' ? 'your Mac' : 'the server';
+    sheet('session', `<div class="sh-h"><span class="dot offline"></span><h2>${esc(s.name)}</h2><button class="x">×</button></div>
+      <div class="meta"><span>${esc(s.model || '')}</span><span>${esc((s.cwd || '').replace(/^\/(Users|home)\/[^/]+/, '~'))}</span></div>
+      <p class="m" style="margin:10px 0">This session runs on ${where}, which is offline right now. Continue the same conversation here on ${HOSTN()}?</p>
+      <div class="row"><button class="primary" id="sHere">Resume here</button></div>`);
+    $('#sHere').onclick = async () => { const r = await api('/api/resume', { sid: s.sid }); toast(r.ok === false ? `Couldn't resume — its history hasn't reached ${HOSTN()} yet` : `Resuming on ${HOSTN()}…`); closeSheet(); };
+    return;
+  }
   const can = !!(s.owner || (s.tty && s.kind !== 'bg')), col = FAMILY_COLOR[s.family] || '#9fb4d8', pct = s.ctxMax ? s.ctx / s.ctxMax * 100 : 0;
-  const stats = `<div class="meta"><span style="color:${col}">${esc(s.model || 'no model yet')}</span><span style="color:${HEALTH_COLOR[s.health]}">${esc(s.health)}</span><span>${s.owner ? INAPP() : s.kind === 'bg' ? 'background' : TERMN()}</span><span>${esc((s.cwd || '').replace(/^\/Users\/[^/]+/, '~'))}</span></div>
+  const stats = `<div class="meta"><span style="color:${col}">${esc(s.model || 'no model yet')}</span><span style="color:${HEALTH_COLOR[s.health]}">${esc(s.health)}</span><span>${s.owner ? INAPP() : s.kind === 'bg' ? 'background' : TERMN()}</span><span>${esc((s.cwd || '').replace(/^\/Users\/[^/]+/, '~'))}</span>${s.onPeer ? `<span class="peerTag">on ${s.hostKind === 'mac' ? 'Mac' : 'server'}</span>` : ''}</div>
     <div class="kpis"><div class="kpi"><div class="l">Speed</div><div class="v">${Math.round(s.tps)}<small> t/s</small></div></div>
       <div class="kpi"><div class="l">Today</div><div class="v">${fmt$(s.todayUsd)}</div></div><div class="kpi"><div class="l">Session</div><div class="v">${fmt$(s.totalUsd)}</div></div></div>
     <div class="meta" style="justify-content:space-between;margin:0"><span>Context</span><span>${Math.round(pct)}%</span></div>
