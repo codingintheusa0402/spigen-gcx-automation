@@ -231,6 +231,13 @@ Given Zendesk ticket info (scraped page text or manual input), write a
   #1000163178 JP, #1000163730 NL, #1000162196 BE, #1000163038 AU→SQ 이관). EU(UK 제외)
   MCF는 관세 별도 부과 없음(#1000162869).
 - **MCF 결론 시 재고 수량을 근거에 명시** (실제 컨펌 대부분 `MCF 재고 N개 확인`). 재고 0이면 환불.
+  **MCF 재고 출처 (사용자 지시 2026-10-13, /revision row 30):** MCF 재고는 Caspi의 일반 EU FBA 재고
+  (`FBA_MYI_UNSUPPRESSED_INVENTORY_DATA`)와 **다른 수치**이므로 Caspi 재고를 MCF 가능/불가 판단 근거로
+  쓰지 않는다. **TCK가 내부 노트에 적은 MCF 재고 수량이 있으면 그 값을 우선 신뢰한다** (TCK가 셀러센트럴에서
+  직접 조회해 적는 값). TCK 메모에 수량이 없을 때만, 가능하면 셀러센트럴 MCF 주문 생성 화면
+  (`https://sellercentral.amazon.de/mcf/orders/create-order?...`, 기존 로그인 세션이 있을 때만 — 직접
+  로그인 금지)에서 조회한 수량을 참고한다. Caspi 재고로 TCK의 MCF 결론을 뒤집지 말 것 (실제 사례
+  2026-10-13 #1000164509: TCK 메모 MCF 재고 1,323개를 Caspi EU 재고 0으로 오판해 환불로 바꿔 보고 → 정정).
 - **SIREN 등록/검토 중·공지된 이슈 제품 → 환불 타당**, 단 고객 대면 문구는 여전히 "제조상
   결함 확인 불가/없음 + 예외적 환불"(#1000163648·#1000162771·#1000164098 Fold8 Ultra Air Skin
   Aramid 코팅박리 SIREN 09-17, #1000163730, #1000162847, #1000162450 공지 이슈).
