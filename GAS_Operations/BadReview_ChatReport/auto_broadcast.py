@@ -197,7 +197,7 @@ def crunch(header, body, today):
     cat = {"휴대폰보호필름": {}, "휴대폰케이스": {}}
     for r in body:
         tag = (r[iT] or "").strip() or "(빈칸)"
-        if tag == "긍정 리뷰":
+        if tag in ("긍정 리뷰", "기타사항"):
             continue
         cc = (r[iC] or "").strip()
         if cc in cat:

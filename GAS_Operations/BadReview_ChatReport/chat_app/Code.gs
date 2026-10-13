@@ -43,9 +43,9 @@ var COL = { date: 'Update 날짜', dateAlt: 'Exported Date', tag: '인입사유(
             cat: '대분류', country: '국가(tag)', device: '기종명' };
 var CAT_COLOR = { '휴대폰보호필름': '#EA4335', '휴대폰케이스': '#4285F4' };
 // 인입사유(tag) values dropped before any counting (user rule 2026-09-08:
-// exclude 긍정 리뷰 from every stat and every card, permanently). Mirror of
-// EXCLUDED_TAGS in ../badreview_chat_report.py — keep in sync.
-var EXCLUDED_TAGS = ['긍정 리뷰'];
+// exclude 긍정 리뷰 from every stat and every card, permanently; 기타사항 added
+// 2026-10-13). Mirror of EXCLUDED_TAGS in ../badreview_chat_report.py — keep in sync.
+var EXCLUDED_TAGS = ['긍정 리뷰', '기타사항'];
 var ALL = '__all__';                                      // dropdown "전체"
 var WD = ['일', '월', '화', '수', '목', '금', '토'];      // JS getDay(): 0 = Sun
 var TZ = 'Asia/Seoul';

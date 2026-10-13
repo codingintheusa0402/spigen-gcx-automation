@@ -119,8 +119,8 @@ only one GCP project; `chat_app_jane/Code.gs` is a copy of this folder's — re-
 
 ## Notes / limits
 
-- `긍정 리뷰` 인입사유(tag) is excluded from every count and the card (`EXCLUDED_TAGS`
-  in `Code.gs`, mirrors the Python) — user rule 2026-09-08.
+- `긍정 리뷰` and `기타사항` 인입사유(tag) are excluded from every count and the card
+  (`EXCLUDED_TAGS` in `Code.gs`, mirrors the Python) — user rules 2026-09-08 and 2026-10-13.
 
 - Interaction only works where the **app itself** is present — it won't retrofit onto
   the existing webhook messages in the 12 broadcast rooms.

@@ -59,9 +59,10 @@ HEADER_IMG = ("https://www.spigen.com/cdn/shop/files/"
 KOR_WD   = ['월', '화', '수', '목', '금', '토', '일']
 
 # 인입사유(tag) values kept out of every stat and every card (user rule 2026-09-08:
-# exclude 긍정 리뷰 permanently). The step-3 JS already drops these rows before
-# counting; this is a second guard in case pre-computed --data still carries them.
-EXCLUDED_TAGS = frozenset({"긍정 리뷰"})
+# exclude 긍정 리뷰 permanently; 기타사항 added 2026-10-13). The step-3 JS already
+# drops these rows before counting; this is a second guard in case pre-computed
+# --data still carries them.
+EXCLUDED_TAGS = frozenset({"긍정 리뷰", "기타사항"})
 
 
 # All three product cards are kept the SAME height by rendering every list at a fixed

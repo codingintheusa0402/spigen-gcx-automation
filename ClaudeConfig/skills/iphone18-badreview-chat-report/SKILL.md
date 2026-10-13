@@ -49,7 +49,7 @@ The card:
 
 Same **significance highlighting** rule as the siblings (>= 1.5x its comparison point
 → bold+red in `.text`; see `report.py`'s module docstring) and the same **permanent
-`긍정 리뷰` exclusion** rule.
+`긍정 리뷰` and `기타사항` exclusion** rule.
 
 ## Steps
 
@@ -106,7 +106,7 @@ let todayCount = 0; const tal = {}; const dayCounts = {};
 const cat = { "휴대폰보호필름": {}, "휴대폰케이스": {} };
 for (let i=1;i<s13.length;i++){
   const tag = (s13[i][iT]||'').trim() || '(빈칸)';
-  if (tag === '긍정 리뷰') continue;   // user rule 2026-09-08: exclude from all stats/cards
+  if (tag === '긍정 리뷰' || tag === '기타사항') continue;   // user rules 2026-09-08 / 2026-10-13: exclude from all stats/cards
   const cc  = (s13[i][iC]||'').trim();
   if (cat[cc]) cat[cc][tag] = (cat[cc][tag]||0) + 1;
   const m = (s13[i][iU]||'').match(/(\d{4})\D+(\d{1,2})\D+(\d{1,2})/);

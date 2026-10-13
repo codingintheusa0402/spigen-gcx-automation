@@ -108,10 +108,10 @@ PRODUCTS = {
 CATEGORIES = ("휴대폰보호필름", "휴대폰케이스")
 
 # 인입사유(tag) values excluded from every count and every card (user rule, 2026-09-08:
-# "exclude 긍정 리뷰 from the stats and the result card, permanently"). Rows with one
-# of these tags are dropped before anything is counted — 총 N건, the 오늘 breakdown,
-# and the cumulative Top 5. Remove an entry only if the user says so.
-EXCLUDED_TAGS = frozenset({"긍정 리뷰"})
+# "exclude 긍정 리뷰 from the stats and the result card, permanently"; 기타사항 added
+# 2026-10-13). Rows with one of these tags are dropped before anything is counted —
+# 총 N건, the 오늘 breakdown, and the cumulative Top 5. Remove an entry only if the user says so.
+EXCLUDED_TAGS = frozenset({"긍정 리뷰", "기타사항"})
 
 KOR_WD = ["월", "화", "수", "목", "금", "토", "일"]
 

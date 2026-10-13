@@ -51,8 +51,8 @@ sides** — the rooms would get double broadcasts.
 | button | **배드리뷰** → that product's `1-3점` sheet |
 
 `N` = rows whose `Update 날짜` (fallback `Exported Date`) is today (KST).
-Rows tagged **`긍정 리뷰`** are dropped before any counting (`EXCLUDED_TAGS`; permanent
-user rule 2026-09-08). Inside a carousel, `decoratedText` and `columns` don't render, so
+Rows tagged **`긍정 리뷰`** or **`기타사항`** are dropped before any counting (`EXCLUDED_TAGS`;
+permanent user rules 2026-09-08 and 2026-10-13). Inside a carousel, `decoratedText` and `columns` don't render, so
 `carousel.py` flattens them into `textParagraph` lines.
 
 ## Data source

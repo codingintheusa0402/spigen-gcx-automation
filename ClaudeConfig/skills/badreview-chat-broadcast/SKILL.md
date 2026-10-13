@@ -118,7 +118,7 @@ function crunch(rows){
   let todayCount=0; const tal={}; const dayCounts={}; const cat={ "휴대폰보호필름":{}, "휴대폰케이스":{} };
   for(let i=1;i<rows.length;i++){
     const tag=(rows[i][iT]||'').trim()||'(빈칸)';
-    if(tag==='긍정 리뷰') continue;   // user rule 2026-09-08: exclude from all stats/cards
+    if(tag==='긍정 리뷰' || tag==='기타사항') continue;   // user rules 2026-09-08 / 2026-10-13: exclude from all stats/cards
     const cc=(rows[i][iC]||'').trim();
     if(cat[cc]) cat[cc][tag]=(cat[cc][tag]||0)+1;
     const m=(rows[i][iU]||'').match(/(\d{4})\D+(\d{1,2})\D+(\d{1,2})/);

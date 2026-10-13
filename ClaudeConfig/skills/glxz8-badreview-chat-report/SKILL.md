@@ -40,7 +40,7 @@ The card:
 `M/D(요일)` = today's date, KST, Korean weekday (월/화/…).
 `N` (총 N건) = count of `1-3점` rows whose `Update 날짜` column resolves to today.
 `대분류` seen in the data: `휴대폰보호필름`, `휴대폰케이스` (exact strings).
-**`긍정 리뷰` 인입사유(tag) is excluded** from every count (총 N건, 오늘 breakdown, cumulative Top 5) and never shown on the card — user rule 2026-09-08, permanent unless the user revokes it.
+**`긍정 리뷰` and `기타사항` 인입사유(tag) are excluded** from every count (총 N건, 오늘 breakdown, cumulative Top 5) and never shown on the card — user rules 2026-09-08 and 2026-10-13, permanent unless the user revokes them.
 
 There is **no chart**.
 
@@ -99,7 +99,7 @@ let todayCount = 0; const tal = {}; const dayCounts = {};
 const cat = { "휴대폰보호필름": {}, "휴대폰케이스": {} };
 for (let i=1;i<s13.length;i++){
   const tag = (s13[i][iT]||'').trim() || '(빈칸)';
-  if (tag === '긍정 리뷰') continue;   // user rule 2026-09-08: exclude from all stats/cards
+  if (tag === '긍정 리뷰' || tag === '기타사항') continue;   // user rules 2026-09-08 / 2026-10-13: exclude from all stats/cards
   const cc  = (s13[i][iC]||'').trim();
   if (cat[cc]) cat[cc][tag] = (cat[cc][tag]||0) + 1;
   const m = (s13[i][iU]||'').match(/(\d{4})\D+(\d{1,2})\D+(\d{1,2})/);
