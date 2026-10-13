@@ -13,7 +13,9 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 
 function createPhoneServer(ctx) {
   // ctx: { root, userData, getSnap, getHistory, sendToSession, interruptSession, resumeOnMac, rename, convert,
-  //        commandsFor, ptys, ptyBus, termOpen?, termClose?, bind? }
+  //        commandsFor, ptys, ptyBus, termOpen?, termClose?, bind?, peer? }
+  // peer (peer.js): the other machine — its sessions are merged into what the phone sees, and calls for them
+  // are forwarded there, so the Mac and the server show one mesh.
   // Mac: ptys are node-pty terminals. Server (server/mesh-server.js): ptys are tmux panes, termOpen/termClose
   // start and stop streaming a pane while a phone is watching it; bind limits the listening address.
   const cfgFile = path.join(ctx.userData, 'phone.json');
@@ -25,6 +27,7 @@ function createPhoneServer(ctx) {
 
   let server = null;
   const clients = new Set();                // SSE telemetry streams
+  let peerPolledAt = 0;                     // the other machine is mirroring us → keep the snapshot fresh
   const okToken = t => typeof t === 'string' && t.length === cfg.token.length && crypto.timingSafeEqual(Buffer.from(t), Buffer.from(cfg.token));
 
   // static files: phone/ app + the shared renderer engine + xterm
@@ -35,6 +38,9 @@ function createPhoneServer(ctx) {
     '/xterm.js': 'node_modules/@xterm/xterm/lib/xterm.js', '/xterm.css': 'node_modules/@xterm/xterm/css/xterm.css', '/addon-fit.js': 'node_modules/@xterm/addon-fit/lib/addon-fit.js',
   };
 
+  const peer = ctx.peer || null;
+  const view = s => peer && s ? peer.merge(s) : s;              // what the phone sees: local + the other machine
+  const remote = sid => !!(peer && sid && peer.owns(sid));
   const termId = p => { try { return decodeURIComponent(p.slice(10)); } catch { return p.slice(10); } };   // tmux pane ids (%0) arrive encoded
   const body = req => new Promise(res => { let b = ''; req.on('data', c => { b += c; if (b.length > 2e6) req.destroy(); }); req.on('end', () => { try { res(JSON.parse(b || '{}')); } catch { res({}); } }); });
   const json = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
@@ -64,14 +70,21 @@ function createPhoneServer(ctx) {
 
     if (p === '/api/events' && req.method === 'GET') {
       sse(res); const c = { res }; clients.add(c);
-      const s = ctx.getSnap(); if (s) send(res, 'telemetry', s);
+      const s = view(ctx.getSnap()); if (s) send(res, 'telemetry', s);
       req.on('close', () => clients.delete(c)); return;
     }
+    if (p === '/api/local-snapshot') { peerPolledAt = Date.now(); return json(res, 200, ctx.getSnap() || { sessions: [] }); }   // for the peer (never merged)
     if (p === '/api/history') return json(res, 200, await ctx.getHistory());
-    if (p === '/api/details') return json(res, 200, await ctx.details(u.searchParams.get('sid') || ''));
+    if (p === '/api/details') {
+      const sid = u.searchParams.get('sid') || '';
+      if (remote(sid)) return json(res, 200, await peer.forward('GET', '/api/details', undefined, { sid }).catch(() => ({})));
+      return json(res, 200, await ctx.details(sid));
+    }
     if (p === '/api/commands') return json(res, 200, await ctx.commandsFor(u.searchParams.get('cwd') || ''));
     if (p.startsWith('/api/term/') && req.method === 'GET') {           // live terminal of an in-app session
-      const id = termId(p), pt = ctx.ptys.get(id); if (!pt) return json(res, 404, { error: 'no such terminal' });
+      const id = termId(p);
+      if (peer && peer.ownsTerm(id)) return peer.pipeTerm(id, res, fn => req.on('close', fn)).catch(e => json(res, 502, { error: e.message }));
+      const pt = ctx.ptys.get(id); if (!pt) return json(res, 404, { error: 'no such terminal' });
       sse(res);
       if (ctx.termOpen) await ctx.termOpen(id);                           // server: start streaming the tmux pane
       send(res, 'init', { cols: pt.proc.cols, rows: pt.proc.rows, backlog: pt.buf || '' });
@@ -81,6 +94,10 @@ function createPhoneServer(ctx) {
     }
     if (req.method !== 'POST') return json(res, 405, {});
     const b = await body(req);
+    if (['/api/send', '/api/interrupt', '/api/rename'].includes(p) && remote(b.sid))
+      return json(res, 200, await peer.forward('POST', p, b).catch(e => ({ ok: false, err: `${peer.label()}: ${e.message}` })));
+    if (p.startsWith('/api/term/') && peer && peer.ownsTerm(termId(p)))
+      return json(res, 200, await peer.termWrite(termId(p), String(b.data || '')).catch(() => ({ ok: false })));
     if (p === '/api/send') return json(res, 200, await ctx.sendToSession(b.sid, String(b.text || '')));
     if (p === '/api/interrupt') return json(res, 200, await ctx.interruptSession(b.sid));
     if (p === '/api/resume') return json(res, 200, ctx.resumeOnMac(b.sid));
@@ -114,8 +131,9 @@ function createPhoneServer(ctx) {
 
   if (cfg.enabled && !ctx.passive) start();        // passive: a CLI run (--pair / --status) beside the running service
   return {
-    broadcast(snap) { for (const c of clients) try { send(c.res, 'telemetry', snap); } catch { } },
-    status: () => ({ enabled: cfg.enabled, running: !!server, port: PORT, urls: urls(), clients: clients.size }),
+    broadcast(snap) { if (!clients.size) return; const v = view(snap); for (const c of clients) try { send(c.res, 'telemetry', v); } catch { } },
+    status: () => ({ enabled: cfg.enabled, running: !!server, port: PORT, urls: urls(), clients: clients.size,
+                     peerWatching: Date.now() - peerPolledAt < 15000, peer: peer ? { online: peer.online(), label: peer.label() } : null }),
     setEnabled(v) { cfg.enabled = !!v; save(); v ? start() : stop(); },
     regenerate() { cfg.token = crypto.randomBytes(18).toString('base64url'); save(); for (const c of clients) try { c.res.end(); } catch { } clients.clear(); },
   };

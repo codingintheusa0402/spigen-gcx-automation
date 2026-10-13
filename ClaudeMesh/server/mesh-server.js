@@ -21,6 +21,7 @@ const ROOT = path.join(__dirname, '..');
 const { Collector } = require(path.join(ROOT, 'collector'));
 const { createPhoneServer } = require(path.join(ROOT, 'phone-server'));
 const { createCore, linuxToken, HOME } = require(path.join(ROOT, 'core'));
+const { createPeer } = require(path.join(ROOT, 'peer'));
 
 const USERDATA = path.join(HOME, '.gcx-mesh');
 const PANES = path.join(USERDATA, 'panes');
@@ -152,16 +153,18 @@ async function tick() {
     if (phone) phone.broadcast(snap);
     for (const id of streams.keys()) if (!panes.has(id)) { ptyBus.emit('exit', id); termClose(id); }
   } catch (e) { log('tick', e.message); }
-  const watching = phone && phone.status().clients > 0;
+  const st = phone && phone.status(), watching = st && (st.clients > 0 || st.peerWatching);
   setTimeout(tick, watching ? 1000 : 10000);                                   // light when nobody is looking
 }
 
+const peerLink = createPeer({ userData: USERDATA, selfKind: 'server' });   // the Mac (peer.json), one mesh for the iPhone
 function main() {
   fs.mkdirSync(USERDATA, { recursive: true });
   cleanupStale();
   const cli = process.argv.includes('--pair') || process.argv.includes('--status');
   phone = createPhoneServer({
     root: ROOT, userData: USERDATA, ptys, ptyBus, termOpen, termClose, passive: cli,
+    peer: cli ? null : peerLink,
     getSnap: () => lastSnap,
     getHistory: () => core.listHistory(),
     details: sid => core.sessionDetails(sid),
@@ -178,6 +181,7 @@ function main() {
   if (process.argv.includes('--pair')) return pair();
   if (process.argv.includes('--status')) return status();
   phone.setEnabled(true);
+  peerLink.start();
   log(`GCX Mesh server on :${phone.status().port} — ${phone.status().urls.map(u => u.url.replace(/t=.*/, 't=…')).join(', ') || 'no Tailscale address yet'}`);
   tick();
   process.on('SIGTERM', () => { for (const id of [...streams.keys()]) { streams.get(id).n = 1; termClose(id); } process.exit(0); });
