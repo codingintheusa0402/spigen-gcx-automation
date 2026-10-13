@@ -6,6 +6,16 @@ $ErrorActionPreference = "SilentlyContinue"
 $log = "C:\GCX-Setup\selfheal\selfheal.log"
 function L($m) { "$(Get-Date -f 'MM-dd HH:mm:ss') $m" | Add-Content $log }
 if (((Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime).TotalMinutes -lt 3) { exit }   # boot still settling
+# One-shot requests (2026-10-14): any *.ps1 dropped into C:\GCX-Setup\selfheal\requests\ runs once here — elevated, in the
+# signed-in session — then its output sits next to it in requests\done\<name>.ps1.log. Written for the case where Windows
+# SSH/VNC are down but Ubuntu still runs: Ubuntu writes the request through /mnt/c (write as .tmp, then rename to .ps1).
+# The file is moved to done\ BEFORE it runs, so a request never repeats even if it crashes or restarts the machine.
+$rq = "C:\GCX-Setup\selfheal\requests"; New-Item -ItemType Directory -Force "$rq\done" | Out-Null
+foreach ($r in (Get-ChildItem "$rq\*.ps1" | Sort-Object Name)) {
+  $dst = "$rq\done\$($r.Name)"; Move-Item $r.FullName $dst -Force; L "request $($r.Name): running"
+  try { & $dst *>&1 | Out-String -Width 220 | Set-Content "$dst.log" -Encoding utf8; L "request $($r.Name): done" }
+  catch { "FAILED: $_" | Add-Content "$dst.log"; L "request $($r.Name): FAILED $_" }
+}
 $fixed = @()
 foreach ($s in "sshd", "Tailscale", "tvnserver") {
   $x = Get-Service $s
