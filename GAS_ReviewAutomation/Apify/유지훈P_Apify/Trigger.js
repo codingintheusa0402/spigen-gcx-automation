@@ -40,13 +40,12 @@ function dailyScrapeJob() {
     Logger.log('dailyScrapeJob: review scraper start failed — ' + (e && e.message ? e.message : e));
   }
 
-  // Product scraper
-  try {
-    runProductNowAndPollRecurring();
-    Logger.log('dailyScrapeJob: product scraper started');
-  } catch (e) {
-    Logger.log('dailyScrapeJob: product scraper start failed — ' + (e && e.message ? e.message : e));
-  }
+  // Product/rating scraper — DISABLED 2026-10-13: replaced by the unified
+  // daily ASIN rating-fetch job (actor 2AuZCyLxKZuO2OyNY). The old paid
+  // axesso_data task (09gwMIgOKhyyDrH3g) was costing money for data no
+  // longer needed from here. Trigger left installed on purpose; this just
+  // no-ops the product-scraper half of the daily job.
+  Logger.log('dailyScrapeJob: product scraper skipped (decommissioned 2026-10-13, superseded by rating_fetch_daily.py)');
 }
 
 // ── Run once in the GAS editor to install a daily 04:00 KST trigger ──────────
