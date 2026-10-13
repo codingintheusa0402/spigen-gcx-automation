@@ -26,7 +26,11 @@ final class Pairing: ObservableObject {
     /// Accepts a link from the Mac's QR code / copy or the server's `--pair` output. Returns false if it isn't a
     /// GCX Mesh pairing link. A link for a host already paired replaces that host's old link; other hosts stay.
     @discardableResult func add(_ text: String) -> Bool {
-        guard let u = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)),
+        // pasted text may carry extra characters (chat formatting, a previous paste, a trailing dot):
+        // use the first http(s) link found anywhere in it
+        let link = text.range(of: #"https?://[^\s`'"<>()]+"#, options: .regularExpression)
+            .map { String(text[$0]).trimmingCharacters(in: CharacterSet(charactersIn: ".,;:!?")) } ?? text
+        guard let u = URL(string: link.trimmingCharacters(in: .whitespacesAndNewlines)),
               let scheme = u.scheme, scheme.hasPrefix("http"), let host = u.host, u.port == 47320,
               let q = URLComponents(url: u, resolvingAgainstBaseURL: false)?.queryItems,
               q.contains(where: { $0.name == "t" && !($0.value ?? "").isEmpty }) else { return false }

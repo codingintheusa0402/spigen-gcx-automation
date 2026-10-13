@@ -9,8 +9,17 @@ struct PairingView: View {
     @State private var error: String?
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topLeading) {
             Color.black.ignoresSafeArea()
+            if let onDone {                    // opened from "Hosts…" — let the user go back to the mesh
+                Button { onDone() } label: {
+                    Image(systemName: "chevron.left").font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.85)).padding(14)
+                        .background(Circle().fill(.white.opacity(0.08)))
+                }
+                .padding(.leading, 16).padding(.top, 12).zIndex(1)
+                .accessibilityLabel("Back")
+            }
             VStack(spacing: 22) {
                 Image("AppIconImage").resizable().frame(width: 84, height: 84).clipShape(RoundedRectangle(cornerRadius: 20))
                     
@@ -29,6 +38,7 @@ struct PairingView: View {
                 }.padding(.horizontal, 28)
                 if let error { Text(error).font(.footnote).foregroundStyle(.red.opacity(0.85)) }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)   // keep the content centred (ZStack aligns top-leading for the back button)
         }
         .sheet(isPresented: $scanning) {
             QRScanner { code in
