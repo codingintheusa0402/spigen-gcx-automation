@@ -36,9 +36,8 @@ GWS_TOKEN_PATH = os.path.expanduser("~/.config/gws_shim/token.json")
 ASIN_MASTER_ID = "1fx9K4r2T9SeZK076zy9kMHoLzAKDgmlRp-C2VtnTKVo"
 ASIN_MASTER_TAB = "Data"
 
-PRIVATE_WEBHOOK = ("https://chat.googleapis.com/v1/spaces/AAQAc9NQmJQ/messages"
-                   "?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI"
-                   "&token=t0A95TCkAqXjLGYBoZrgZSG_XuSSB9UDL3GsFJX_YDc")  # "siren_private_room"
+# User's private Chat room; the URL lives only in the gitignored local config (Mac + server).
+PRIVATE_WEBHOOK = json.load(open(os.path.expanduser("~/.config/gcx_webhooks.json")))["siren_private_room"]
 
 # 국가 cell value (uppercased, trimmed) -> actor marketplace code
 MARKET_CODE = {

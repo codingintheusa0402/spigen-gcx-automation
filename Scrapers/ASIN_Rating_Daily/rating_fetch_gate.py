@@ -63,7 +63,8 @@ def notify_catchup(today_str, now, late_minutes):
 
 def run_job(run_label):
     script = os.path.join(HERE, "rating_fetch_daily.py")
-    subprocess.run(["python3", "-I", script, "--commit", "--run-label", run_label],
+    # No -I: on gcx-server the Google client libs are user-site installs, which -I hides.
+    subprocess.run([sys.executable, script, "--commit", "--run-label", run_label],
                     check=False)
 
 
