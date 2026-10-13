@@ -25,6 +25,8 @@ STATE_PATH = os.path.join(HERE, "state_rating_gate.json")
 LOG_PATH = os.path.expanduser("~/.config/asin_rating_daily/gate.log")
 os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
 
+sys.path.insert(0, os.path.expanduser("~/Desktop/GCX/ServerBootstrap/watchdog"))
+
 
 def log(msg):
     line = f"{datetime.now():%F %T} {msg}"
