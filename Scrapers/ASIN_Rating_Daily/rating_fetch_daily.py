@@ -132,7 +132,7 @@ HEADER_ALIASES = {
     "asin": ["ASIN"],
     "sku": ["SKU", "SKU "],
     "country": ["국가"],
-    "score": ["Score"],
+    "score": ["Score", "Rating"],
     "global": ["Global Ratings", "Global ratings", "Global Rating"],
 }
 
@@ -501,6 +501,7 @@ def main():
     ap.add_argument("--commit", action="store_true")
     ap.add_argument("--pilot-only", action="store_true")
     ap.add_argument("--run-label", default="run")
+    ap.add_argument("--skip-group-a", action="store_true", help="Group B only (for a targeted supplemental run)")
     args = ap.parse_args()
     dry_run = not args.commit
 
@@ -519,6 +520,8 @@ def main():
 
     if args.pilot_only:
         books = {"GlxZ8": (GROUP_A_BOOKS["GlxZ8"][0], ["DE"])}
+    elif args.skip_group_a:
+        books = {}
     else:
         books = {k: v for k, v in GROUP_A_BOOKS.items()}
 
