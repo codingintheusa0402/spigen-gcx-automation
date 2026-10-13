@@ -245,12 +245,18 @@ def chunked(lst, n):
 
 
 # ---------------------------------------------------------------- Apify saved tasks + schedule
-# One saved task per marketplace in the Spigen org, holding that market's full ASIN list, run by
-# one Apify Schedule (weekdays 08:00 KST). The sheet job (08:20) reads today's task runs.
+# One saved task per SPREADSHEET in the Spigen org (user rule 2026-10-14): its input is every
+# ASIN on every country tab of that sheet, as product URLs (amazon.<market>/dp/<ASIN>) — actor
+# v0.4+ scrapes each URL on its own marketplace, so one run covers all markets of the sheet.
+# One Apify Schedule (weekdays 08:00 KST) runs them; the sheet job (08:20) distributes results.
 TASK_PREFIX = "asin-rating-"
 SCHEDULE_NAME = "asin-rating-weekday"
 SCHEDULE_CRON = "0 8 * * 1-5"
 SCHEDULE_TZ = "Asia/Seoul"
+SHEET_SLUG = {"GlxZ8": "glxz8", "Pixel11": "pixel11", "iPh18": "iph18", "유지훈P": "yujihunp", "SDA": "sda",
+              "Auto_Acc": "auto-acc", "Power_Acc": "power-acc", "전략폰": "jeonryakpon"}
+GROUP_B_SLUG = {"1XXIMDNVMPBut8WTCV-4gZt4DSxHmGaRR8GkRejAOGq0": "sales-devices",
+                "1_9O8oTHt-yHewG0aGeioeM0psZ2kprf3lgH77-BFLs8": "ljh"}
 
 
 def apify(method, path, body=None, timeout=120):
@@ -270,37 +276,57 @@ def apify(method, path, body=None, timeout=120):
             raise RuntimeError(f"Apify {method} {path} -> {e.code}: {e.read()[:300]!r}")
 
 
-def task_name(market):
-    return TASK_PREFIX + market.replace(".", "-")
+def dp_url(market, asin):
+    return f"https://www.amazon.{market}/dp/{asin}"
 
 
-def ensure_tasks(needed_by_market, dry_run):
-    """Create/update one saved task per market with that market's full ASIN list. Returns {market: task_id}."""
+def sheet_urls(needed):
+    """needed: {market: set(asins)} -> sorted product-URL list for one sheet."""
+    return sorted(dp_url(m, a) for m, asins in needed.items() for a in asins)
+
+
+def ensure_tasks(needed_by_sheet, dry_run):
+    """Create/update one saved task per spreadsheet. Returns {slug: task_id}."""
     existing = {t["name"]: t["id"] for t in apify("GET", "/actor-tasks?limit=1000")["data"]["items"]}
     ids = {}
-    for market, asins in sorted(needed_by_market.items()):
-        name = task_name(market)
-        inp = {"asins": sorted(set(asins)), "marketplace": market}
+    for slug, needed in sorted(needed_by_sheet.items()):
+        name = TASK_PREFIX + slug
+        urls = sheet_urls(needed)
+        inp = {"asins": urls, "marketplace": "com"}
+        per = ", ".join(f"{m}:{len(a)}" for m, a in sorted(needed.items()))
         if dry_run:
-            log(f"  [dry-run] task {name}: {len(inp['asins'])} ASINs ({'update' if name in existing else 'create'})")
-            ids[market] = existing.get(name)
+            log(f"  [dry-run] task {name}: {len(urls)} URLs ({per}) ({'update' if name in existing else 'create'})")
+            ids[slug] = existing.get(name)
             continue
         if name in existing:
             apify("PUT", f"/actor-tasks/{existing[name]}/input", inp)
-            ids[market] = existing[name]
-            log(f"  task {name} ({existing[name]}): input updated, {len(inp['asins'])} ASINs")
+            ids[slug] = existing[name]
+            log(f"  task {name} ({existing[name]}): input updated, {len(urls)} URLs ({per})")
         else:
             t = apify("POST", "/actor-tasks", {"actId": APIFY_ACTOR, "name": name, "input": inp})["data"]
-            ids[market] = t["id"]
-            log(f"  task {name} ({t['id']}): created, {len(inp['asins'])} ASINs")
+            ids[slug] = t["id"]
+            log(f"  task {name} ({t['id']}): created, {len(urls)} URLs ({per})")
     return ids
+
+
+def retire_old_market_tasks(keep_ids, dry_run):
+    """Delete the earlier per-marketplace tasks (asin-rating-de etc.) superseded by per-sheet tasks."""
+    markets = {"de", "com", "co-uk", "fr", "it", "es", "co-jp", "in", "ca"}
+    for t in apify("GET", "/actor-tasks?limit=1000")["data"]["items"]:
+        if t["name"].startswith(TASK_PREFIX) and t["name"][len(TASK_PREFIX):] in markets and t["id"] not in keep_ids:
+            if dry_run:
+                log(f"  [dry-run] would delete old per-market task {t['name']}")
+            else:
+                apify("DELETE", f"/actor-tasks/{t['id']}")
+                log(f"  deleted old per-market task {t['name']} ({t['id']})")
 
 
 def ensure_schedule(task_ids, dry_run):
     actions = [{"type": "RUN_ACTOR_TASK", "actorTaskId": tid} for _, tid in sorted(task_ids.items()) if tid]
     body = {"name": SCHEDULE_NAME, "cronExpression": SCHEDULE_CRON, "timezone": SCHEDULE_TZ,
             "isEnabled": True, "isExclusive": True, "actions": actions,
-            "description": "Weekday ASIN rating fetch for the GCX monitoring sheets (rating_fetch_daily.py fills sheets at 08:20)"}
+            "description": "Weekday ASIN rating fetch, one task per monitoring spreadsheet "
+                           "(rating_fetch_daily.py distributes results into the sheets at 08:20)"}
     if dry_run:
         log(f"  [dry-run] schedule {SCHEDULE_NAME}: {len(actions)} task actions, {SCHEDULE_CRON} {SCHEDULE_TZ}")
         return
@@ -316,71 +342,69 @@ def ensure_schedule(task_ids, dry_run):
         log(f"  schedule {SCHEDULE_NAME} ({s['id']}) created: {SCHEDULE_CRON} {SCHEDULE_TZ}, {len(actions)} tasks")
 
 
-def _items_to_results(items):
-    out = {}
+def _merge_items(results, items):
+    """Dataset items (mixed marketplaces) -> results[market][asin]."""
     for it in items:
-        asin = it.get("asin")
-        if asin:
-            out[asin] = {"found": bool(it.get("found")) and it.get("rating") is not None,
-                         "rating": it.get("rating"), "ratingsCount": it.get("ratingsCount")}
-    return out
+        asin, mk = it.get("asin"), (it.get("marketplace") or "").replace("amazon.", "")
+        if asin and mk:
+            results.setdefault(mk, {})[asin] = {
+                "found": bool(it.get("found")) and it.get("rating") is not None,
+                "rating": it.get("rating"), "ratingsCount": it.get("ratingsCount")}
 
 
-def wait_runs(run_ids, stats, max_wait=3600):
-    """run_ids: {market: run_id}. Poll until terminal; return {market: results}."""
-    results, pending, t0 = {}, dict(run_ids), time.time()
+def wait_runs(run_ids, stats, results, max_wait=3600):
+    """run_ids: {label: run_id}. Poll until terminal; merge each succeeded run's items into results."""
+    pending, t0 = dict(run_ids), time.time()
     while pending and time.time() - t0 < max_wait:
-        for market, rid in list(pending.items()):
+        for label, rid in list(pending.items()):
             run = apify("GET", f"/actor-runs/{rid}")["data"]
             if run["status"] in ("READY", "RUNNING"):
                 continue
-            del pending[market]
+            del pending[label]
             if run["status"] != "SUCCEEDED":
-                stats["errors"].append(f"task run {market} {rid}: {run['status']}")
-                log(f"  ERROR task run {market} ({rid}) ended {run['status']}")
+                stats["errors"].append(f"task run {label} {rid}: {run['status']}")
+                log(f"  ERROR task run {label} ({rid}) ended {run['status']}")
                 continue
             items = apify("GET", f"/datasets/{run['defaultDatasetId']}/items?clean=true&format=json", timeout=300)
-            results[market] = _items_to_results(items)
-            log(f"  task run {market} ({rid}) SUCCEEDED: {len(items)} items")
+            _merge_items(results, items)
+            log(f"  task run {label} ({rid}) SUCCEEDED: {len(items)} items")
         if pending:
             time.sleep(15)
-    for market, rid in pending.items():
-        stats["errors"].append(f"task run {market} {rid}: still running after {max_wait}s")
-    return results
+    for label, rid in pending.items():
+        stats["errors"].append(f"task run {label} {rid}: still running after {max_wait}s")
 
 
-def run_tasks_now(task_ids, stats):
-    run_ids = {}
-    for market, tid in task_ids.items():
-        run = apify("POST", f"/actor-tasks/{tid}/runs")["data"]
-        run_ids[market] = run["id"]
-        stats["actor_calls"] += 1
-        stats["actor_calls_by_market"][market] = stats["actor_calls_by_market"].get(market, 0) + 1
-        log(f"  started task {task_name(market)} run {run['id']}")
-    return wait_runs(run_ids, stats)
+def start_task(task_id, label, stats, urls=None):
+    """Start a saved task; urls overrides its input (top-ups / fallbacks stay inside the sheet's task)."""
+    body = {"asins": urls, "marketplace": "com"} if urls is not None else None
+    run = apify("POST", f"/actor-tasks/{task_id}/runs", body)["data"]
+    stats["actor_calls"] += 1
+    stats["actor_calls_by_market"][label] = stats["actor_calls_by_market"].get(label, 0) + 1
+    log(f"  started task {TASK_PREFIX}{label.split(':')[0]} run {run['id']}" + (f" ({len(urls)} URLs override)" if urls else ""))
+    return run["id"]
 
 
-def todays_scheduled_results(task_ids, stats):
-    """Use today's (KST) run of each task — normally the 08:00 schedule. Waits for in-flight runs;
-    if a task has no run today at all (schedule missed), runs it now."""
+def run_tasks_now(task_ids, stats, results):
+    wait_runs({slug: start_task(tid, slug, stats) for slug, tid in task_ids.items()}, stats, results)
+
+
+def todays_scheduled_results(task_ids, stats, results):
+    """Use today's (KST) run of each sheet task — normally the 08:00 schedule. Waits for in-flight runs;
+    runs a task now if it has no run today (schedule missed)."""
     today = datetime.now().astimezone().strftime("%Y-%m-%d")
     run_ids, missing = {}, {}
-    for market, tid in task_ids.items():
+    for slug, tid in task_ids.items():
         runs = apify("GET", f"/actor-tasks/{tid}/runs?desc=true&limit=1")["data"]["items"]
         started = runs[0]["startedAt"] if runs else ""
-        local_day = (datetime.fromisoformat(started.replace("Z", "+00:00")).astimezone().strftime("%Y-%m-%d")
-                     if started else "")
-        if runs and local_day == today:
-            run_ids[market] = runs[0]["id"]
-        else:
-            missing[market] = tid
+        day = (datetime.fromisoformat(started.replace("Z", "+00:00")).astimezone().strftime("%Y-%m-%d")
+               if started else "")
+        (run_ids.__setitem__(slug, runs[0]["id"]) if runs and day == today else missing.__setitem__(slug, tid))
     if missing:
         log(f"  no run today for {sorted(missing)} — running those tasks now")
         stats["errors"].append(f"schedule missed for {sorted(missing)}; ran on demand")
-    results = wait_runs(run_ids, stats)
-    if missing:
-        results.update(run_tasks_now(missing, stats))
-    return results
+        for slug, tid in missing.items():
+            run_ids[slug] = start_task(tid, slug, stats)
+    wait_runs(run_ids, stats, results)
 
 
 def fetch_market(asins, marketplace, stats):
@@ -695,7 +719,7 @@ def post_chat_summary(stats, run_label, pilot_mode, dry_run):
         lines.append("Mode: PILOT (GlxZ8/DE only)")
     if dry_run:
         lines.append("Mode: DRY RUN (nothing written)")
-    lines.append(f"Actor calls: {stats['actor_calls']} ({stats['actor_calls_by_market']})")
+    lines.append(f"Apify runs (Spigen org, per-sheet tasks): {stats['actor_calls']} ({stats['actor_calls_by_market']})")
     lines.append(f"Cells written: {stats['cells_written']}")
     lines.append(f"Tabs migrated off ARRAYFORMULA: {len(stats['migrated_tabs'])}" +
                  (f" — {stats['migrated_tabs']}" if stats['migrated_tabs'] else ""))
@@ -748,8 +772,8 @@ def main():
     asin_to_sku, sku_to_asin = load_asin_master(svc)
     log(f"ASIN_Master loaded: {len(asin_to_sku)} ASIN->SKU mappings")
 
-    needed_by_market = {}
-    tab_infos = []  # (kind, product/label, sid, tab, info)
+    needed_by_sheet = {}  # slug -> {market: set(asins)}
+    tab_infos = []  # (kind, product/label, sid, tab, info, slug)
 
     if args.pilot_only:
         books = {"GlxZ8": (GROUP_A_BOOKS["GlxZ8"][0], ["DE"])}
@@ -759,12 +783,12 @@ def main():
         books = {k: v for k, v in GROUP_A_BOOKS.items()}
 
     for product, (sid, tabs) in books.items():
+        slug = SHEET_SLUG[product]
         for tab in tabs:
-            pilot_mode = args.pilot_only
-            info = process_group_a_tab(svc, product, sid, tab, dry_run, pilot_mode,
-                                        asin_to_sku, sku_to_asin, stats, needed_by_market)
+            info = process_group_a_tab(svc, product, sid, tab, dry_run, args.pilot_only,
+                                        asin_to_sku, sku_to_asin, stats, needed_by_sheet.setdefault(slug, {}))
             if info:
-                tab_infos.append(("A", product, sid, tab, info))
+                tab_infos.append(("A", product, sid, tab, info, slug))
             if stats["pilot_failed"]:
                 log("Halting further processing due to pilot failure.")
                 post_chat_summary(stats, args.run_label, args.pilot_only, dry_run)
@@ -772,54 +796,78 @@ def main():
 
     if not args.pilot_only:
         for cfg in GROUP_B_TABS:
-            info = process_group_b_tab(svc, cfg, dry_run, stats, needed_by_market)
+            slug = GROUP_B_SLUG[cfg["sid"]]
+            info = process_group_b_tab(svc, cfg, dry_run, stats, needed_by_sheet.setdefault(slug, {}))
             if info:
-                tab_infos.append(("B", cfg["label"], cfg["sid"], cfg["tab"], info))
+                tab_infos.append(("B", cfg["label"], cfg["sid"], cfg["tab"], info, slug))
+    needed_by_sheet = {k: v for k, v in needed_by_sheet.items() if v}
 
-    # Fetch all primary-market needs
-    results = {}
+    results = {}  # market -> asin -> {found, rating, ratingsCount}
     if args.source == "direct" or args.pilot_only:
-        for market, asins in needed_by_market.items():
+        merged = {}
+        for needed in needed_by_sheet.values():
+            for m, a in needed.items():
+                merged.setdefault(m, set()).update(a)
+        for market, asins in merged.items():
             log(f"Fetching marketplace={market}: {len(asins)} ASINs")
             results[market] = fetch_market(list(asins), market, stats)
     else:
-        log(f"Syncing saved Apify tasks (Spigen org) — {sum(len(v) for v in needed_by_market.values())} ASIN slots "
-            f"across {len(needed_by_market)} markets")
-        task_ids = ensure_tasks(needed_by_market, dry_run)
+        log(f"Syncing per-sheet Apify tasks (Spigen org): " + ", ".join(
+            f"{slug}={sum(len(a) for a in n.values())}" for slug, n in sorted(needed_by_sheet.items())))
+        task_ids = ensure_tasks(needed_by_sheet, dry_run)
         ensure_schedule(task_ids, dry_run)
+        retire_old_market_tasks(set(task_ids.values()), dry_run)
         stats["task_ids"] = task_ids
         if dry_run:
             log("  [dry-run] not running tasks")
-        elif args.source == "tasks-run":
-            results = run_tasks_now(task_ids, stats)
         else:
-            results = todays_scheduled_results(task_ids, stats)
-        if not dry_run:
-            # ASINs added to the sheets after today's task run started aren't in its dataset — top up directly.
-            for market, asins in needed_by_market.items():
-                gap = sorted(set(asins) - set(results.get(market, {})))
+            if args.source == "tasks-run":
+                run_tasks_now(task_ids, stats, results)
+            else:
+                todays_scheduled_results(task_ids, stats, results)
+            # Rows added after today's run started aren't in its dataset: re-run that sheet's task on just those.
+            topups = {}
+            for slug, needed in needed_by_sheet.items():
+                gap = [dp_url(m, a) for m, asins in needed.items() for a in sorted(asins) if a not in results.get(m, {})]
                 if gap:
-                    log(f"  top-up marketplace={market}: {len(gap)} ASINs not in task results")
-                    results.setdefault(market, {}).update(fetch_market(gap, market, stats))
+                    log(f"  top-up {slug}: {len(gap)} URLs not in task results")
+                    topups[slug + ":top-up"] = start_task(task_ids[slug], slug + ":top-up", stats, gap)
+            if topups:
+                wait_runs(topups, stats, results)
 
-    # Group B fallback cascade: find not-found ASINs on primary, fetch fallbacks.
+    # Group B fallback cascade, one level at a time, each level = one run of that sheet's own task.
     # Skipped on dry-run: no primary results exist then, so every ASIN would look not-found (billed calls).
     if not args.pilot_only and not dry_run:
-        for kind, label, sid, tab, info in tab_infos:
-            if kind != "B":
-                continue
-            primary = info["primary"]
-            not_found = [a for a in info["asins"] if a and not (results.get(primary, {}).get(a) or {}).get("found")]
-            for fb in info["fallbacks"]:
-                pending = [a for a in not_found if not (results.get(fb, {}).get(a) or {}).get("found")]
-                if not pending:
+        b_tabs = [t for t in tab_infos if t[0] == "B"]
+        for level in range(3):
+            per_slug = {}
+            for kind, label, sid, tab, info, slug in b_tabs:
+                chain = [info["primary"]] + info["fallbacks"]
+                if level + 1 >= len(chain):
                     continue
-                log(f"[B:{label}] fallback fetch marketplace={fb}: {len(pending)} ASINs")
-                fetched = fetch_market(pending, fb, stats)
-                results.setdefault(fb, {}).update(fetched)
+                for a in info["asins"]:
+                    if not a or any((results.get(m, {}).get(a) or {}).get("found") for m in chain[:level + 1]):
+                        continue
+                    fb = chain[level + 1]
+                    if a not in results.get(fb, {}):
+                        per_slug.setdefault(slug, set()).add(dp_url(fb, a))
+            if not per_slug:
+                break
+            runs = {}
+            for slug, urls in per_slug.items():
+                log(f"[B:{slug}] fallback level {level + 1}: {len(urls)} URLs")
+                if args.source == "direct":
+                    for u in urls:
+                        m, a = u.split("amazon.")[1].split("/dp/")
+                        results.setdefault(m, {}).update(fetch_market([a], m, stats))
+                else:
+                    runs[f"{slug}:fallback{level + 1}"] = start_task(task_ids[slug], f"{slug}:fallback{level + 1}",
+                                                                     stats, sorted(urls))
+            if runs:
+                wait_runs(runs, stats, results)
 
     # Write results
-    for kind, label, sid, tab, info in tab_infos:
+    for kind, label, sid, tab, info, _slug in tab_infos:
         if kind == "A":
             write_group_a_results(svc, sid, tab, info, results, dry_run, stats)
         else:
