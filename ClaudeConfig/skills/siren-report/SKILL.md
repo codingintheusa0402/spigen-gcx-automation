@@ -94,7 +94,8 @@ reusing the original session-gated URL.
 - **Claim / bad-review slides (user rules)**: title `#NN` is **blue** (`#0000FF`) for 클레임 and **red** (`#FF0000`) for 배드 리뷰 —
   if you renumber an existing deck with replaceAllText, re-apply these colours (replace recolours the run). **상세 내용 always
   starts with the SKU**: `[ACS08964] 일주일 만에 뒷면이 벗겨짐` — pass `sku` on every claim/review item (claim = ticket ★문의SKU,
-  review = product-master SKU of its ASIN); `_with_sku()` adds the prefix (2026-10-12).
+  review = product-master SKU of its ASIN); `_with_sku()` adds the prefix (2026-10-12). Legacy codes like `062CS25324` are
+  kept whole; `해당없음`/blank → `[SKU 미확인]` (never guess from a mistyped ASIN).
 - **SKU/ASIN cell shows per-SKU counts (user rule 2026-10-12)**: `ACS08964/B0DJ9SYLMJ (13건)` = claims + bad reviews in this deck
   for that SKU (from each item's `sku`, else a leading `[ACS…` in detail_text); SKUs with none show `(0건)`. Multi-SKU column
   widths are 95/130/80/255/90 so two counted pairs fit per line at 8pt.

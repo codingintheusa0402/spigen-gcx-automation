@@ -530,9 +530,19 @@ def _claim_link_url(claim: dict):
 def _with_sku(item: dict) -> str:
     """상세 내용 always starts with the item's SKU: '[ACS08964] 일주일 만에 뒷면이 벗겨짐' (user rule 2026-10-12).
     Uses item['sku'] (claim: ticket ★문의SKU; review: product-master SKU of its ASIN); kept as-is if already prefixed."""
+    import re as _re
     text = item.get("detail_text", "") or ""
-    sku = (item.get("sku") or "")[:8]
-    if sku and not text.lstrip().startswith(f"[{sku}"):
+    raw = (item.get("sku") or "").strip()
+    m = _re.match(r"[A-Z]{3}\d{5}", raw)
+    if m:
+        sku = m.group(0)                        # ACS08964PAN -> ACS08964
+    elif _re.fullmatch(r"\d{3}[A-Z]{2}\d{5}", raw):
+        sku = raw                               # legacy Spigen code (e.g. 062CS25324) — keep whole, never cut
+    elif "sku" in item:
+        sku = "SKU 미확인"                       # ticket had '해당없음'/blank — say so, don't guess
+    else:
+        return text
+    if not _re.match(r"\s*\[", text):
         text = f"[{sku}] {text.lstrip()}"
     return text
 
