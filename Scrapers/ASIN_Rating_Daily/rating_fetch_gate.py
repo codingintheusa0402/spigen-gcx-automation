@@ -19,7 +19,7 @@ from datetime import date, datetime, time as dtime
 from zoneinfo import ZoneInfo
 
 KST = ZoneInfo("Asia/Seoul")
-TARGET_TIME = dtime(9, 0)
+TARGET_TIME = dtime(8, 20)
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATE_PATH = os.path.join(HERE, "state_rating_gate.json")
 LOG_PATH = os.path.expanduser("~/.config/asin_rating_daily/gate.log")
