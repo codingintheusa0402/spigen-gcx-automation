@@ -5,7 +5,7 @@
 $ErrorActionPreference = "SilentlyContinue"
 $log = "C:\GCX-Setup\selfheal\selfheal.log"
 function L($m) { "$(Get-Date -f 'MM-dd HH:mm:ss') $m" | Add-Content $log }
-if (((Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime).TotalMinutes -lt 3) { exit }   # boot still settling
+if ([Environment]::TickCount64 -lt 180000) { exit }   # boot still settling (TickCount, not WMI: a CIM query can hang for minutes on a sick host)
 # One-shot requests (2026-10-14): any *.ps1 dropped into C:\GCX-Setup\selfheal\requests\ runs once here — elevated, in the
 # signed-in session — then its output sits next to it in requests\done\<name>.ps1.log. Written for the case where Windows
 # SSH/VNC are down but Ubuntu still runs: Ubuntu writes the request through /mnt/c (write as .tmp, then rename to .ps1).
