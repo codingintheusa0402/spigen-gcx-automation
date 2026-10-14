@@ -891,6 +891,12 @@ Zendesk 두 뷰는 매 틱(5분)마다 확인하지만, 이 소스는 **30분에
 - 값이 없거나 `now - tct_log_last_scan >= 1800`이면 이번 틱에서 이 소스를 스캔하고,
   스캔 직후(성공 여부 무관) `tct_log_last_scan = now`로 갱신한다.
 - 그렇지 않으면 조용히 건너뛴다 — 틱 요약에 언급 불필요 (Zendesk 결과만 보고).
+- **30분은 고정 기본값이다 (사용자 재확인 2026-10-14: "tct chatlog는 30분 간격 스캔, 앞으로
+  기본 설정").** Zendesk 뷰 틱 주기가 바뀌어도(예: 1분·3분 임시 cadence, 5분 기본) TCT 스캔
+  주기는 따라 바뀌지 않는다 — 항상 `tct_log_last_scan` 기준 30분(1800초)마다 1회. 사용자가
+  TCT 주기 자체를 명시적으로 바꾸라고 할 때만 변경한다.
+- `scan_tct_log.py`는 `tct_log_last_scan`을 스스로 갱신하지 않는다 — 스캔 후 반드시
+  `processed.json`에 직접 `tct_log_last_scan = now`를 기록한다.
 
 ### 컬럼 매핑 (A~V, 두 탭 동일)
 A=Status, B=Ticket ID, C=Order ID, D=Income/Date(로그 등록일, 구매일자 아님),
