@@ -40,6 +40,7 @@ JOBS = [
     ("Caspi 판매량 backfill",        "*/30 * * * *",  "GAS_Operations/CaspiSalesBackfill",   ["backfill.py"]),
     ("Discoloration report",        "*/30 * * * *",  "GAS_Operations/DiscolorationReport",  ["report.py"]),
     ("Apify ASIN health check",     "0 10 * * *",    "Scrapers/apify-asin-rating-scraper",  ["health_check.py", "--autofix"]),
+    ("ASIN rating daily",           "*/5 * * * 1-5", "Scrapers/ASIN_Rating_Daily",          ["rating_fetch_gate.py"]),
 ]
 
 
