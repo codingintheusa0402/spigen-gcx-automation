@@ -6,7 +6,12 @@ Called every 5 min by cron (not a single exact-time shot) so a missed slot
 back, instead of silently skipping the whole day — added 2026-10-12 after a
 27h Modern Standby outage ate both this job's 8:30 run and the Apify health
 check's 10:00 run on the same day. Only actually launches once per working
-day (state/last_run.json), from 08:30 KST onward.
+day (state_cron_gate.json, git-synced between hosts), from 08:30 KST onward.
+
+2026-10-14: the Mac runs this same gate too (launchd com.spigen.gcx.sc-propagate-gate,
+every 5 min). Ownership per day: the server, unless it is unreachable over Tailscale
+ssh at launch time, or unless the state file's "force_mac_dates" lists today — then
+the Mac launches and the server skips. The shared state file keeps it to one launch.
 
 Skips on Korean public holidays, computed via the `holidays` package (South
 Korea, "public" category) in the dedicated venv ~/.venvs/gcx-holidays —
@@ -28,6 +33,9 @@ from datetime import date, datetime, time as dtime
 from zoneinfo import ZoneInfo
 
 KST = ZoneInfo("Asia/Seoul")
+IS_MAC = sys.platform == "darwin"          # 2026-10-14: the same gate also runs on the Mac (launchd, every 5 min)
+HOST_LABEL = "Mac" if IS_MAC else "GCX server"
+PROJECT_DIR = "-Users-kevinkim" if IS_MAC else "-home-kevinkim"
 EXCLUDE_HOLIDAYS = {"07-17"}  # 제헌절 — no longer a non-working day since 2008
 TASK_NAME = "sc-propagate-daily"
 TASK_DIR = os.path.expanduser("~/.gcx-tasks")
@@ -36,7 +44,7 @@ STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state_cro
 
 sys.path.insert(0, os.path.expanduser("~/Desktop/GCX/ServerBootstrap/watchdog"))
 
-PROMPT = """Run today's full sc-review-propagate pipeline end to end, autonomously, no confirmation needed. This is the standing daily routine (see memory sc_master_sheet_propagation.md, caspilm_review_fetch_workflow.md, and ~/Desktop/GCX/Scrapers/SC_Master_Propagate/SKILL.md — read them, don't re-derive the approach). You are running on the GCX server via a cron-triggered session with no prior context, so figure out today's date yourself first.
+PROMPT = """Run today's full sc-review-propagate pipeline end to end, autonomously, no confirmation needed. This is the standing daily routine (see memory sc_master_sheet_propagation.md, caspilm_review_fetch_workflow.md, and ~/Desktop/GCX/Scrapers/SC_Master_Propagate/SKILL.md — read them, don't re-derive the approach). You are running on the __HOST__ via a cron-triggered session with no prior context, so figure out today's date yourself first.
 
 1. Get today's date in KST (`TZ=Asia/Seoul date +%y%m%d` and `+%Y-%m-%d`).
 
@@ -44,7 +52,7 @@ PROMPT = """Run today's full sc-review-propagate pipeline end to end, autonomous
 
 2b. **Already-ran check (added 2026-10-13)**: another scheduler (the Mac) may already have run this same pipeline today. Before writing anything, list the source spreadsheet's tabs and `drive.revisions.list` on `1tMbA_msRfCRY0KK40GnyZ_h1uNCldlnk9Cg-_MTcbsw` for today's kjw@spigen.com revisions. If `CaspiLM_<yymmdd>` already exists and today's revisions show the funnel/cleanup already happened, SKIP every phase that is already complete — above all do NOT re-post the Phase E Google Chat card — and only verify (`--all-products` = 0 pending, `--refresh-tem --commit` is always safe, `phase_g.py` dry run), then report what you skipped and why.
 
-3. **CaspiLM fetch + upload (steps 3 and 4 are one script)**: `cd ~/Desktop/GCX/Scrapers/Caspi_Review_Fetch && python3 fetch_caspi_reviews.py` — it pulls the latest 500 reviews per marketplace (US/DE/IT/FR/ES/UK/JP/IN, Spigen, SC-scraper 14-column schema, photo URLs `|`-joined, GB→UK) through the registered Caspi data-api query, dedupes by Review ID, writes a CSV under `out/`, and uploads the new tab `CaspiLM_<yymmdd>` (header included) to spreadsheet `1tMbA_msRfCRY0KK40GnyZ_h1uNCldlnk9Cg-_MTcbsw` via gws_shim OAuth. It reads its own API key — NEVER run shell commands that mention the api_key path (not even `test -f`); the auto-mode classifier blocks them and the session hangs for hours. Expect 4,000 rows (500 × 8). Only if the script itself fails, fall back to the CaspiLM MCP `run_query` (one call per marketplace, `LIMIT 500`; large results land as JSON files under `~/.claude/projects/-home-kevinkim/<session>/tool-results/`) and upload with googleapiclient.
+3. **CaspiLM fetch + upload (steps 3 and 4 are one script)**: `cd ~/Desktop/GCX/Scrapers/Caspi_Review_Fetch && python3 fetch_caspi_reviews.py` — it pulls the latest 500 reviews per marketplace (US/DE/IT/FR/ES/UK/JP/IN, Spigen, SC-scraper 14-column schema, photo URLs `|`-joined, GB→UK) through the registered Caspi data-api query, dedupes by Review ID, writes a CSV under `out/`, and uploads the new tab `CaspiLM_<yymmdd>` (header included) to spreadsheet `1tMbA_msRfCRY0KK40GnyZ_h1uNCldlnk9Cg-_MTcbsw` via gws_shim OAuth. It reads its own API key — NEVER run shell commands that mention the api_key path (not even `test -f`); the auto-mode classifier blocks them and the session hangs for hours. Expect 4,000 rows (500 × 8). Only if the script itself fails, fall back to the CaspiLM MCP `run_query` (one call per marketplace, `LIMIT 500`; large results land as JSON files under `~/.claude/projects/__PROJECT_DIR__/<session>/tool-results/`) and upload with googleapiclient.
 
 4. (merged into step 3 — the script uploads the tab itself.)
 
@@ -104,13 +112,46 @@ def notify_catchup(today_str, now, late_minutes):
         print(f"WARN: catch-up chat alert failed: {e}", file=sys.stderr)
 
 
+def server_reachable():
+    """Ubuntu-side ssh over Tailscale — the gate on the server runs in that very Ubuntu, so this is the right probe."""
+    try:
+        return subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "kevinkim@gcx-server", "true"],
+                              capture_output=True, timeout=25).returncode == 0
+    except Exception:
+        return False
+
+
+def owner_is_other_host(state, today_str):
+    """Both hosts share this gate (and the git-synced state file). Exactly one of them launches per day:
+    the server unless it is unreachable at launch time, or unless state["force_mac_dates"] lists today
+    (set 2026-10-14 by the user: "use my mac tomorrow"). Returns a skip reason, or None to launch here."""
+    forced = today_str in (state.get("force_mac_dates") or [])
+    if IS_MAC:
+        if forced:
+            return None
+        if server_reachable():
+            return "server reachable → the server owns today's run, Mac skips"
+        return None
+    if forced:
+        return "force_mac_dates names today → the Mac owns today's run, server skips"
+    return None
+
+
 def launch_pipeline():
     os.makedirs(TASK_DIR, exist_ok=True)
     prompt_path = os.path.join(TASK_DIR, f"{TASK_NAME}.prompt")
     with open(prompt_path, "w") as f:
-        f.write(PROMPT)
+        f.write(PROMPT.replace("__HOST__", HOST_LABEL).replace("__PROJECT_DIR__", PROJECT_DIR))
 
-    launch_cmd = f"""
+    if IS_MAC:
+        launch_cmd = f"""
+export PATH=$HOME/.local/bin:/opt/homebrew/bin:$PATH
+tmux has-session -t gcx 2>/dev/null || tmux new-session -d -s gcx -c "$HOME"
+tmux kill-window -t gcx:{TASK_NAME} 2>/dev/null
+tmux new-window -t gcx: -n {TASK_NAME} 'cd ~ && export PATH=$HOME/.local/bin:/opt/homebrew/bin:$PATH; claude --remote-control gcx-{TASK_NAME}-mac "$(cat {prompt_path})"; echo; echo "[session ended]"; exec zsh'
+"""
+    else:
+        launch_cmd = f"""
 bash ~/tmux_start.sh >/dev/null 2>&1
 tmux kill-window -t gcx:{TASK_NAME} 2>/dev/null
 tmux new-window -t gcx: -n {TASK_NAME} 'cd ~ && export PATH=$HOME/.local/bin:$PATH DISPLAY=:0 WAYLAND_DISPLAY=wayland-0; claude --remote-control gcx-{TASK_NAME} "$(cat {prompt_path})"; echo; echo "[session ended]"; exec bash'
@@ -137,6 +178,10 @@ def main():
     if state.get("last_run_date") == today_str:
         print(f"{today} already launched today, skipping")
         return
+    skip = owner_is_other_host(state, today_str)
+    if skip:
+        print(f"{today} {skip}")
+        return
 
     # Catch-up detection: are we more than ~10 min past the target time?
     target_dt = datetime.combine(today, TARGET_TIME, tzinfo=KST)
@@ -146,6 +191,7 @@ def main():
     state["last_run_date"] = today_str
     state["last_run_at"] = now.isoformat()
     state["was_catchup"] = is_catchup
+    state["last_run_host"] = HOST_LABEL
     save_state(state)
 
     if is_catchup:
