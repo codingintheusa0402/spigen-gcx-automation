@@ -184,7 +184,7 @@ def main():
             if due(expr, since, now) and not running(name):
                 launch(name, cwd, args)
                 log(f"started {name}")
-                if "catch-up" not in name and "backfill" not in name and "Discoloration" not in name:
+                if not any(k in name for k in ("catch-up", "backfill", "Discoloration", "rating daily")):
                     st.setdefault("ran", []).append(f"{now:%H:%M} {name}")
                 elif not any(name in r for r in st.get("ran", [])):
                     st.setdefault("ran", []).append(f"{now:%H:%M} {name} (every few min while down)")
