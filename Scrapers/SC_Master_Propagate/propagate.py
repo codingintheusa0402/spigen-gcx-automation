@@ -47,6 +47,20 @@ import sys
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from googleapiclient.http import HttpRequest as _HttpRequest
+
+# A transient Sheets 503 on a plain values.get killed the 2026-10-14 run
+# mid-worklist. Default every API call to googleapiclient's built-in
+# exponential-backoff retry (5xx / 429 / rate-limit 403) — also covers
+# phase_g.py, which imports this module for its service.
+_orig_execute = _HttpRequest.execute
+
+
+def _execute_with_retries(self, http=None, num_retries=5):
+    return _orig_execute(self, http=http, num_retries=num_retries)
+
+
+_HttpRequest.execute = _execute_with_retries
 
 # Resolved rather than hardcoded so the same file runs on the Mac and on the
 # 24/7 Windows server. GWS_SHIM_TOKEN wins if set; otherwise the usual
