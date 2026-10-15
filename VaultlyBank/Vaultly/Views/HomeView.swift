@@ -5,6 +5,77 @@ struct HomeView: View {
     @State private var showAddAccount = false
 
     var body: some View {
+        if store.theme.style == .toss { tossBody } else { cardBody }
+    }
+
+    private var tossBody: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 14) {
+                    TossHeader(title: store.brand.bank, symbol: "building.columns.fill",
+                               subtitle: AnyView(Image(systemName: "chevron.right").font(.app(.caption, .semibold)).foregroundStyle(.secondary))) {
+                        SimBadge()
+                        Button { store.update { $0.hideBalances.toggle() } } label: {
+                            Image(systemName: store.settings.hideBalances ? "eye.slash" : "eye").font(.app(.title3)).foregroundStyle(.primary)
+                        }
+                        NavigationLink { TransferForm() } label: { Image(systemName: "paperplane").font(.app(.title3)).foregroundStyle(.primary) }
+                    }
+                    Card {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text("총자산").font(.app(.subheadline)).foregroundStyle(.secondary)
+                                Spacer()
+                                if !store.clock.isRealTime {
+                                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                                        Label("\(speedLabel) · \(store.now.formatted(date: .numeric, time: .shortened))", systemImage: "forward.fill")
+                                            .font(.app(.caption2, .semibold)).foregroundStyle(store.theme.accent)
+                                    }
+                                }
+                            }
+                            MoneyText(amount: store.totalAssets, font: .app(size: 30, .bold))
+                            if store.totalDebt > 0 {
+                                HStack(spacing: 4) {
+                                    Text("대출").font(.app(.caption)).foregroundStyle(.secondary)
+                                    MoneyText(amount: store.totalDebt, font: .app(.caption, .semibold)).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                    Card {
+                        VStack(spacing: 4) {
+                            ForEach(store.checkingAccounts + store.productAccounts) { acc in
+                                NavigationLink(value: acc.id) { TossAccountRow(account: acc) }.buttonStyle(.plain)
+                            }
+                            Divider().padding(.vertical, 6)
+                            HStack {
+                                Text("계좌 \(store.checkingAccounts.count)").font(.app(.subheadline)).foregroundStyle(.secondary)
+                                Text("|").foregroundStyle(.quaternary)
+                                Text("상품 \(store.productAccounts.count)").font(.app(.subheadline)).foregroundStyle(.secondary)
+                                Spacer()
+                                Button { showAddAccount = true } label: {
+                                    Text("계좌 추가").font(.app(.subheadline)).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                    upcoming
+                    Card {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("최근 거래").font(.app(.title3, .bold))
+                            TossTransactionList(transactions: Array(store.recentTransactions.prefix(10)), showAccount: true)
+                        }
+                    }
+                }
+                .padding(.horizontal).padding(.bottom)
+            }
+            .background(store.theme.background)
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: UUID.self) { AccountDetailView(accountID: $0) }
+            .sheet(isPresented: $showAddAccount) { AddAccountSheet() }
+        }
+    }
+
+    private var cardBody: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {

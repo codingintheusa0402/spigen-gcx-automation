@@ -14,7 +14,10 @@ struct BannerMessage: Identifiable, Equatable {
 @MainActor
 final class BankStore: ObservableObject {
     @Published private(set) var data: BankData {
-        didSet { if data != oldValue { Persistence.save(data) } }
+        didSet {
+            Money.wonSuffix = Theme.named(data.settings.themeID).wonSuffix
+            if data != oldValue { Persistence.save(data) }
+        }
     }
     @Published var banner: BannerMessage?
     @Published var notificationsAuthorized = false
@@ -23,6 +26,7 @@ final class BankStore: ObservableObject {
 
     init() {
         data = Persistence.load() ?? BankData.starter()
+        Money.wonSuffix = Theme.named(data.settings.themeID).wonSuffix
         // Check for due events every 20s while the app is in the foreground so the
         // "4:00pm allowance" shows up on screen within seconds of the notification.
         timer = Timer.publish(every: 20, on: .main, in: .common).autoconnect()

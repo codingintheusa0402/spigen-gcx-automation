@@ -14,9 +14,9 @@ struct AccountDetailView: View {
         if let account = store.account(accountID) {
             ScrollView {
                 VStack(spacing: 20) {
-                    AccountTile(account: account)
+                    if store.theme.style == .toss { tossHeader(account) } else { AccountTile(account: account) }
                     if let terms = account.terms { productInfo(account, terms) }
-                    if account.kind == .checking {
+                    if account.kind == .checking, store.theme.style != .toss {
                         HStack(spacing: 12) {
                             Button { newBalance = account.balance; editBalance = true } label: {
                                 Label("잔액 설정", systemImage: "slider.horizontal.3").frame(maxWidth: .infinity)
@@ -26,21 +26,44 @@ struct AccountDetailView: View {
                             }.buttonStyle(.bordered)
                         }
                     }
-                    Card {
-                        Text("거래 내역").font(.app(.headline, .semibold))
-                        let txs = store.transactions(for: accountID)
-                        if txs.isEmpty { Text("거래 내역이 없습니다").foregroundStyle(.secondary).padding(.top, 4) }
-                        ForEach(txs) { tx in
-                            TransactionRow(tx: tx)
-                            if tx.id != txs.last?.id { Divider() }
+                    if store.theme.style == .toss {
+                        TossTransactionList(transactions: store.transactions(for: accountID))
+                    } else {
+                        Card {
+                            Text("거래 내역").font(.app(.headline, .semibold))
+                            let txs = store.transactions(for: accountID)
+                            if txs.isEmpty { Text("거래 내역이 없습니다").foregroundStyle(.secondary).padding(.top, 4) }
+                            ForEach(txs) { tx in
+                                TransactionRow(tx: tx)
+                                if tx.id != txs.last?.id { Divider() }
+                            }
                         }
                     }
                 }
                 .padding()
             }
             .background(store.theme.background)
+            .safeAreaInset(edge: .bottom) {
+                if store.theme.style == .toss, account.kind == .checking {
+                    HStack(spacing: 12) {
+                        Button { newBalance = account.balance; editBalance = true } label: {
+                            Text("채우기").font(.app(.body, .bold)).frame(maxWidth: .infinity).padding(.vertical, 14)
+                        }
+                        .background(store.theme.accent.opacity(0.18), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .foregroundStyle(store.theme.accent)
+                        NavigationLink { TransferForm(presetFrom: account.id) } label: {
+                            Text("보내기").font(.app(.body, .bold)).frame(maxWidth: .infinity).padding(.vertical, 14)
+                        }
+                        .background(store.theme.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .foregroundStyle(.white)
+                    }
+                    .padding(.horizontal).padding(.top, 8).padding(.bottom, 4)
+                    .background(store.theme.background)
+                }
+            }
             .navigationTitle(account.name)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarRole(store.theme.style == .toss ? .editor : .automatic)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -65,6 +88,21 @@ struct AccountDetailView: View {
         } else {
             ContentUnavailableView("계좌를 찾을 수 없습니다", systemImage: "questionmark.folder")
         }
+    }
+
+    private func tossHeader(_ account: Account) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("\(store.brand.bank) \(account.number.replacingOccurrences(of: "-", with: ""))")
+                .font(.app(.subheadline)).foregroundStyle(.secondary).underline()
+            MoneyText(amount: account.kind == .loan ? -account.balance : account.balance, font: .app(size: 34, .bold))
+            if let t = account.terms {
+                Text(String(format: "연 %.2f%%", t.annualRate * 100)).font(.app(.subheadline)).foregroundStyle(.secondary)
+            } else {
+                Text("연 0.10% · \(account.kind.title)").font(.app(.subheadline)).foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 8)
     }
 
     @ViewBuilder

@@ -15,7 +15,24 @@ struct InvestView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    ticker
+                    if store.theme.style == .toss {
+                        TossHeader(title: store.brand.broker, subtitle: AnyView(tickerInline)) {
+                            SimBadge()
+                            Button { adding = true } label: { Image(systemName: "plus").font(.app(.title3)).foregroundStyle(.primary) }
+                        }
+                        HStack(spacing: 8) {
+                            ZStack {
+                                Circle().fill(store.theme.accent).frame(width: 24, height: 24)
+                                Image(systemName: "chart.xyaxis.line").font(.app(size: 11, .bold)).foregroundStyle(.white)
+                            }
+                            Text("기본계좌").font(.app(.body, .bold))
+                            Image(systemName: "chevron.up.chevron.down").font(.app(.caption2)).foregroundStyle(.secondary)
+                            Spacer()
+                            NavigationLink { CashEditorSheet() } label: { Text("계좌 보기").font(.app(.subheadline)).foregroundStyle(.secondary) }
+                        }
+                    } else {
+                        ticker
+                    }
                     cashCards
                     summary
                     controls
@@ -28,6 +45,7 @@ struct InvestView: View {
             }
             .background(store.theme.background)
             .navigationTitle(store.brand.broker)
+            .toolbar(store.theme.style == .toss ? .hidden : .visible, for: .navigationBar)
             .navigationDestination(for: Holding.self) { HoldingDetailView(holdingID: $0.id) }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { SimBadge() }
@@ -37,6 +55,17 @@ struct InvestView: View {
             }
             .sheet(isPresented: $adding) { AddHoldingSheet() }
         }
+    }
+
+    private var tickerInline: some View {
+        HStack(spacing: 6) {
+            Text(p.indexName).font(.app(.subheadline)).foregroundStyle(.secondary)
+            Text(p.indexValue.formatted(.number.precision(.fractionLength(2)))).font(.app(.subheadline, .bold)).monospacedDigit()
+                .foregroundStyle(p.indexChange >= 0 ? store.theme.accentSecondary : store.theme.accent)
+            Text(String(format: "%@%.1f%%", p.indexChange >= 0 ? "+" : "", p.indexChange * 100))
+                .font(.app(.caption, .semibold)).foregroundStyle(p.indexChange >= 0 ? store.theme.accentSecondary : store.theme.accent)
+        }
+        .padding(.leading, 4)
     }
 
     private var ticker: some View {
@@ -239,6 +268,7 @@ struct HoldingDetailView: View {
             }
             .background(store.theme.background)
             .navigationTitle(h.name)
+            .toolbarRole(store.theme.style == .toss ? .editor : .automatic)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

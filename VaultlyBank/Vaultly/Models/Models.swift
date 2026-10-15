@@ -21,7 +21,18 @@ extension Decimal {
 }
 
 enum Money {
+    /// Mirrors Theme.wonSuffix of the active theme; BankStore keeps it in sync.
+    nonisolated(unsafe) static var wonSuffix = false
+
     static func format(_ amount: Decimal, code: String, signed: Bool = false) -> String {
+        if code == "KRW", wonSuffix {
+            let f = NumberFormatter()
+            f.numberStyle = .decimal
+            f.maximumFractionDigits = 0
+            let body = f.string(from: NSDecimalNumber(decimal: abs(amount))) ?? "\(amount)"
+            let sign = amount < 0 ? "-" : (signed && amount > 0 ? "+" : "")
+            return "\(sign)\(body)원"
+        }
         let f = NumberFormatter()
         f.numberStyle = .currency
         f.currencyCode = code

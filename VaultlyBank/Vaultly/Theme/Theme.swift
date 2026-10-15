@@ -1,6 +1,8 @@
 import SwiftUI
 
-/// Fictional bank brands. None of these copy a real bank's name, logo or layout.
+enum ThemeStyle { case card, toss }
+
+/// Bank brands. `toss` reproduces the flat dark list layout of Korean neobank apps.
 struct Theme: Identifiable {
     let id: String
     let bankName: String
@@ -13,8 +15,26 @@ struct Theme: Identifiable {
     let cornerRadius: CGFloat
     let cardGradient: [Color]
     let cardPalette: [[Color]]
+    var style: ThemeStyle = .card
+    var wonSuffix = false          // 219,320원 instead of ₩219,320
+    var displayName: String { style == .toss ? "TOSS" : bankName }
+
+    static let tossBlue = Color(red: 0.192, green: 0.510, blue: 0.965)   // #3182F6
+    static let tossRed = Color(red: 0.941, green: 0.267, blue: 0.322)    // #F04452
 
     static let all: [Theme] = [
+        Theme(id: "toss", bankName: "토스뱅크", brokerName: "토스증권", tagline: "금융을 쉽고 간편하게",
+              accent: tossBlue, accentSecondary: tossRed,
+              background: adaptive(light: (0.949, 0.957, 0.965), dark: (0.067, 0.067, 0.075)),
+              card: adaptive(light: (1, 1, 1), dark: (0.110, 0.114, 0.129)),
+              cornerRadius: 20,
+              cardGradient: [tossBlue, Color(red: 0.106, green: 0.392, blue: 0.855)],
+              cardPalette: [[tossBlue, Color(red: 0.106, green: 0.392, blue: 0.855)], [tossRed, Color(red: 0.82, green: 0.23, blue: 0.28)],
+                            [Color(red: 0.12, green: 0.72, blue: 0.42), Color(red: 0.08, green: 0.55, blue: 0.33)],
+                            [Color(red: 1.0, green: 0.70, blue: 0.0), Color(red: 0.95, green: 0.55, blue: 0.0)],
+                            [Color(red: 0.48, green: 0.36, blue: 0.96), Color(red: 0.36, green: 0.25, blue: 0.85)],
+                            [Color(red: 0.55, green: 0.58, blue: 0.63), Color(red: 0.35, green: 0.38, blue: 0.43)]],
+              style: .toss, wonSuffix: true),
         Theme(id: "nova", bankName: "Nova Bank", brokerName: "Nova 증권", tagline: "심플한 금융의 시작",
               accent: Color(red: 0.19, green: 0.42, blue: 1.0), accentSecondary: Color(red: 0.0, green: 0.78, blue: 0.9),
               background: Color(UIColor.systemGroupedBackground), card: Color(UIColor.secondarySystemGroupedBackground),

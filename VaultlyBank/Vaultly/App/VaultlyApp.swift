@@ -8,7 +8,12 @@ struct VaultlyApp: App {
     init() {
         if CommandLine.arguments.contains("-uitest-reset") { Persistence.reset() }
         AppFont.installUIKitAppearance()
-        _store = StateObject(wrappedValue: BankStore())
+        let store = BankStore()
+        if let i = CommandLine.arguments.firstIndex(of: "-uitest-theme"), i + 1 < CommandLine.arguments.count {
+            let id = CommandLine.arguments[i + 1]
+            store.update { $0.themeID = id }
+        }
+        _store = StateObject(wrappedValue: store)
     }
 
     var body: some Scene {

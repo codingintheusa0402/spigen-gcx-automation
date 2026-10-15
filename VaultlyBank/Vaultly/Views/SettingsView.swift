@@ -33,7 +33,7 @@ struct SettingsView: View {
 
                 Section("화면") {
                     NavigationLink { ThemePicker() } label: {
-                        HStack { Label("테마", systemImage: "paintpalette"); Spacer(); Text(store.theme.bankName).foregroundStyle(.secondary) }
+                        HStack { Label("테마", systemImage: "paintpalette"); Spacer(); Text(store.theme.displayName).foregroundStyle(.secondary) }
                     }
                     Picker(selection: Binding(get: { store.settings.appearance }, set: { v in store.update { $0.appearance = v } })) {
                         ForEach(Appearance.allCases) { Text($0.title).tag($0) }
@@ -146,8 +146,8 @@ struct ThemePicker: View {
                                 .fill(LinearGradient(colors: t.cardGradient, startPoint: .topLeading, endPoint: .bottomTrailing))
                                 .frame(width: 48, height: 32)
                             VStack(alignment: .leading) {
-                                Text(t.bankName).font(.app(.body, .semibold))
-                                Text(t.tagline).font(.app(.caption)).foregroundStyle(.secondary)
+                                Text(t.displayName).font(.app(.body, .semibold))
+                                Text(t.style == .toss ? "\(t.bankName) · 다크 리스트 레이아웃" : t.tagline).font(.app(.caption)).foregroundStyle(.secondary)
                             }
                             Spacer()
                             if store.settings.themeID == t.id { Image(systemName: "checkmark").foregroundStyle(store.theme.accent) }
