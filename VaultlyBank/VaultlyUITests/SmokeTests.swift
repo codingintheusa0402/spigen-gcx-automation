@@ -60,3 +60,26 @@ final class SmokeTests: XCTestCase {
         snap("account-detail")
     }
 }
+
+extension SmokeTests {
+    func testScheduleDepositViaEditor() {
+        XCTAssertTrue(app.textFields["이름 (예: 홍길동)"].waitForExistence(timeout: 5))
+        app.buttons["시작하기"].tap()
+        allowNotificationsIfAsked()
+        app.tabBars.firstMatch.buttons["예약 알림"].tap()
+        XCTAssertTrue(app.staticTexts["예약된 알림이 없습니다"].waitForExistence(timeout: 5))
+
+        app.navigationBars["예약 알림"].buttons.element(boundBy: app.navigationBars["예약 알림"].buttons.count - 1).tap()
+        XCTAssertTrue(app.navigationBars["알림 예약"].waitForExistence(timeout: 5))
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH '엄마 · 용돈'")).firstMatch.tap()
+        snap("schedule-editor")
+        let save = app.navigationBars["알림 예약"].buttons["저장"]
+        XCTAssertTrue(save.isEnabled, "preset should make the form valid")
+        save.tap()
+
+        let row = app.staticTexts["엄마 · 용돈"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "saved event should be listed")
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS '5,000,000'")).firstMatch.exists)
+        snap("schedule-list")
+    }
+}

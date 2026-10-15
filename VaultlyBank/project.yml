@@ -9,6 +9,8 @@ targets:
     type: application
     platform: iOS
     sources: [Vaultly]
+    entitlements:
+      path: Vaultly/Vaultly.entitlements
     info:
       path: Vaultly/Info.plist
       properties:
@@ -22,6 +24,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.kevinkim.vaultly
         DEVELOPMENT_TEAM: 6Z44CDGL2Q
         CODE_SIGN_STYLE: Automatic
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.9"
