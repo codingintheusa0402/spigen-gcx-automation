@@ -97,9 +97,9 @@ enum WealthTier: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .broke: return [
             FlowTemplate(counterparty: "편의점 알바", memo: "주급", minAmount: 180_000, maxAmount: 260_000, frequency: .weekly(weekday: 6), hour: 18, isSalary: true),
-            FlowTemplate(counterparty: "OK캐피탈", memo: "대출 원금 상환", minAmount: -210_000, maxAmount: -210_000, frequency: .monthly(day: 5), category: .repayment, hour: 9),
+            FlowTemplate(counterparty: "{capital}", memo: "대출 원금 상환", minAmount: -210_000, maxAmount: -210_000, frequency: .monthly(day: 5), category: .repayment, hour: 9),
             FlowTemplate(counterparty: "러시앤캐시", memo: "대출 이자", minAmount: -94_000, maxAmount: -94_000, frequency: .monthly(day: 12), category: .interest, hour: 9),
-            FlowTemplate(counterparty: "OK캐피탈", memo: "연체 이자", minAmount: -31_000, maxAmount: -47_000, frequency: .weekly(weekday: 2), category: .interest, hour: 8),
+            FlowTemplate(counterparty: "{capital}", memo: "연체 이자", minAmount: -31_000, maxAmount: -47_000, frequency: .weekly(weekday: 2), category: .interest, hour: 8),
             FlowTemplate(counterparty: "휴대폰 소액결제", memo: "자동이체", minAmount: -89_000, maxAmount: -89_000, frequency: .monthly(day: 25), hour: 7),
             FlowTemplate(counterparty: "고시원", memo: "월세", minAmount: -280_000, maxAmount: -280_000, frequency: .monthly(day: 1), hour: 10),
             FlowTemplate(counterparty: "편의점", memo: "컵라면·삼각김밥", minAmount: -3_200, maxAmount: -8_900, frequency: .daily(chance: 0.9), hour: 21),
@@ -108,7 +108,7 @@ enum WealthTier: String, Codable, CaseIterable, Identifiable {
         case .working: return [
             FlowTemplate(counterparty: "(주)대성물류", memo: "급여", minAmount: 2_800_000, maxAmount: 2_800_000, frequency: .monthly(day: 25), hour: 9, isSalary: true),
             FlowTemplate(counterparty: "집주인", memo: "월세", minAmount: -650_000, maxAmount: -650_000, frequency: .monthly(day: 1), hour: 10),
-            FlowTemplate(counterparty: "신한카드", memo: "카드 대금", minAmount: -980_000, maxAmount: -1_340_000, frequency: .monthly(day: 14), hour: 8),
+            FlowTemplate(counterparty: "{card}", memo: "카드 대금", minAmount: -980_000, maxAmount: -1_340_000, frequency: .monthly(day: 14), hour: 8),
             FlowTemplate(counterparty: "햇살론", memo: "대출 이자", minAmount: -112_000, maxAmount: -112_000, frequency: .monthly(day: 10), category: .interest, hour: 9),
             FlowTemplate(counterparty: "통신사", memo: "휴대폰 요금", minAmount: -69_000, maxAmount: -69_000, frequency: .monthly(day: 20), hour: 7),
             FlowTemplate(counterparty: "GS25 / 식당", memo: "식비", minAmount: -7_000, maxAmount: -18_000, frequency: .daily(chance: 0.8), hour: 12),
@@ -117,10 +117,10 @@ enum WealthTier: String, Codable, CaseIterable, Identifiable {
         case .middle: return [
             FlowTemplate(counterparty: "(주)한빛전자", memo: "급여", minAmount: 6_200_000, maxAmount: 6_200_000, frequency: .monthly(day: 25), hour: 9, isSalary: true),
             FlowTemplate(counterparty: "아파트 관리사무소", memo: "관리비", minAmount: -310_000, maxAmount: -420_000, frequency: .monthly(day: 5), hour: 10),
-            FlowTemplate(counterparty: "삼성카드", memo: "카드 대금", minAmount: -1_900_000, maxAmount: -2_600_000, frequency: .monthly(day: 15), hour: 8),
+            FlowTemplate(counterparty: "{card}", memo: "카드 대금", minAmount: -1_900_000, maxAmount: -2_600_000, frequency: .monthly(day: 15), hour: 8),
             FlowTemplate(counterparty: "주택담보대출", memo: "원리금 상환", minAmount: -1_420_000, maxAmount: -1_420_000, frequency: .monthly(day: 10), category: .repayment, hour: 9),
             FlowTemplate(counterparty: "영재수학학원", memo: "학원비", minAmount: -480_000, maxAmount: -480_000, frequency: .monthly(day: 3), hour: 11),
-            FlowTemplate(counterparty: "Vaultly 자유적금", memo: "자동이체", minAmount: -500_000, maxAmount: -500_000, frequency: .monthly(day: 26), category: .autoTransfer, hour: 9),
+            FlowTemplate(counterparty: "{bank} 자유적금", memo: "자동이체", minAmount: -500_000, maxAmount: -500_000, frequency: .monthly(day: 26), category: .autoTransfer, hour: 9),
             FlowTemplate(counterparty: "이마트", memo: "장보기", minAmount: -90_000, maxAmount: -210_000, frequency: .weekly(weekday: 7), hour: 15),
             FlowTemplate(counterparty: "스타벅스", memo: "커피", minAmount: -5_900, maxAmount: -12_000, frequency: .daily(chance: 0.6), hour: 9),
         ]
@@ -129,7 +129,7 @@ enum WealthTier: String, Codable, CaseIterable, Identifiable {
             FlowTemplate(counterparty: "강남 오피스 임차인", memo: "임대료", minAmount: 8_500_000, maxAmount: 8_500_000, frequency: .monthly(day: 1), hour: 10),
             FlowTemplate(counterparty: "한남동 상가", memo: "임대료", minAmount: 4_200_000, maxAmount: 4_200_000, frequency: .monthly(day: 5), hour: 10),
             FlowTemplate(counterparty: "증권 배당", memo: "배당금 입금", minAmount: 1_200_000, maxAmount: 6_800_000, frequency: .weekly(weekday: 3), category: .interest, hour: 15),
-            FlowTemplate(counterparty: "Vaultly", memo: "예금 이자", minAmount: 640_000, maxAmount: 640_000, frequency: .monthly(day: 20), category: .interest, hour: 9),
+            FlowTemplate(counterparty: "{bank}", memo: "예금 이자", minAmount: 640_000, maxAmount: 640_000, frequency: .monthly(day: 20), category: .interest, hour: 9),
             FlowTemplate(counterparty: "현대카드 Black", memo: "카드 대금", minAmount: -9_000_000, maxAmount: -17_000_000, frequency: .monthly(day: 14), hour: 8),
             FlowTemplate(counterparty: "국세청", memo: "종합소득세 중간예납", minAmount: -12_000_000, maxAmount: -12_000_000, frequency: .monthly(day: 30), hour: 10),
             FlowTemplate(counterparty: "골프장 / 레스토랑", memo: "결제", minAmount: -300_000, maxAmount: -1_800_000, frequency: .daily(chance: 0.5), hour: 20),
@@ -138,7 +138,7 @@ enum WealthTier: String, Codable, CaseIterable, Identifiable {
             FlowTemplate(counterparty: "(주)VX그룹", memo: "법인 급여", minAmount: 120_000_000, maxAmount: 120_000_000, frequency: .monthly(day: 25), hour: 9, isSalary: true),
             FlowTemplate(counterparty: "VX벤처스", memo: "투자 수익 배분", minAmount: 35_000_000, maxAmount: 280_000_000, frequency: .weekly(weekday: 2), hour: 11),
             FlowTemplate(counterparty: "증권 배당", memo: "배당금 입금", minAmount: 12_000_000, maxAmount: 95_000_000, frequency: .daily(chance: 0.55), category: .interest, hour: 15),
-            FlowTemplate(counterparty: "Vaultly PB", memo: "채권 이자", minAmount: 4_800_000, maxAmount: 21_000_000, frequency: .daily(chance: 0.7), category: .interest, hour: 9),
+            FlowTemplate(counterparty: "{bank} PB", memo: "채권 이자", minAmount: 4_800_000, maxAmount: 21_000_000, frequency: .daily(chance: 0.7), category: .interest, hour: 9),
             FlowTemplate(counterparty: "테헤란로 타워", memo: "임대료", minAmount: 310_000_000, maxAmount: 310_000_000, frequency: .monthly(day: 1), hour: 10),
             FlowTemplate(counterparty: "제주 리조트", memo: "운영 수익", minAmount: 48_000_000, maxAmount: 130_000_000, frequency: .weekly(weekday: 5), hour: 17),
             FlowTemplate(counterparty: "국세청", memo: "종합소득세", minAmount: -380_000_000, maxAmount: -380_000_000, frequency: .monthly(day: 30), hour: 10),

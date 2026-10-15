@@ -8,7 +8,6 @@ struct InvestView: View {
     @State private var showValue = true     // 평가금 vs 현재가
     @State private var showKRW = true       // 원 vs $
     @State private var adding = false
-    @State private var editCash = false
 
     private var p: Portfolio { store.portfolio }
 
@@ -16,39 +15,38 @@ struct InvestView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
+                    ticker
                     cashCards
                     summary
                     controls
                     marketSection(.domestic)
                     marketSection(.overseas)
                     Text("모의 투자입니다. 시세는 앱 안에서 무작위로 움직이며 실제 시장과 무관합니다.")
-                        .font(.caption2).foregroundStyle(.tertiary)
+                        .font(.app(.caption2)).foregroundStyle(.tertiary)
                 }
                 .padding()
             }
             .background(store.theme.background)
-            .navigationTitle("")
+            .navigationTitle(store.brand.broker)
             .navigationDestination(for: Holding.self) { HoldingDetailView(holdingID: $0.id) }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    HStack(spacing: 6) {
-                        SimBadge()
-                        Text(p.indexName).font(.subheadline.weight(.semibold))
-                        Text(p.indexValue.formatted(.number.precision(.fractionLength(2)))).font(.subheadline.weight(.bold)).monospacedDigit()
-                        Text(String(format: "%@%.1f%%", p.indexChange >= 0 ? "+" : "", p.indexChange * 100))
-                            .font(.caption.weight(.semibold)).foregroundStyle(p.indexChange >= 0 ? .red : .blue)
-                    }
-                }
+                ToolbarItem(placement: .topBarLeading) { SimBadge() }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button { adding = true } label: { Label("종목 추가", systemImage: "plus") }
-                        Button { editCash = true } label: { Label("예수금 · 환율 설정", systemImage: "dollarsign.circle") }
-                        Toggle("시세 자동 변동", isOn: Binding(get: { p.simulatePrices }, set: { v in store.updatePortfolio { $0.simulatePrices = v; $0.lastTick = Date() } }))
-                    } label: { Image(systemName: "ellipsis.circle") }
+                    Button { adding = true } label: { Image(systemName: "plus") }
                 }
             }
             .sheet(isPresented: $adding) { AddHoldingSheet() }
-            .sheet(isPresented: $editCash) { CashEditorSheet() }
+        }
+    }
+
+    private var ticker: some View {
+        HStack(spacing: 8) {
+            Text(p.indexName).font(.app(.subheadline, .semibold)).foregroundStyle(.secondary)
+            Text(p.indexValue.formatted(.number.precision(.fractionLength(2)))).font(.app(.subheadline, .bold)).monospacedDigit()
+            Text(String(format: "%@%.1f%%", p.indexChange >= 0 ? "+" : "", p.indexChange * 100))
+                .font(.app(.caption, .semibold)).foregroundStyle(p.indexChange >= 0 ? .red : .blue)
+            Spacer()
+            if !p.simulatePrices { Text("시세 고정").font(.app(.caption2)).foregroundStyle(.tertiary) }
         }
     }
 
@@ -60,8 +58,8 @@ struct InvestView: View {
     }
     private func cashCard(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.subheadline).foregroundStyle(.secondary)
-            Text(store.settings.hideBalances ? "••••" : value).font(.title3.weight(.bold)).monospacedDigit()
+            Text(title).font(.app(.subheadline)).foregroundStyle(.secondary)
+            Text(store.settings.hideBalances ? "••••" : value).font(.app(.title3, .bold)).monospacedDigit()
         }
         .padding(18).frame(maxWidth: .infinity, alignment: .leading)
         .background(store.theme.card, in: RoundedRectangle(cornerRadius: store.theme.cornerRadius, style: .continuous))
@@ -69,7 +67,7 @@ struct InvestView: View {
 
     private var summary: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("내 투자").font(.headline)
+            Text("내 투자").font(.app(.headline, .semibold))
             HStack(spacing: 6) {
                 MoneyText(amount: p.investedKRW, font: .system(size: 38, weight: .heavy))
                 Image(systemName: "chevron.right").foregroundStyle(.secondary)
@@ -84,7 +82,7 @@ struct InvestView: View {
                 ForEach(SortMode.allCases, id: \.self) { m in Button(m.rawValue) { sort = m } }
             } label: {
                 HStack(spacing: 4) { Text(sort.rawValue); Image(systemName: "chevron.down") }
-                    .font(.subheadline).padding(.horizontal, 12).padding(.vertical, 8)
+                    .font(.app(.subheadline)).padding(.horizontal, 12).padding(.vertical, 8)
                     .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
             }.foregroundStyle(.primary)
             Spacer()
@@ -95,7 +93,7 @@ struct InvestView: View {
     private func segment(_ items: [String], selected: Int, action: @escaping (Int) -> Void) -> some View {
         HStack(spacing: 0) {
             ForEach(items.indices, id: \.self) { i in
-                Text(items[i]).font(.subheadline.weight(i == selected ? .bold : .regular))
+                Text(items[i]).font(.app(.subheadline, i == selected ? .bold : .regular))
                     .padding(.horizontal, 10).padding(.vertical, 6)
                     .background(i == selected ? Color.primary.opacity(0.15) : .clear, in: RoundedRectangle(cornerRadius: 8))
                     .foregroundStyle(i == selected ? .primary : .secondary)
@@ -110,10 +108,10 @@ struct InvestView: View {
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
-                    Text(market.title).font(.title3.weight(.semibold))
+                    Text(market.title).font(.app(.title3, .semibold))
                     Text(String(format: "%@%.1f%%", p.rate(for: market) >= 0 ? "+" : "", p.rate(for: market) * 100))
-                        .font(.title3.weight(.semibold)).foregroundStyle(p.rate(for: market) >= 0 ? .red : .blue)
-                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+                        .font(.app(.title3, .semibold)).foregroundStyle(p.rate(for: market) >= 0 ? .red : .blue)
+                    Image(systemName: "chevron.right").font(.app(.caption)).foregroundStyle(.secondary)
                 }
                 .padding(.bottom, 8)
                 ForEach(items) { h in
@@ -165,16 +163,16 @@ struct HoldingRow: View {
         HStack(spacing: 14) {
             ZStack {
                 Circle().fill(store.theme.gradient(for: holding.colorIndex)).frame(width: 46, height: 46)
-                Text(String(holding.symbol.prefix(2))).font(.caption.weight(.black)).foregroundStyle(.white)
+                Text(String(holding.symbol.prefix(2))).font(.app(.caption, .black)).foregroundStyle(.white)
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text(holding.name).font(.title3.weight(.medium))
-                Text("\(holding.shares.formatted())주").font(.subheadline).foregroundStyle(.secondary)
+                Text(holding.name).font(.app(.title3, .medium))
+                Text("\(holding.shares.formatted())주").font(.app(.subheadline)).foregroundStyle(.secondary)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 4) {
                 Text(store.settings.hideBalances ? "••••" : Money.format(convert(showValue ? holding.value : holding.price), code: code))
-                    .font(.title3.weight(.bold)).monospacedDigit()
+                    .font(.app(.title3, .bold)).monospacedDigit()
                 PnLText(pnl: convert(holding.pnl), rate: holding.pnlRate, code: code)
             }
         }
@@ -200,8 +198,8 @@ struct HoldingDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("\(h.name) · \(h.symbol)").font(.subheadline).foregroundStyle(.secondary)
-                        Text(Money.format(h.price, code: code)).font(.system(size: 36, weight: .heavy)).monospacedDigit()
+                        Text("\(h.name) · \(h.symbol)").font(.app(.subheadline)).foregroundStyle(.secondary)
+                        Text(Money.format(h.price, code: code)).font(.app(size: 36, .heavy)).monospacedDigit()
                             .contentTransition(.numericText())
                         PnLText(pnl: h.pnl, rate: h.pnlRate, code: code, font: .headline)
                     }
@@ -215,9 +213,9 @@ struct HoldingDetailView: View {
                         }
                     }
                     HStack(spacing: 12) {
-                        Button { orderBuy = true; orderPrice = h.price; showOrder = true } label: { Text("구매하기").frame(maxWidth: .infinity).fontWeight(.bold) }
+                        Button { orderBuy = true; orderPrice = h.price; showOrder = true } label: { Text("구매하기").frame(maxWidth: .infinity).font(.app(.body, .bold)) }
                             .buttonStyle(.borderedProminent).tint(.red)
-                        Button { orderBuy = false; orderPrice = h.price; showOrder = true } label: { Text("판매하기").frame(maxWidth: .infinity).fontWeight(.bold) }
+                        Button { orderBuy = false; orderPrice = h.price; showOrder = true } label: { Text("판매하기").frame(maxWidth: .infinity).font(.app(.body, .bold)) }
                             .buttonStyle(.borderedProminent).tint(.blue)
                     }
                     Button { newPrice = h.price; setPrice = true } label: { Label("현재가 직접 설정", systemImage: "slider.horizontal.3").frame(maxWidth: .infinity) }
@@ -225,13 +223,13 @@ struct HoldingDetailView: View {
                     let trades = store.portfolio.trades.filter { $0.holdingID == holdingID }.sorted { $0.date > $1.date }
                     if !trades.isEmpty {
                         Card {
-                            Text("체결 내역").font(.headline)
+                            Text("체결 내역").font(.app(.headline, .semibold))
                             ForEach(trades) { t in
                                 HStack {
-                                    Text(t.isBuy ? "매수" : "매도").font(.subheadline.weight(.semibold)).foregroundStyle(t.isBuy ? .red : .blue)
-                                    Text(t.date.formatted(date: .numeric, time: .shortened)).font(.caption).foregroundStyle(.secondary)
+                                    Text(t.isBuy ? "매수" : "매도").font(.app(.subheadline, .semibold)).foregroundStyle(t.isBuy ? .red : .blue)
+                                    Text(t.date.formatted(date: .numeric, time: .shortened)).font(.app(.caption)).foregroundStyle(.secondary)
                                     Spacer()
-                                    Text("\(t.shares.formatted())주 · \(Money.format(t.price, code: code))").font(.subheadline).monospacedDigit()
+                                    Text("\(t.shares.formatted())주 · \(Money.format(t.price, code: code))").font(.app(.subheadline)).monospacedDigit()
                                 }
                                 if t.id != trades.last?.id { Divider() }
                             }
@@ -261,7 +259,7 @@ struct HoldingDetailView: View {
                                 let ok = store.trade(holdingID: holdingID, buy: orderBuy, shares: orderShares, price: orderPrice)
                                 result = ok ? "\(orderBuy ? "매수" : "매도") 체결 완료 (모의)" : "주문 실패: 예수금 또는 수량이 부족합니다"
                                 showOrder = false
-                            } label: { Text(orderBuy ? "매수" : "매도").frame(maxWidth: .infinity).fontWeight(.bold) }
+                            } label: { Text(orderBuy ? "매수" : "매도").frame(maxWidth: .infinity).font(.app(.body, .bold)) }
                             .buttonStyle(.borderedProminent).tint(orderBuy ? .red : .blue).listRowInsets(EdgeInsets())
                         } footer: { Text("모의 주문입니다. 실제 거래가 발생하지 않습니다.") }
                     }
@@ -282,7 +280,7 @@ struct HoldingDetailView: View {
     }
 
     private func kv(_ k: String, _ v: String) -> some View {
-        HStack { Text(k).foregroundStyle(.secondary); Spacer(); Text(v).fontWeight(.medium).monospacedDigit() }.font(.subheadline)
+        HStack { Text(k).foregroundStyle(.secondary); Spacer(); Text(v).fontWeight(.medium).monospacedDigit() }.font(.app(.subheadline))
     }
 }
 

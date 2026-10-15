@@ -3,7 +3,6 @@ import SwiftUI
 struct HomeView: View {
     @EnvironmentObject var store: BankStore
     @State private var showAddAccount = false
-    @State private var showWealth = false
 
     var body: some View {
         NavigationStack {
@@ -43,7 +42,7 @@ struct HomeView: View {
                 .padding()
             }
             .background(store.theme.background)
-            .navigationTitle(store.theme.bankName)
+            .navigationTitle(store.brand.bank)
             .navigationDestination(for: UUID.self) { AccountDetailView(accountID: $0) }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { SimBadge() }
@@ -54,45 +53,34 @@ struct HomeView: View {
                 }
             }
             .sheet(isPresented: $showAddAccount) { AddAccountSheet() }
-            .sheet(isPresented: $showWealth) { WealthView() }
         }
     }
 
     private var totalCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("\(store.settings.ownerName)님의 총자산").font(.subheadline).foregroundStyle(.white.opacity(0.8))
+                Text("\(store.settings.ownerName)님의 총자산").font(.app(.subheadline)).foregroundStyle(.white.opacity(0.8))
                 Spacer()
                 if store.clock.isRealTime {
-                    Text(store.theme.tagline).font(.caption2).foregroundStyle(.white.opacity(0.6))
+                    Text(store.theme.tagline).font(.app(.caption2)).foregroundStyle(.white.opacity(0.6))
                 } else {
                     TimelineView(.periodic(from: .now, by: 1)) { _ in
                         Label("\(speedLabel) · \(store.now.formatted(date: .numeric, time: .shortened))", systemImage: "forward.fill")
-                            .font(.caption2.weight(.semibold)).foregroundStyle(.white.opacity(0.9))
+                            .font(.app(.caption2, .semibold)).foregroundStyle(.white.opacity(0.9))
                     }
                 }
             }
             MoneyText(amount: store.totalAssets, font: .system(size: 36, weight: .heavy))
                 .foregroundStyle(.white)
-            Button { showWealth = true } label: {
-                HStack(spacing: 6) {
-                    if let t = store.lifestyle.tier { Text("\(t.emoji) \(t.title) 모드") } else { Text("재력 설정하기") }
-                    Image(systemName: "chevron.right").font(.caption2)
-                }
-                .font(.caption.weight(.semibold)).foregroundStyle(.white)
-                .padding(.horizontal, 10).padding(.vertical, 5)
-                .background(.white.opacity(0.2), in: Capsule())
-            }
-            .padding(.top, 2)
             HStack(spacing: 4) {
-                Text("은행").font(.caption).foregroundStyle(.white.opacity(0.75))
+                Text("은행").font(.app(.caption)).foregroundStyle(.white.opacity(0.75))
                 MoneyText(amount: store.bankAssets, font: .caption.weight(.semibold)).foregroundStyle(.white)
-                Text("· 투자").font(.caption).foregroundStyle(.white.opacity(0.75))
+                Text("· 투자").font(.app(.caption)).foregroundStyle(.white.opacity(0.75))
                 MoneyText(amount: store.portfolio.investedKRW + store.portfolio.cashKRWTotal, font: .caption.weight(.semibold)).foregroundStyle(.white)
             }
             if store.totalDebt > 0 {
                 HStack(spacing: 4) {
-                    Text("대출 잔액").font(.caption).foregroundStyle(.white.opacity(0.75))
+                    Text("대출 잔액").font(.app(.caption)).foregroundStyle(.white.opacity(0.75))
                     MoneyText(amount: store.totalDebt, font: .caption.weight(.semibold)).foregroundStyle(.white)
                 }
             }
@@ -113,8 +101,8 @@ struct HomeView: View {
                         HStack {
                             Image(systemName: "clock.badge").foregroundStyle(store.theme.accent)
                             VStack(alignment: .leading) {
-                                Text("\(ev.counterparty) · \(ev.memo)").font(.subheadline.weight(.semibold))
-                                Text(ev.nextFireDate.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
+                                Text("\(ev.counterparty) · \(ev.memo)").font(.app(.subheadline, .semibold))
+                                Text(ev.nextFireDate.formatted(date: .abbreviated, time: .shortened)).font(.app(.caption)).foregroundStyle(.secondary)
                             }
                             Spacer()
                             MoneyText(amount: ev.amount, signed: true, font: .subheadline.weight(.bold))
@@ -136,7 +124,7 @@ struct HomeView: View {
 
     private func section<T: View, C: View>(_ title: String, @ViewBuilder trailing: () -> T, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack { Text(title).font(.headline); Spacer(); trailing() }
+            HStack { Text(title).font(.app(.headline, .semibold)); Spacer(); trailing() }
             content()
         }
     }

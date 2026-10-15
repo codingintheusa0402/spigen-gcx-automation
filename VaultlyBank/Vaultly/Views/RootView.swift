@@ -1,7 +1,11 @@
 import SwiftUI
+import LocalAuthentication
 
 struct RootView: View {
     @EnvironmentObject var store: BankStore
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var locked = false
+    @State private var unlocking = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -21,11 +25,53 @@ struct RootView: View {
                         if store.banner?.id == banner.id { store.banner = nil }
                     }
             }
+            if locked { LockScreen(unlock: unlock).transition(.opacity) }
+        }
+        .onAppear { if store.settings.appLock && store.settings.hasOnboarded { locked = true; unlock() } }
+        .onChange(of: scenePhase) { _, phase in
+            guard store.settings.appLock, store.settings.hasOnboarded else { return }
+            if phase == .background { locked = true }
+            if phase == .active, locked { unlock() }
         }
         .animation(.spring(duration: 0.4), value: store.banner)
         .themed(store.theme, appearance: store.settings.appearance)
         .sheet(isPresented: Binding(get: { !store.settings.hasOnboarded }, set: { _ in })) {
             OnboardingView().interactiveDismissDisabled()
+        }
+    }
+
+    private func unlock() {
+        guard !unlocking else { return }
+        unlocking = true
+        let ctx = LAContext()
+        ctx.localizedCancelTitle = "취소"
+        var err: NSError?
+        guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &err) else { locked = false; unlocking = false; return }
+        ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "앱 잠금을 해제합니다") { ok, _ in
+            Task { @MainActor in
+                withAnimation { locked = !ok }
+                unlocking = false
+            }
+        }
+    }
+}
+
+struct LockScreen: View {
+    @EnvironmentObject var store: BankStore
+    let unlock: () -> Void
+    var body: some View {
+        ZStack {
+            store.theme.background.ignoresSafeArea()
+            VStack(spacing: 18) {
+                Image(systemName: "lock.fill").font(.app(size: 44, .bold)).foregroundStyle(store.theme.accent)
+                Text(store.brand.bank).font(.app(.title2, .bold))
+                Text("잠금 상태입니다").foregroundStyle(.secondary)
+                Button { unlock() } label: {
+                    Label("Face ID로 잠금 해제", systemImage: "faceid").frame(maxWidth: .infinity).padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.horizontal, 40)
+            }
         }
     }
 }
@@ -37,8 +83,8 @@ struct OnboardingView: View {
     var body: some View {
         VStack(spacing: 24) {
             Spacer()
-            Image(systemName: "building.columns.circle.fill").font(.system(size: 72)).foregroundStyle(store.theme.accent)
-            Text("Vaultly").font(.largeTitle.bold())
+            Image(systemName: "building.columns.circle.fill").font(.app(size: 72)).foregroundStyle(store.theme.accent)
+            Text("Vaultly").font(.app(.largeTitle, .bold))
             Text("가상 자산으로 즐기는 뱅킹 시뮬레이터")
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 10) {
@@ -46,7 +92,7 @@ struct OnboardingView: View {
                 Label("실제 은행·결제 서비스와 연결되지 않습니다.", systemImage: "wifi.slash")
                 Label("화면의 SIM 배지는 시뮬레이션 표시입니다.", systemImage: "checkmark.shield")
             }
-            .font(.footnote).foregroundStyle(.secondary)
+            .font(.app(.footnote)).foregroundStyle(.secondary)
             .padding().background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
             TextField("이름 (예: 홍길동)", text: $name)
                 .textFieldStyle(.roundedBorder)

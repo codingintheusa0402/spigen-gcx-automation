@@ -49,11 +49,11 @@ struct EventRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: event.isIncoming ? "arrow.down.left.circle.fill" : "arrow.up.right.circle.fill")
-                .font(.title2).foregroundStyle(event.isEnabled ? (event.isIncoming ? .green : .orange) : .gray)
+                .font(.app(.title2)).foregroundStyle(event.isEnabled ? (event.isIncoming ? .green : .orange) : .gray)
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(event.counterparty) · \(event.memo)").font(.subheadline.weight(.semibold))
-                Text(schedule).font(.caption).foregroundStyle(.secondary)
-                if let a = store.account(event.accountID) { Text(a.name).font(.caption2).foregroundStyle(.tertiary) }
+                Text("\(event.counterparty) · \(event.memo)").font(.app(.subheadline, .semibold))
+                Text(schedule).font(.app(.caption)).foregroundStyle(.secondary)
+                if let a = store.account(event.accountID) { Text(a.name).font(.app(.caption2)).foregroundStyle(.tertiary) }
             }
             Spacer()
             MoneyText(amount: event.amount, signed: true, font: .subheadline.weight(.bold), hideable: false)
@@ -96,8 +96,8 @@ struct EventEditor: View {
                                     counterparty = p.0; memo = p.1; amount = p.2; incoming = true
                                 } label: {
                                     VStack(alignment: .leading) {
-                                        Text("\(p.0) · \(p.1)").font(.caption.weight(.semibold))
-                                        Text(Money.format(p.2, code: store.currency)).font(.caption2)
+                                        Text("\(p.0) · \(p.1)").font(.app(.caption, .semibold))
+                                        Text(Money.format(p.2, code: store.currency)).font(.app(.caption2))
                                     }
                                     .padding(10).background(store.theme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
                                 }.buttonStyle(.plain)

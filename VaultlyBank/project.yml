@@ -18,6 +18,8 @@ targets:
         UILaunchScreen: {}
         UIBackgroundModes: []
         NSUserNotificationsUsageDescription: 예약한 가상 입금 알림을 보내기 위해 알림 권한이 필요합니다.
+        NSFaceIDUsageDescription: 앱 잠금을 해제하기 위해 Face ID를 사용합니다.
+        UIAppFonts: [Pretendard-Regular.otf, Pretendard-Medium.otf, Pretendard-SemiBold.otf, Pretendard-Bold.otf, Pretendard-ExtraBold.otf]
         ITSAppUsesNonExemptEncryption: false
     settings:
       base:

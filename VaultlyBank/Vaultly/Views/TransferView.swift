@@ -12,14 +12,14 @@ struct TransferForm: View {
     @State private var toOwn = true
     @State private var toAccount: UUID?
     @State private var recipient = ""
-    @State private var bank = "Nova Bank"
+    @State private var bank = ""
     @State private var amount: Decimal = 0
     @State private var memo = ""
     @State private var confirm = false
     @State private var done = false
     @State private var failed = false
 
-    private let banks = ["Nova Bank", "Heritage Trust", "Orbit Pay", "Lumen Credit", "Pioneer Savings"]
+    private var banks: [String] { [store.brand.bank, "카카오뱅크", "토스뱅크", "케이뱅크", "KB국민은행", "신한은행", "우리은행", "하나은행", "NH농협은행", "IBK기업은행"] }
 
     var body: some View {
         Group {
@@ -47,7 +47,7 @@ struct TransferForm: View {
                     TextField("메모 (선택)", text: $memo)
                 }
                 Section {
-                    Button { confirm = true } label: { Text("보내기").frame(maxWidth: .infinity).fontWeight(.bold) }
+                    Button { confirm = true } label: { Text("보내기").frame(maxWidth: .infinity).font(.app(.body, .bold)) }
                         .buttonStyle(.borderedProminent)
                         .disabled(!canSend)
                         .listRowInsets(EdgeInsets())
@@ -58,6 +58,7 @@ struct TransferForm: View {
             .navigationTitle("송금")
             .toolbar { ToolbarItem(placement: .topBarLeading) { SimBadge() } }
             .onAppear {
+                if bank.isEmpty { bank = store.brand.bank }
                 if from == nil { from = presetFrom ?? store.checkingAccounts.first?.id }
                 if toAccount == nil { toAccount = store.data.accounts.first { $0.id != from && $0.kind != .loan }?.id }
             }
@@ -67,7 +68,7 @@ struct TransferForm: View {
             .sheet(isPresented: $done) {
                 VStack(spacing: 20) {
                     SuccessCheck()
-                    Text("송금 완료").font(.title2.bold())
+                    Text("송금 완료").font(.app(.title2, .bold))
                     MoneyText(amount: amount, font: .largeTitle.weight(.heavy), hideable: false)
                     Text(toOwn ? (store.account(toAccount ?? UUID())?.name ?? "") : "\(recipient) · \(bank)").foregroundStyle(.secondary)
                     Button("확인") { done = false; amount = 0; memo = "" }.buttonStyle(.borderedProminent).padding(.top)

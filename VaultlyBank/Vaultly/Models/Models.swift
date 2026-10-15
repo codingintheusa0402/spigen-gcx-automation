@@ -182,6 +182,60 @@ struct BankSettings: Codable, Equatable {
     var interestTaxRate: Double = 0.154     // 이자소득세 15.4% (0이면 비과세)
     var hideBalances: Bool = false
     var hasOnboarded: Bool = false
+    var appLock: Bool = false
+    // User-editable institution names. Empty = theme default.
+    var bankName: String = ""
+    var brokerName: String = ""
+    var cardName: String = ""
+    var capitalName: String = ""
+
+    var brand: Brand { Brand(settings: self) }
+
+    init() {}
+
+    // Tolerant decoding so adding a field never wipes saved data.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        themeID = try c.decodeIfPresent(String.self, forKey: .themeID) ?? themeID
+        appearance = try c.decodeIfPresent(Appearance.self, forKey: .appearance) ?? appearance
+        currencyCode = try c.decodeIfPresent(String.self, forKey: .currencyCode) ?? currencyCode
+        ownerName = try c.decodeIfPresent(String.self, forKey: .ownerName) ?? ownerName
+        interestTaxRate = try c.decodeIfPresent(Double.self, forKey: .interestTaxRate) ?? interestTaxRate
+        hideBalances = try c.decodeIfPresent(Bool.self, forKey: .hideBalances) ?? hideBalances
+        hasOnboarded = try c.decodeIfPresent(Bool.self, forKey: .hasOnboarded) ?? hasOnboarded
+        appLock = try c.decodeIfPresent(Bool.self, forKey: .appLock) ?? appLock
+        bankName = try c.decodeIfPresent(String.self, forKey: .bankName) ?? bankName
+        brokerName = try c.decodeIfPresent(String.self, forKey: .brokerName) ?? brokerName
+        cardName = try c.decodeIfPresent(String.self, forKey: .cardName) ?? cardName
+        capitalName = try c.decodeIfPresent(String.self, forKey: .capitalName) ?? capitalName
+    }
+}
+
+/// Resolved institution names. Templates use {bank} {broker} {card} {capital} placeholders.
+struct Brand: Equatable {
+    let bank: String
+    let broker: String
+    let card: String
+    let capital: String
+
+    static let defaultCard = "신한카드"
+    static let defaultCapital = "OK캐피탈"
+
+    init(settings: BankSettings) {
+        let theme = Theme.named(settings.themeID)
+        bank = settings.bankName.isEmpty ? theme.bankName : settings.bankName
+        broker = settings.brokerName.isEmpty ? theme.brokerName : settings.brokerName
+        card = settings.cardName.isEmpty ? Brand.defaultCard : settings.cardName
+        capital = settings.capitalName.isEmpty ? Brand.defaultCapital : settings.capitalName
+    }
+
+    func resolve(_ text: String) -> String {
+        guard text.contains("{") else { return text }
+        return text.replacingOccurrences(of: "{bank}", with: bank)
+            .replacingOccurrences(of: "{broker}", with: broker)
+            .replacingOccurrences(of: "{card}", with: card)
+            .replacingOccurrences(of: "{capital}", with: capital)
+    }
 }
 
 struct BankData: Codable, Equatable {
@@ -195,11 +249,11 @@ struct BankData: Codable, Equatable {
 
     static func starter() -> BankData {
         var d = BankData()
-        var main = Account(name: "Vaultly 입출금통장", kind: .checking, number: Account.generateNumber(), balance: 1_250_000)
+        var main = Account(name: "입출금통장", kind: .checking, number: Account.generateNumber(), balance: 1_250_000)
         main.colorIndex = 0
         d.accounts = [main]
         d.transactions = [Transaction(accountID: main.id, date: Date(), amount: 1_250_000,
-                                      counterparty: "Vaultly", memo: "시작 잔액", category: .adjustment,
+                                      counterparty: d.settings.brand.bank, memo: "시작 잔액", category: .adjustment,
                                       balanceAfter: main.balance)]
         return d
     }

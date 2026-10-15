@@ -35,6 +35,7 @@ enum LifestyleEngine {
         var processed = data.lifestyle.lastProcessed
         var guardCount = 0
         let specs = EventLibrary.specs(for: tier)
+        let brand = data.settings.brand
         let scale = EventLibrary.tierScale[tier] ?? 1
 
         while day <= endDay, guardCount < maxDays {
@@ -51,7 +52,7 @@ enum LifestyleEngine {
                 let minute = Int.random(in: 0..<60, using: &rng)
                 guard let at = cal.date(bySettingHour: min(23, max(0, hour)), minute: minute, second: second % 60, of: day),
                       at > data.lifestyle.lastProcessed, at <= now else { return }
-                Ledger.apply(amount: amount, to: accountID, date: at, counterparty: counterparty, memo: memo, category: category, data: &data)
+                Ledger.apply(amount: amount, to: accountID, date: at, counterparty: brand.resolve(counterparty), memo: memo, category: category, data: &data)
                 processed = max(processed, at)
             }
 

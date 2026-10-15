@@ -39,7 +39,7 @@ final class SmokeTests: XCTestCase {
                       "SIM badge must be visible on Home")
         snap("01-home")
 
-        for (tab, expect) in [("증권", "내 투자"), ("상품", "금융 상품"), ("예약 알림", "예약 알림"), ("설정", "프로필")] {
+        for (tab, expect) in [("증권", "내 투자"), ("상품", "금융 상품"), ("예약 알림", "예약 알림"), ("설정", "내 정보")] {
             tabs.buttons[tab].tap()
             XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", expect)).firstMatch.waitForExistence(timeout: 5),
                           "tab \(tab) should show '\(expect)'")

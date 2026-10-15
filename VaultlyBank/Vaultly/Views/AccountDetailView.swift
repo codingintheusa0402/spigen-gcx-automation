@@ -27,7 +27,7 @@ struct AccountDetailView: View {
                         }
                     }
                     Card {
-                        Text("거래 내역").font(.headline)
+                        Text("거래 내역").font(.app(.headline, .semibold))
                         let txs = store.transactions(for: accountID)
                         if txs.isEmpty { Text("거래 내역이 없습니다").foregroundStyle(.secondary).padding(.top, 4) }
                         ForEach(txs) { tx in
@@ -73,7 +73,7 @@ struct AccountDetailView: View {
         let tax = store.settings.interestTaxRate
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                Text("상품 정보").font(.headline)
+                Text("상품 정보").font(.app(.headline, .semibold))
                 row("금리", String(format: "연 %.2f%%", terms.annualRate * 100))
                 row("기간", "\(terms.termMonths)개월")
                 row("가입일", terms.startDate.formatted(date: .long, time: .omitted))
@@ -93,7 +93,7 @@ struct AccountDetailView: View {
                     moneyRow("현재까지 누적 이자", terms.accruedInterest.rounded())
                     moneyRow("만기 예상 이자 (세전)", projection.interest)
                     moneyRow("만기 예상 수령액 (세후)", projection.principal + projection.interest - (projection.interest * Decimal(double: tax)).rounded())
-                    if terms.isClosed { Text("만기 처리 완료 — 이자가 지급되었습니다.").font(.caption).foregroundStyle(.green) }
+                    if terms.isClosed { Text("만기 처리 완료 — 이자가 지급되었습니다.").font(.app(.caption)).foregroundStyle(.green) }
                 default: EmptyView()
                 }
             }
@@ -101,9 +101,9 @@ struct AccountDetailView: View {
     }
 
     private func row(_ k: String, _ v: String) -> some View {
-        HStack { Text(k).foregroundStyle(.secondary); Spacer(); Text(v).fontWeight(.medium) }.font(.subheadline)
+        HStack { Text(k).foregroundStyle(.secondary); Spacer(); Text(v).fontWeight(.medium) }.font(.app(.subheadline))
     }
     private func moneyRow(_ k: String, _ v: Decimal) -> some View {
-        HStack { Text(k).foregroundStyle(.secondary); Spacer(); MoneyText(amount: v, font: .subheadline.weight(.medium)) }.font(.subheadline)
+        HStack { Text(k).foregroundStyle(.secondary); Spacer(); MoneyText(amount: v, font: .subheadline.weight(.medium)) }.font(.app(.subheadline))
     }
 }

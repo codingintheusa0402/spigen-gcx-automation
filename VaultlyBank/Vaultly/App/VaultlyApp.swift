@@ -7,6 +7,7 @@ struct VaultlyApp: App {
 
     init() {
         if CommandLine.arguments.contains("-uitest-reset") { Persistence.reset() }
+        AppFont.installUIKitAppearance()
         _store = StateObject(wrappedValue: BankStore())
     }
 

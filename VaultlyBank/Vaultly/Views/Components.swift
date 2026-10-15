@@ -4,7 +4,7 @@ import SwiftUI
 struct SimBadge: View {
     var body: some View {
         Text("SIM")
-            .font(.system(size: 10, weight: .black, design: .rounded))
+            .font(.app(size: 10, .black))
             .padding(.horizontal, 6).padding(.vertical, 3)
             .background(Capsule().fill(Color.orange.opacity(0.9)))
             .foregroundStyle(.white)
@@ -23,6 +23,8 @@ struct MoneyText: View {
         Text(store.settings.hideBalances && hideable ? "••••••" : Money.format(amount, code: store.currency, signed: signed))
             .font(font)
             .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.55)
             .contentTransition(.numericText())
             .animation(.snappy, value: amount)
     }
@@ -50,12 +52,12 @@ struct AccountTile: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Image(systemName: account.kind.symbol)
-                Text(account.kind.title).font(.caption.weight(.semibold))
+                Text(account.kind.title).font(.app(.caption, .semibold))
                 Spacer()
-                if account.kind == .loan { Text("부채").font(.caption2.weight(.bold)).padding(4).background(.white.opacity(0.2), in: Capsule()) }
+                if account.kind == .loan { Text("부채").font(.app(.caption2, .bold)).padding(4).background(.white.opacity(0.2), in: Capsule()) }
             }
             .foregroundStyle(.white.opacity(0.85))
-            Text(account.name).font(.headline).foregroundStyle(.white).lineLimit(1)
+            Text(account.name).font(.app(.headline, .semibold)).foregroundStyle(.white).lineLimit(1)
             Text(account.number).font(.caption.monospaced()).foregroundStyle(.white.opacity(0.7))
             Spacer(minLength: 4)
             MoneyText(amount: account.kind == .loan ? -account.balance : account.balance,
@@ -63,9 +65,9 @@ struct AccountTile: View {
                 .foregroundStyle(.white)
             if let t = account.terms, !t.isClosed {
                 Text(String(format: "연 %.2f%% · 만기 %@", t.annualRate * 100, t.maturityDate.formatted(date: .abbreviated, time: .omitted)))
-                    .font(.caption2).foregroundStyle(.white.opacity(0.75))
+                    .font(.app(.caption2)).foregroundStyle(.white.opacity(0.75))
             } else if account.terms?.isClosed == true {
-                Text("종료된 상품").font(.caption2).foregroundStyle(.white.opacity(0.75))
+                Text("종료된 상품").font(.app(.caption2)).foregroundStyle(.white.opacity(0.75))
             }
         }
         .padding(16)
@@ -88,8 +90,8 @@ struct TransactionRow: View {
                 Image(systemName: icon).foregroundStyle(store.theme.accent)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(tx.counterparty).font(.subheadline.weight(.semibold)).lineLimit(1)
-                Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text(tx.counterparty).font(.app(.subheadline, .semibold)).lineLimit(1)
+                Text(subtitle).font(.app(.caption)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
@@ -134,7 +136,7 @@ struct AmountField: View {
             TextField("0", text: $text)
                 .keyboardType(store.currency == "KRW" ? .numberPad : .decimalPad)
                 .multilineTextAlignment(.trailing)
-                .font(.body.weight(.semibold).monospacedDigit())
+                .font(.app(.body, .semibold).monospacedDigit())
                 .onChange(of: text) { _, new in
                     let cleaned = new.filter { $0.isNumber || $0 == "." }
                     amount = Decimal(string: cleaned) ?? 0
@@ -162,10 +164,10 @@ struct BannerView: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: message.positive ? "arrow.down.circle.fill" : "arrow.up.circle.fill")
-                .font(.title2).foregroundStyle(message.positive ? .green : .orange)
+                .font(.app(.title2)).foregroundStyle(message.positive ? .green : .orange)
             VStack(alignment: .leading, spacing: 2) {
-                Text(message.title).font(.subheadline.weight(.bold))
-                Text(message.body).font(.caption).foregroundStyle(.secondary)
+                Text(message.title).font(.app(.subheadline, .bold))
+                Text(message.body).font(.app(.caption)).foregroundStyle(.secondary)
             }
             Spacer()
         }
@@ -183,7 +185,7 @@ struct SuccessCheck: View {
             Circle().fill(Color.green.opacity(0.15)).frame(width: 120, height: 120)
             Circle().stroke(Color.green, lineWidth: 4).frame(width: 120, height: 120)
                 .scaleEffect(drawn ? 1 : 0.6).opacity(drawn ? 1 : 0)
-            Image(systemName: "checkmark").font(.system(size: 54, weight: .bold)).foregroundStyle(.green)
+            Image(systemName: "checkmark").font(.app(size: 54, .bold)).foregroundStyle(.green)
                 .scaleEffect(drawn ? 1 : 0.2).opacity(drawn ? 1 : 0)
         }
         .onAppear { withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) { drawn = true } }
@@ -193,7 +195,7 @@ struct SuccessCheck: View {
 extension View {
     func themed(_ theme: Theme, appearance: Appearance) -> some View {
         let scheme: ColorScheme? = appearance == .light ? .light : appearance == .dark ? .dark : nil
-        return self.fontDesign(theme.fontDesign)
+        return self.font(.app(.body))
             .tint(theme.accent)
             .preferredColorScheme(scheme)
     }

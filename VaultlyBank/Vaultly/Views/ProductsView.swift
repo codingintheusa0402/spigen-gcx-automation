@@ -9,13 +9,13 @@ struct ProductsView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     Text("가입하면 매일 이자가 쌓이고, 매월 자동이체·상환이 실제로 잔액에 반영됩니다.")
-                        .font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+                        .font(.app(.footnote)).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
                     ForEach([AccountKind.installmentSavings, .deposit, .loan]) { kind in
                         Button { opening = kind } label: { ProductCard(kind: kind) }.buttonStyle(.plain)
                     }
                     if !store.productAccounts.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("가입 중인 상품").font(.headline)
+                            Text("가입 중인 상품").font(.app(.headline, .semibold))
                             ForEach(store.productAccounts) { acc in
                                 NavigationLink(value: acc.id) { AccountTile(account: acc) }.buttonStyle(.plain)
                             }
@@ -38,10 +38,10 @@ struct ProductCard: View {
     var body: some View {
         Card {
             HStack(spacing: 14) {
-                Image(systemName: kind.symbol).font(.title).foregroundStyle(store.theme.accent).frame(width: 44)
+                Image(systemName: kind.symbol).font(.app(.title)).foregroundStyle(store.theme.accent).frame(width: 44)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(title).font(.headline)
-                    Text(desc).font(.caption).foregroundStyle(.secondary)
+                    Text(title).font(.app(.headline, .semibold))
+                    Text(desc).font(.app(.caption)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Image(systemName: "chevron.right").foregroundStyle(.tertiary)
@@ -50,9 +50,9 @@ struct ProductCard: View {
     }
     private var title: String {
         switch kind {
-        case .installmentSavings: return "Vaultly 자유적금"
-        case .deposit: return "Vaultly 정기예금"
-        case .loan: return "Vaultly 신용대출"
+        case .installmentSavings: return "\(store.brand.bank) 자유적금"
+        case .deposit: return "\(store.brand.bank) 정기예금"
+        case .loan: return "\(store.brand.bank) 신용대출"
         default: return ""
         }
     }
@@ -85,7 +85,7 @@ struct ProductEditor: View {
                     TextField("상품 이름", text: $name)
                     HStack {
                         Text("금리"); Spacer()
-                        Text(String(format: "연 %.2f%%", rate)).monospacedDigit().fontWeight(.semibold)
+                        Text(String(format: "연 %.2f%%", rate)).monospacedDigit().font(.app(.body, .semibold))
                     }
                     Slider(value: $rate, in: 0...20, step: 0.1)
                     Stepper("기간: \(months)개월", value: $months, in: 1...360)
@@ -100,7 +100,7 @@ struct ProductEditor: View {
                 } footer: { Text(linkedFooter) }
                 Section("예상") { projection }
                 Section {
-                    Button { open() } label: { Text("가입하기").frame(maxWidth: .infinity).fontWeight(.bold) }
+                    Button { open() } label: { Text("가입하기").frame(maxWidth: .infinity).font(.app(.body, .bold)) }
                         .buttonStyle(.borderedProminent).disabled(amount <= 0 || name.isEmpty).listRowInsets(EdgeInsets())
                 } footer: { Text("가입일을 과거로 두면 그동안의 이자·납입·상환이 즉시 정산됩니다.") }
             }
@@ -110,9 +110,9 @@ struct ProductEditor: View {
                 start = store.now
                 linked = store.checkingAccounts.first?.id
                 switch kind {
-                case .installmentSavings: name = "Vaultly 자유적금"; rate = 5.0; amount = 500_000
-                case .deposit: name = "Vaultly 정기예금"; rate = 3.8; amount = 10_000_000
-                case .loan: name = "Vaultly 신용대출"; rate = 4.2; months = 36; amount = 30_000_000
+                case .installmentSavings: name = "\(store.brand.bank) 자유적금"; rate = 5.0; amount = 500_000
+                case .deposit: name = "\(store.brand.bank) 정기예금"; rate = 3.8; amount = 10_000_000
+                case .loan: name = "\(store.brand.bank) 신용대출"; rate = 4.2; months = 36; amount = 30_000_000
                 default: break
                 }
             }

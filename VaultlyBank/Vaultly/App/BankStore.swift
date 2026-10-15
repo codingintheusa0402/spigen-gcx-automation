@@ -35,6 +35,7 @@ final class BankStore: ObservableObject {
     var settings: BankSettings { data.settings }
     var currency: String { data.settings.currencyCode }
     var theme: Theme { Theme.named(data.settings.themeID) }
+    var brand: Brand { data.settings.brand }
     var checkingAccounts: [Account] { data.accounts.filter { $0.kind == .checking } }
     var productAccounts: [Account] { data.accounts.filter { $0.kind.isProduct } }
 
@@ -219,10 +220,10 @@ final class BankStore: ObservableObject {
             d.lifestyle.tierStart = Calendar.current.date(byAdding: .day, value: -backfillDays, to: simNow) ?? simNow
             if resetBalance { Ledger.setBalance(tier.startingBalance, of: accountID, date: simNow, data: &d) }
             if tier == .broke {
-                var debt = Account(name: "OK캐피탈 신용대출", kind: .loan, number: Account.generateNumber(), balance: 0, colorIndex: 5)
+                var debt = Account(name: "\(d.settings.brand.capital) 신용대출", kind: .loan, number: Account.generateNumber(), balance: 0, colorIndex: 5)
                 debt.terms = nil // lifestyle engine manages this one
                 d.accounts.append(debt)
-                Ledger.apply(amount: 4_800_000, to: debt.id, date: d.lifestyle.tierStart, counterparty: "OK캐피탈",
+                Ledger.apply(amount: 4_800_000, to: debt.id, date: d.lifestyle.tierStart, counterparty: d.settings.brand.capital,
                              memo: "기존 대출 잔액 (연 19.9% + 연체)", category: .transfer, data: &d)
                 d.lifestyle.debtAccountID = debt.id
             }

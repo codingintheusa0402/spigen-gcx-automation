@@ -16,13 +16,13 @@ struct WealthView: View {
                     ForEach(WealthTier.allCases) { t in
                         Button { tier = t } label: {
                             HStack(alignment: .top, spacing: 12) {
-                                Text(t.emoji).font(.title)
+                                Text(t.emoji).font(.app(.title))
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Text(t.title).font(.headline)
-                                        Text("잔액 \(Money.format(t.startingBalance, code: store.currency))").font(.caption).foregroundStyle(.secondary)
+                                        Text(t.title).font(.app(.headline, .semibold))
+                                        Text("잔액 \(Money.format(t.startingBalance, code: store.currency))").font(.app(.caption)).foregroundStyle(.secondary)
                                     }
-                                    Text(t.summary).font(.caption).foregroundStyle(.secondary)
+                                    Text(t.summary).font(.app(.caption)).foregroundStyle(.secondary)
                                 }
                                 Spacer()
                                 if tier == t { Image(systemName: "checkmark.circle.fill").foregroundStyle(store.theme.accent) }
@@ -46,23 +46,23 @@ struct WealthView: View {
                     }
                     if let t = tier {
                         Section("현실 반영") {
-                            HStack { Text("급여 인상"); Spacer(); Text(String(format: "매년 +%.1f%% · %d년마다 승진 ×%.2f", t.annualRaise * 100, t.promotionEveryYears, t.promotionBump)).font(.caption).foregroundStyle(.secondary) }
-                            HStack { Text("물가 상승"); Spacer(); Text("지출 매년 +2.5%").font(.caption).foregroundStyle(.secondary) }
-                            HStack { Text("사건·사고 변형"); Spacer(); Text("\(EventLibrary.variationCount(for: t))가지").font(.caption).foregroundStyle(.secondary) }
+                            HStack { Text("급여 인상"); Spacer(); Text(String(format: "매년 +%.1f%% · %d년마다 승진 ×%.2f", t.annualRaise * 100, t.promotionEveryYears, t.promotionBump)).font(.app(.caption)).foregroundStyle(.secondary) }
+                            HStack { Text("물가 상승"); Spacer(); Text("지출 매년 +2.5%").font(.app(.caption)).foregroundStyle(.secondary) }
+                            HStack { Text("사건·사고 변형"); Spacer(); Text("\(EventLibrary.variationCount(for: t))가지").font(.app(.caption)).foregroundStyle(.secondary) }
                             if t == .broke {
                                 Text("잔액이 바닥나면 캐피탈에서 자동으로 추가 대출이 실행되고, 매월 이자·연체 수수료가 원금에 붙어 빚이 계속 불어납니다.")
-                                    .font(.caption).foregroundStyle(.red)
+                                    .font(.app(.caption)).foregroundStyle(.red)
                             }
                         }
                         Section("기본 흐름") {
                             ForEach(Array(t.flows.enumerated()), id: \.offset) { _, f in
                                 HStack {
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text("\(f.counterparty) · \(f.memo)").font(.subheadline)
-                                        Text(frequencyText(f.frequency)).font(.caption).foregroundStyle(.secondary)
+                                        Text("\(f.counterparty) · \(f.memo)").font(.app(.subheadline))
+                                        Text(frequencyText(f.frequency)).font(.app(.caption)).foregroundStyle(.secondary)
                                     }
                                     Spacer()
-                                    Text(amountText(f)).font(.subheadline.weight(.semibold)).monospacedDigit()
+                                    Text(amountText(f)).font(.app(.subheadline, .semibold)).monospacedDigit()
                                         .foregroundStyle(f.minAmount >= 0 ? Color.blue : Color.primary)
                                 }
                             }

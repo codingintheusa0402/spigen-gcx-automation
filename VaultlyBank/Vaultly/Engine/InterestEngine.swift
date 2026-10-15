@@ -79,7 +79,7 @@ enum InterestEngine {
         let net = gross - tax
         let id = data.accounts[idx].id
         if net != 0 {
-            Ledger.apply(amount: net, to: id, date: terms.maturityDate, counterparty: "Vaultly",
+            Ledger.apply(amount: net, to: id, date: terms.maturityDate, counterparty: data.settings.brand.bank,
                          memo: "만기 이자 (세전 \(Money.format(gross, code: data.settings.currencyCode)))",
                          category: .maturity, data: &data)
         }
@@ -138,7 +138,7 @@ enum InterestEngine {
             let debt = data.accounts[idx].balance
             guard debt > 0 else { terms.isClosed = true; break }
             let interest = (debt * Decimal(double: terms.annualRate / 12)).rounded()
-            Ledger.apply(amount: interest, to: id, date: due, counterparty: "Vaultly",
+            Ledger.apply(amount: interest, to: id, date: due, counterparty: data.settings.brand.bank,
                          memo: "대출 이자", category: .interest, data: &data)
             let payment = min(terms.monthlyAmount, debt + interest)
             if let linked = terms.linkedAccountID,
