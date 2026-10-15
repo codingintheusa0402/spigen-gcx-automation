@@ -142,6 +142,6 @@ struct AccountDetailView: View {
         HStack { Text(k).foregroundStyle(.secondary); Spacer(); Text(v).fontWeight(.medium) }.font(.app(.subheadline))
     }
     private func moneyRow(_ k: String, _ v: Decimal) -> some View {
-        HStack { Text(k).foregroundStyle(.secondary); Spacer(); MoneyText(amount: v, font: .subheadline.weight(.medium)) }.font(.app(.subheadline))
+        HStack { Text(k).foregroundStyle(.secondary); Spacer(); MoneyText(amount: v, font: .app(.subheadline, .medium)) }.font(.app(.subheadline))
     }
 }

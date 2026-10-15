@@ -8,8 +8,7 @@ enum AppFont {
         case .ultraLight, .thin, .light, .regular: return "Pretendard-Regular"
         case .medium: return "Pretendard-Medium"
         case .semibold: return "Pretendard-SemiBold"
-        case .bold: return "Pretendard-Bold"
-        default: return "Pretendard-ExtraBold"   // .heavy, .black
+        default: return "Pretendard-Bold"        // .bold, .heavy, .black — real bank apps never go heavier
         }
     }
 

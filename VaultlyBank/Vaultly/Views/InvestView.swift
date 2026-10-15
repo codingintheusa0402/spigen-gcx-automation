@@ -98,10 +98,10 @@ struct InvestView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("내 투자").font(.app(.headline, .semibold))
             HStack(spacing: 6) {
-                MoneyText(amount: p.investedKRW, font: .system(size: 38, weight: .heavy))
+                MoneyText(amount: p.investedKRW, font: .app(size: 38, .bold))
                 Image(systemName: "chevron.right").foregroundStyle(.secondary)
             }
-            PnLText(pnl: p.pnlKRW, rate: p.pnlRate, code: "KRW", font: .title3.weight(.semibold))
+            PnLText(pnl: p.pnlKRW, rate: p.pnlRate, code: "KRW", font: .app(.title3, .semibold))
         }
     }
 
@@ -192,7 +192,7 @@ struct HoldingRow: View {
         HStack(spacing: 14) {
             ZStack {
                 Circle().fill(store.theme.gradient(for: holding.colorIndex)).frame(width: 46, height: 46)
-                Text(String(holding.symbol.prefix(2))).font(.app(.caption, .black)).foregroundStyle(.white)
+                Text(String(holding.symbol.prefix(2))).font(.app(.caption, .bold)).foregroundStyle(.white)
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text(holding.name).font(.app(.title3, .medium))
@@ -228,9 +228,9 @@ struct HoldingDetailView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("\(h.name) · \(h.symbol)").font(.app(.subheadline)).foregroundStyle(.secondary)
-                        Text(Money.format(h.price, code: code)).font(.app(size: 36, .heavy)).monospacedDigit()
+                        Text(Money.format(h.price, code: code)).font(.app(size: 34, .bold)).monospacedDigit()
                             .contentTransition(.numericText())
-                        PnLText(pnl: h.pnl, rate: h.pnlRate, code: code, font: .headline)
+                        PnLText(pnl: h.pnl, rate: h.pnlRate, code: code, font: .app(.headline))
                     }
                     Card {
                         VStack(spacing: 10) {

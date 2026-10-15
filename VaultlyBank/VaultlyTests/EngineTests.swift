@@ -12,8 +12,16 @@ final class EngineTests: XCTestCase {
     func testDecimalRoundingAndFormatting() {
         XCTAssertEqual(Decimal(string: "1234.567")!.rounded(scale: 2), Decimal(string: "1234.57"))
         XCTAssertEqual(Decimal(double: 0.1 + 0.2), Decimal(string: "0.3"))
+        let saved = Money.wonSuffix
+        defer { Money.wonSuffix = saved }
+        Money.wonSuffix = false
         XCTAssertEqual(Money.format(1_234_567, code: "KRW"), "₩1,234,567")
         XCTAssertTrue(Money.format(5000, code: "KRW", signed: true).hasPrefix("+"))
+        Money.wonSuffix = true
+        XCTAssertEqual(Money.format(1_234_567, code: "KRW"), "1,234,567원")
+        XCTAssertEqual(Money.format(-7_890, code: "KRW"), "-7,890원")
+        XCTAssertEqual(Money.format(27_456, code: "KRW", signed: true), "+27,456원")
+        XCTAssertEqual(Money.format(Decimal(string: "2032.22")!, code: "USD"), "$2,032.22")
     }
 
     // MARK: Ledger / scheduled events

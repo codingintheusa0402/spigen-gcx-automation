@@ -4,7 +4,7 @@ import SwiftUI
 struct SimBadge: View {
     var body: some View {
         Text("SIM")
-            .font(.app(size: 10, .black))
+            .font(.app(size: 10, .bold))
             .padding(.horizontal, 6).padding(.vertical, 3)
             .background(Capsule().fill(Color.orange.opacity(0.9)))
             .foregroundStyle(.white)
@@ -43,38 +43,44 @@ struct Card<Content: View>: View {
     }
 }
 
-/// Gradient "bank card" tile for an account.
+/// Flat account tile: colored icon, dark text on the card color — the way real bank apps draw accounts.
 struct AccountTile: View {
     @EnvironmentObject var store: BankStore
     let account: Account
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Image(systemName: account.kind.symbol)
-                Text(account.kind.title).font(.app(.caption, .semibold))
-                Spacer()
-                if account.kind == .loan { Text("부채").font(.app(.caption2, .bold)).padding(4).background(.white.opacity(0.2), in: Capsule()) }
+        HStack(alignment: .top, spacing: 14) {
+            ZStack {
+                Circle().fill(store.theme.gradient(for: account.colorIndex)).frame(width: 44, height: 44)
+                Image(systemName: account.kind.symbol).font(.app(size: 17, .semibold)).foregroundStyle(.white)
             }
-            .foregroundStyle(.white.opacity(0.85))
-            Text(account.name).font(.app(.headline, .semibold)).foregroundStyle(.white).lineLimit(1)
-            Text(account.number).font(.caption.monospaced()).foregroundStyle(.white.opacity(0.7))
-            Spacer(minLength: 4)
-            MoneyText(amount: account.kind == .loan ? -account.balance : account.balance,
-                      font: .title3.weight(.bold))
-                .foregroundStyle(.white)
-            if let t = account.terms, !t.isClosed {
-                Text(String(format: "연 %.2f%% · 만기 %@", t.annualRate * 100, t.maturityDate.formatted(date: .abbreviated, time: .omitted)))
-                    .font(.app(.caption2)).foregroundStyle(.white.opacity(0.75))
-            } else if account.terms?.isClosed == true {
-                Text("종료된 상품").font(.app(.caption2)).foregroundStyle(.white.opacity(0.75))
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(account.kind.title).font(.app(.caption, .medium)).foregroundStyle(.secondary)
+                    if account.kind == .loan {
+                        Text("부채").font(.app(.caption2, .semibold)).padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Color.primary.opacity(0.08), in: Capsule()).foregroundStyle(.secondary)
+                    }
+                }
+                Text(account.name).font(.app(.body, .semibold)).lineLimit(1)
+                Text(account.number).font(.app(.caption)).foregroundStyle(.secondary)
+                MoneyText(amount: account.kind == .loan ? -account.balance : account.balance, font: .app(.title3, .bold))
+                    .padding(.top, 6)
+                if let t = account.terms, !t.isClosed {
+                    Text(String(format: "연 %.2f%% · 만기 %@", t.annualRate * 100, t.maturityDate.formatted(date: .abbreviated, time: .omitted)))
+                        .font(.app(.caption)).foregroundStyle(.secondary)
+                } else if account.terms?.isClosed == true {
+                    Text("종료된 상품").font(.app(.caption)).foregroundStyle(.secondary)
+                }
             }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right").font(.app(.caption)).foregroundStyle(.tertiary).padding(.top, 14)
         }
         .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 150, alignment: .leading)
-        .background(store.theme.gradient(for: account.colorIndex))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(store.theme.card)
         .clipShape(RoundedRectangle(cornerRadius: store.theme.cornerRadius, style: .continuous))
-        .shadow(color: .black.opacity(0.15), radius: 10, y: 5)
+        .overlay(RoundedRectangle(cornerRadius: store.theme.cornerRadius, style: .continuous).stroke(Color.primary.opacity(0.06)))
     }
 }
 
@@ -95,9 +101,9 @@ struct TransactionRow: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                MoneyText(amount: tx.amount, signed: true, font: .subheadline.weight(.bold))
+                MoneyText(amount: tx.amount, signed: true, font: .app(.subheadline, .bold))
                     .foregroundStyle(tx.amount == 0 ? Color.secondary : (tx.amount > 0 ? Color.blue : Color.primary))
-                MoneyText(amount: tx.balanceAfter, font: .caption2).foregroundStyle(.secondary)
+                MoneyText(amount: tx.balanceAfter, font: .app(.caption2)).foregroundStyle(.secondary)
             }
         }
         .padding(.vertical, 4)

@@ -56,7 +56,7 @@ struct EventRow: View {
                 if let a = store.account(event.accountID) { Text(a.name).font(.app(.caption2)).foregroundStyle(.tertiary) }
             }
             Spacer()
-            MoneyText(amount: event.amount, signed: true, font: .subheadline.weight(.bold), hideable: false)
+            MoneyText(amount: event.amount, signed: true, font: .app(.subheadline, .bold), hideable: false)
                 .foregroundStyle(event.isEnabled ? .primary : .secondary)
         }
         .opacity(event.isEnabled ? 1 : 0.6)

@@ -128,39 +128,39 @@ struct HomeView: View {
     }
 
     private var totalCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let on = store.theme.onAccent
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("\(store.settings.ownerName)님의 총자산").font(.app(.subheadline)).foregroundStyle(.white.opacity(0.8))
+                Text("\(store.settings.ownerName)님의 총자산").font(.app(.subheadline)).foregroundStyle(on.opacity(0.8))
                 Spacer()
                 if store.clock.isRealTime {
-                    Text(store.theme.tagline).font(.app(.caption2)).foregroundStyle(.white.opacity(0.6))
+                    Text(store.theme.tagline).font(.app(.caption2)).foregroundStyle(on.opacity(0.6))
                 } else {
                     TimelineView(.periodic(from: .now, by: 1)) { _ in
                         Label("\(speedLabel) · \(store.now.formatted(date: .numeric, time: .shortened))", systemImage: "forward.fill")
-                            .font(.app(.caption2, .semibold)).foregroundStyle(.white.opacity(0.9))
+                            .font(.app(.caption2, .semibold)).foregroundStyle(on.opacity(0.9))
                     }
                 }
             }
-            MoneyText(amount: store.totalAssets, font: .system(size: 36, weight: .heavy))
-                .foregroundStyle(.white)
+            MoneyText(amount: store.totalAssets, font: .app(size: 32, .bold))
+                .foregroundStyle(on)
             HStack(spacing: 4) {
-                Text("은행").font(.app(.caption)).foregroundStyle(.white.opacity(0.75))
-                MoneyText(amount: store.bankAssets, font: .caption.weight(.semibold)).foregroundStyle(.white)
-                Text("· 투자").font(.app(.caption)).foregroundStyle(.white.opacity(0.75))
-                MoneyText(amount: store.portfolio.investedKRW + store.portfolio.cashKRWTotal, font: .caption.weight(.semibold)).foregroundStyle(.white)
+                Text("은행").font(.app(.caption)).foregroundStyle(on.opacity(0.75))
+                MoneyText(amount: store.bankAssets, font: .app(.caption, .semibold)).foregroundStyle(on)
+                Text("· 투자").font(.app(.caption)).foregroundStyle(on.opacity(0.75))
+                MoneyText(amount: store.portfolio.investedKRW + store.portfolio.cashKRWTotal, font: .app(.caption, .semibold)).foregroundStyle(on)
             }
             if store.totalDebt > 0 {
                 HStack(spacing: 4) {
-                    Text("대출 잔액").font(.app(.caption)).foregroundStyle(.white.opacity(0.75))
-                    MoneyText(amount: store.totalDebt, font: .caption.weight(.semibold)).foregroundStyle(.white)
+                    Text("대출 잔액").font(.app(.caption)).foregroundStyle(on.opacity(0.75))
+                    MoneyText(amount: store.totalDebt, font: .app(.caption, .semibold)).foregroundStyle(on)
                 }
             }
         }
-        .padding(22)
+        .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(LinearGradient(colors: store.theme.cardGradient, startPoint: .topLeading, endPoint: .bottomTrailing))
+        .background(store.theme.accent)
         .clipShape(RoundedRectangle(cornerRadius: store.theme.cornerRadius, style: .continuous))
-        .shadow(color: store.theme.accent.opacity(0.35), radius: 16, y: 8)
     }
 
     @ViewBuilder private var upcoming: some View {
@@ -176,7 +176,7 @@ struct HomeView: View {
                                 Text(ev.nextFireDate.formatted(date: .abbreviated, time: .shortened)).font(.app(.caption)).foregroundStyle(.secondary)
                             }
                             Spacer()
-                            MoneyText(amount: ev.amount, signed: true, font: .subheadline.weight(.bold))
+                            MoneyText(amount: ev.amount, signed: true, font: .app(.subheadline, .bold))
                         }
                         if ev.id != next.last?.id { Divider() }
                     }

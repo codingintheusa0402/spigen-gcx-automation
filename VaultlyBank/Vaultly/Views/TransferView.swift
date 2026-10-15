@@ -69,7 +69,7 @@ struct TransferForm: View {
                 VStack(spacing: 20) {
                     SuccessCheck()
                     Text("송금 완료").font(.app(.title2, .bold))
-                    MoneyText(amount: amount, font: .largeTitle.weight(.heavy), hideable: false)
+                    MoneyText(amount: amount, font: .app(.largeTitle, .bold), hideable: false)
                     Text(toOwn ? (store.account(toAccount ?? UUID())?.name ?? "") : "\(recipient) · \(bank)").foregroundStyle(.secondary)
                     Button("확인") { done = false; amount = 0; memo = "" }.buttonStyle(.borderedProminent).padding(.top)
                 }

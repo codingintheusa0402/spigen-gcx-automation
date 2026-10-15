@@ -149,7 +149,7 @@ struct ProductEditor: View {
         }
     }
     private func row(_ k: String, _ v: Decimal) -> some View {
-        HStack { Text(k).foregroundStyle(.secondary); Spacer(); MoneyText(amount: v, font: .body.weight(.semibold), hideable: false) }
+        HStack { Text(k).foregroundStyle(.secondary); Spacer(); MoneyText(amount: v, font: .app(.body, .semibold), hideable: false) }
     }
 
     private func open() {
