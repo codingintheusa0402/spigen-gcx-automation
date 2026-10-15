@@ -17,11 +17,6 @@ struct SimClock: Codable, Equatable {
         speed = max(1, s)
     }
 
-    mutating func jump(by interval: TimeInterval, real: Date = Date()) {
-        anchorVirtual = now(real: real).addingTimeInterval(max(0, interval))
-        anchorReal = real
-    }
-
     var isRealTime: Bool { speed == 1 && abs(anchorVirtual.timeIntervalSince(anchorReal)) < 120 }
 }
 

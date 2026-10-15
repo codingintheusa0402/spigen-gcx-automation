@@ -92,15 +92,6 @@ final class BankStore: ObservableObject {
         catchUp()
     }
 
-    /// Jump simulated time forward instantly (days/months/years).
-    func jump(_ component: Calendar.Component, value: Int) {
-        var d = data
-        let target = Calendar.current.date(byAdding: component, value: value, to: d.clock.now()) ?? d.clock.now()
-        d.clock.jump(by: target.timeIntervalSince(d.clock.now()))
-        data = d
-        catchUp()
-    }
-
     func resetClockToRealTime() {
         var d = data; d.clock = SimClock(); data = d
         syncNotifications()
@@ -153,6 +144,7 @@ final class BankStore: ObservableObject {
         d.transactions.removeAll { $0.accountID == id }
         d.events.removeAll { $0.accountID == id }
         if d.lifestyle.accountID == id { d.lifestyle.accountID = nil; d.lifestyle.tier = nil }
+        if d.lifestyle.debtAccountID == id { d.lifestyle.debtAccountID = nil }
         for i in d.accounts.indices where d.accounts[i].terms?.linkedAccountID == id {
             d.accounts[i].terms?.linkedAccountID = nil
         }
@@ -209,12 +201,27 @@ final class BankStore: ObservableObject {
     /// typical amount and back-fills the last `backfillDays` of transactions.
     func applyTier(_ tier: WealthTier?, accountID: UUID?, resetBalance: Bool, backfillDays: Int) {
         var d = data
+        // drop the previous tier's auto-created debt account
+        if let old = d.lifestyle.debtAccountID {
+            d.accounts.removeAll { $0.id == old }
+            d.transactions.removeAll { $0.accountID == old }
+            d.lifestyle.debtAccountID = nil
+        }
         d.lifestyle.tier = tier
         d.lifestyle.accountID = accountID
         d.lifestyle.seed = UInt64.random(in: 1...UInt64.max)
         if let tier, let accountID {
             let simNow = d.clock.now()
+            d.lifestyle.tierStart = Calendar.current.date(byAdding: .day, value: -backfillDays, to: simNow) ?? simNow
             if resetBalance { Ledger.setBalance(tier.startingBalance, of: accountID, date: simNow, data: &d) }
+            if tier == .broke {
+                var debt = Account(name: "OK캐피탈 신용대출", kind: .loan, number: Account.generateNumber(), balance: 0, colorIndex: 5)
+                debt.terms = nil // lifestyle engine manages this one
+                d.accounts.append(debt)
+                Ledger.apply(amount: 4_800_000, to: debt.id, date: d.lifestyle.tierStart, counterparty: "OK캐피탈",
+                             memo: "기존 대출 잔액 (연 19.9% + 연체)", category: .transfer, data: &d)
+                d.lifestyle.debtAccountID = debt.id
+            }
             d.lifestyle.lastProcessed = Calendar.current.date(byAdding: .day, value: -backfillDays, to: simNow) ?? simNow
             if backfillDays > 0 {
                 // Re-date the balance reset so it precedes the generated history

@@ -34,7 +34,7 @@ struct WealthView: View {
                         HStack { Text("자동 흐름 끄기"); Spacer(); if tier == nil { Image(systemName: "checkmark") } }
                     }
                 } header: { Text("재력 정도") } footer: {
-                    Text("선택한 재력에 맞는 입금·출금이 매일/매주/매월 자동으로 생깁니다. 앱을 안 켜도 다음 실행 때 그동안의 내역이 채워집니다.")
+                    Text("선택한 재력에 맞는 급여·지출·보험료·공과금·의료비·사고·경조사·세금·보너스 등이 자동으로 생깁니다. 급여는 연차에 따라 오르고, 앱을 안 켜도 다음 실행 때 그동안의 내역이 채워집니다.")
                 }
                 if tier != nil {
                     Section("적용 대상") {
@@ -45,7 +45,16 @@ struct WealthView: View {
                         Toggle("지난 30일 내역 바로 생성", isOn: $backfill)
                     }
                     if let t = tier {
-                        Section("자동 생성되는 흐름") {
+                        Section("현실 반영") {
+                            HStack { Text("급여 인상"); Spacer(); Text(String(format: "매년 +%.1f%% · %d년마다 승진 ×%.2f", t.annualRaise * 100, t.promotionEveryYears, t.promotionBump)).font(.caption).foregroundStyle(.secondary) }
+                            HStack { Text("물가 상승"); Spacer(); Text("지출 매년 +2.5%").font(.caption).foregroundStyle(.secondary) }
+                            HStack { Text("사건·사고 변형"); Spacer(); Text("\(EventLibrary.variationCount(for: t))가지").font(.caption).foregroundStyle(.secondary) }
+                            if t == .broke {
+                                Text("잔액이 바닥나면 캐피탈에서 자동으로 추가 대출이 실행되고, 매월 이자·연체 수수료가 원금에 붙어 빚이 계속 불어납니다.")
+                                    .font(.caption).foregroundStyle(.red)
+                            }
+                        }
+                        Section("기본 흐름") {
                             ForEach(Array(t.flows.enumerated()), id: \.offset) { _, f in
                                 HStack {
                                     VStack(alignment: .leading, spacing: 2) {
