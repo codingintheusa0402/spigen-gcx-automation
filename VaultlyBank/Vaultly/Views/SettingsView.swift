@@ -4,6 +4,7 @@ struct SettingsView: View {
     @EnvironmentObject var store: BankStore
     @State private var confirmReset = false
     @State private var name = ""
+    @State private var showWealth = false
 
     var body: some View {
         NavigationStack {
@@ -28,6 +29,15 @@ struct SettingsView: View {
                                 if store.settings.themeID == t.id { Image(systemName: "checkmark").foregroundStyle(store.theme.accent) }
                             }
                         }.buttonStyle(.plain)
+                    }
+                }
+                Section("시뮬레이션") {
+                    Button { showWealth = true } label: {
+                        HStack {
+                            Label("재력 설정", systemImage: "person.crop.circle.badge.checkmark")
+                            Spacer()
+                            Text(store.lifestyle.tier.map { "\($0.emoji) \($0.title)" } ?? "꺼짐").foregroundStyle(.secondary)
+                        }
                     }
                 }
                 Section("화면 모드") {
@@ -69,6 +79,7 @@ struct SettingsView: View {
             }
             .navigationTitle("설정")
             .toolbar { ToolbarItem(placement: .topBarLeading) { SimBadge() } }
+            .sheet(isPresented: $showWealth) { WealthView() }
             .confirmationDialog("모든 계좌·거래·예약을 삭제하고 처음 상태로 되돌릴까요?", isPresented: $confirmReset, titleVisibility: .visible) {
                 Button("초기화", role: .destructive) { store.resetAll() }
             }

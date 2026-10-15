@@ -54,6 +54,7 @@ struct HomeView: View {
                 }
             }
             .sheet(isPresented: $showAddAccount) { AddAccountSheet() }
+            .sheet(isPresented: $showWealth) { WealthView() }
         }
     }
 
@@ -66,6 +67,16 @@ struct HomeView: View {
             }
             MoneyText(amount: store.totalAssets, font: .system(size: 36, weight: .heavy))
                 .foregroundStyle(.white)
+            Button { showWealth = true } label: {
+                HStack(spacing: 6) {
+                    if let t = store.lifestyle.tier { Text("\(t.emoji) \(t.title) 모드") } else { Text("재력 설정하기") }
+                    Image(systemName: "chevron.right").font(.caption2)
+                }
+                .font(.caption.weight(.semibold)).foregroundStyle(.white)
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .background(.white.opacity(0.2), in: Capsule())
+            }
+            .padding(.top, 2)
             HStack(spacing: 4) {
                 Text("은행").font(.caption).foregroundStyle(.white.opacity(0.75))
                 MoneyText(amount: store.bankAssets, font: .caption.weight(.semibold)).foregroundStyle(.white)
