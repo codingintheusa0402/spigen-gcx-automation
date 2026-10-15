@@ -9,7 +9,12 @@ struct HomeView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     totalCard
-                    section("내 계좌", trailing: { Button { showAddAccount = true } label: { Image(systemName: "plus.circle.fill") } }) {
+                    section("내 계좌", trailing: {
+                        HStack(spacing: 14) {
+                            NavigationLink { TransferForm() } label: { Image(systemName: "paperplane.fill") }
+                            Button { showAddAccount = true } label: { Image(systemName: "plus.circle.fill") }
+                        }
+                    }) {
                         ForEach(store.checkingAccounts) { acc in
                             NavigationLink(value: acc.id) { AccountTile(account: acc) }.buttonStyle(.plain)
                         }
@@ -60,6 +65,12 @@ struct HomeView: View {
             }
             MoneyText(amount: store.totalAssets, font: .system(size: 36, weight: .heavy))
                 .foregroundStyle(.white)
+            HStack(spacing: 4) {
+                Text("은행").font(.caption).foregroundStyle(.white.opacity(0.75))
+                MoneyText(amount: store.bankAssets, font: .caption.weight(.semibold)).foregroundStyle(.white)
+                Text("· 투자").font(.caption).foregroundStyle(.white.opacity(0.75))
+                MoneyText(amount: store.portfolio.investedKRW + store.portfolio.cashKRWTotal, font: .caption.weight(.semibold)).foregroundStyle(.white)
+            }
             if store.totalDebt > 0 {
                 HStack(spacing: 4) {
                     Text("대출 잔액").font(.caption).foregroundStyle(.white.opacity(0.75))

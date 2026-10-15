@@ -7,7 +7,7 @@ struct RootView: View {
         ZStack(alignment: .top) {
             TabView {
                 HomeView().tabItem { Label("홈", systemImage: "house.fill") }
-                TransferView().tabItem { Label("송금", systemImage: "paperplane.fill") }
+                InvestView().tabItem { Label("증권", systemImage: "chart.xyaxis.line") }
                 ProductsView().tabItem { Label("상품", systemImage: "chart.line.uptrend.xyaxis") }
                 ScheduleView().tabItem { Label("예약 알림", systemImage: "bell.badge") }
                 SettingsView().tabItem { Label("설정", systemImage: "gearshape.fill") }
