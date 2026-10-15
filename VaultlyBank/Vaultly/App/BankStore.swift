@@ -59,6 +59,7 @@ final class BankStore: ObservableObject {
         let fired = ScheduleEngine.processDue(now: Date(), data: &d)
         InterestEngine.accrue(now: Date(), data: &d, taxRate: d.settings.interestTaxRate)
         MarketSimulator.tick(now: Date(), portfolio: &d.portfolio)
+        LifestyleEngine.process(now: Date(), data: &d)
         if d != data { data = d }
         if let last = fired.last {
             let amount = Money.format(abs(last.event.amount), code: currency)
@@ -119,6 +120,7 @@ final class BankStore: ObservableObject {
         d.accounts.removeAll { $0.id == id }
         d.transactions.removeAll { $0.accountID == id }
         d.events.removeAll { $0.accountID == id }
+        if d.lifestyle.accountID == id { d.lifestyle.accountID = nil; d.lifestyle.tier = nil }
         for i in d.accounts.indices where d.accounts[i].terms?.linkedAccountID == id {
             d.accounts[i].terms?.linkedAccountID = nil
         }
@@ -165,6 +167,33 @@ final class BankStore: ObservableObject {
             data.events[i].nextFireDate = t
         }
         syncNotifications()
+    }
+
+    // MARK: Lifestyle (wealth tier)
+
+    var lifestyle: LifestyleState { data.lifestyle }
+
+    /// Pick a wealth tier. Optionally resets the account balance to the tier's
+    /// typical amount and back-fills the last `backfillDays` of transactions.
+    func applyTier(_ tier: WealthTier?, accountID: UUID?, resetBalance: Bool, backfillDays: Int) {
+        var d = data
+        d.lifestyle.tier = tier
+        d.lifestyle.accountID = accountID
+        d.lifestyle.seed = UInt64.random(in: 1...UInt64.max)
+        if let tier, let accountID {
+            if resetBalance { Ledger.setBalance(tier.startingBalance, of: accountID, data: &d) }
+            d.lifestyle.lastProcessed = Calendar.current.date(byAdding: .day, value: -backfillDays, to: Date()) ?? Date()
+            if backfillDays > 0 {
+                // Re-date the balance reset so it precedes the generated history
+                if resetBalance, let i = d.transactions.lastIndex(where: { $0.accountID == accountID && $0.category == .adjustment }) {
+                    d.transactions[i].date = d.lifestyle.lastProcessed
+                }
+                LifestyleEngine.process(now: Date(), data: &d)
+            }
+        } else {
+            d.lifestyle.lastProcessed = Date()
+        }
+        data = d
     }
 
     // MARK: Mock trading

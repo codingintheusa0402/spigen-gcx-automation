@@ -186,6 +186,7 @@ struct BankData: Codable, Equatable {
     var events: [ScheduledEvent] = []
     var settings = BankSettings()
     var portfolio = Portfolio.starter()
+    var lifestyle = LifestyleState()
 
     static func starter() -> BankData {
         var d = BankData()

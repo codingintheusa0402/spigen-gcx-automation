@@ -3,6 +3,7 @@ import SwiftUI
 struct HomeView: View {
     @EnvironmentObject var store: BankStore
     @State private var showAddAccount = false
+    @State private var showWealth = false
 
     var body: some View {
         NavigationStack {
