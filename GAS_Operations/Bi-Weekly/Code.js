@@ -3,7 +3,8 @@
 // skill moves the wrapper it needs (bwRunCards / bwRunOverview / bwRunOverviewApple)
 // to the very top before pushing.
 const BW_RUN = {
-  start: '2026-09-11', end: '2026-10-01',                 // 작성 날짜 window for the claim/review cards
+  start: '2026-10-02', end: '2026-10-15',                 // 작성 날짜 window for the claim/review cards
+  deck: '18r_Ceuaxr_on73M4pueuHYL1NgDCeOkKxr7C8itKlko',    // this period's classic deck (blank → the bound deck)
   sources: ['glxZ8', 'pixel11', 'iphone18'],              // CLAIM_SLIDE_SOURCES keys
   appleDeck: '1quCr9Xj-pSsVXKrYuaEOq0LPILZMN2LPUwBkY1f_GFI',
   // Overview TOP3 slides: claims = Zendesk 4. Product Issue (cumulative, device filter per series);
@@ -21,12 +22,15 @@ const BW_RUN = {
 
 // Claim/review cards for BW_RUN.start..end into the ACTIVE (bound) deck. Re-runs only add missing cards.
 function bwRunCards() {
-  const res = _generateClaimSlides(SlidesApp.getActivePresentation(), { sources: BW_RUN.sources, startDate: BW_RUN.start, endDate: BW_RUN.end });
+  const res = _generateClaimSlides(_bwDeck(), { sources: BW_RUN.sources, startDate: BW_RUN.start, endDate: BW_RUN.end });
   Logger.log(JSON.stringify(res));
 }
 
 // Overview TOP3 grids on the ACTIVE deck, classic theme. Resumable across the 6-min cap.
-function bwRunOverview() { _bwOverview(SlidesApp.getActivePresentation(), CHART_THEMES.classic, 'bw_overview_done_' + BW_RUN.end); }
+function bwRunOverview() { _bwOverview(_bwDeck(), CHART_THEMES.classic, 'bw_overview_done_' + BW_RUN.end); }
+
+// BW_RUN.deck when set, so an already-authorized script can drive a fresh deck copy.
+function _bwDeck() { return BW_RUN.deck ? SlidesApp.openById(BW_RUN.deck) : SlidesApp.getActivePresentation(); }
 
 // Same grids on the Apple copy (BW_RUN.appleDeck), apple theme, #F5F5F7 canvas.
 function bwRunOverviewApple() { _bwOverview(SlidesApp.openById(BW_RUN.appleDeck), CHART_THEMES.apple, 'bw_overview_apple_done_' + BW_RUN.end); }
