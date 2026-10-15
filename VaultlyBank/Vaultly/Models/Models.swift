@@ -13,7 +13,11 @@ extension Decimal {
 
     var doubleValue: Double { NSDecimalNumber(decimal: self).doubleValue }
 
-    init(double: Double) { self = Decimal(double).rounded(scale: 2) }
+    /// Double → Decimal with float noise removed (8 dp keeps rate factors like 0.042/12 intact).
+    init(double: Double) {
+        guard double.isFinite else { self = 0; return }
+        self = Decimal(double).rounded(scale: 8)
+    }
 }
 
 enum Money {

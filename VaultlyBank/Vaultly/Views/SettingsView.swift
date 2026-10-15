@@ -51,8 +51,8 @@ struct SettingsView: View {
                             Text(store.now.formatted(date: .abbreviated, time: .shortened)).foregroundStyle(.secondary).monospacedDigit()
                         }
                     }
-                    if !store.clock.isRealTime {
-                        Button("실시간으로 되돌리기 (현재 시각)") { store.resetClockToRealTime() }
+                    if store.clock.speed != 1 {
+                        Button("실시간 속도로 (시뮬레이션 시각 유지)") { store.resetToRealSpeed() }
                     }
                 } header: { Text("시간 흐름") } footer: {
                     Text("속도를 올리면 월급·생활비·이자·상환·예약 입금이 그 배속으로 진행됩니다. 1,200x면 실제 한 달 동안 100년이 지납니다. 가장 느린 설정이 실시간이며, 시간은 앞으로만 흐릅니다(점프 없음). 가속 중에는 잠금화면 알림 대신 앱 내 배너로 표시됩니다.")

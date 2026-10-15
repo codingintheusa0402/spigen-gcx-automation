@@ -92,8 +92,12 @@ final class BankStore: ObservableObject {
         catchUp()
     }
 
-    func resetClockToRealTime() {
-        var d = data; d.clock = SimClock(); data = d
+    /// Back to 1x. Simulated time keeps its current value (it never moves backwards);
+    /// from here on it advances at real speed.
+    func resetToRealSpeed() {
+        var d = data
+        d.clock = SimClock(speed: 1, anchorReal: Date(), anchorVirtual: d.clock.now())
+        data = d
         syncNotifications()
     }
 

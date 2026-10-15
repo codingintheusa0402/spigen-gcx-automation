@@ -86,12 +86,12 @@ enum MarketSimulator {
             let vol = portfolio.holdings[i].volatility
             for _ in 0..<steps { price *= 1 + Double.random(in: -vol...vol) }
             let scale = portfolio.holdings[i].market == .domestic ? 0 : 2
-            portfolio.holdings[i].price = max(Decimal(double: price).rounded(scale: scale), 1)
+            if price.isFinite { portfolio.holdings[i].price = max(Decimal(double: price).rounded(scale: scale), 1) }
         }
         var idx = portfolio.indexValue.doubleValue
         var change = 0.0
         for _ in 0..<steps { let r = Double.random(in: -0.004...0.004); idx *= 1 + r; change += r }
-        portfolio.indexValue = Decimal(double: idx).rounded(scale: 2)
+        if idx.isFinite { portfolio.indexValue = Decimal(double: idx).rounded(scale: 2) }
         portfolio.indexChange = change
         portfolio.lastTick = now
     }
