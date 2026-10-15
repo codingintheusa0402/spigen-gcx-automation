@@ -12,7 +12,7 @@ enum ScheduleEngine {
             var ev = data.events[i]
             guard ev.isEnabled else { continue }
             var guardCount = 0
-            while ev.nextFireDate <= now, guardCount < 400 {
+            while ev.nextFireDate <= now, guardCount < 5000 {
                 guardCount += 1
                 if let tx = Ledger.apply(amount: ev.amount, to: ev.accountID, date: ev.nextFireDate,
                                          counterparty: ev.counterparty, memo: ev.memo,
@@ -46,11 +46,11 @@ enum Ledger {
         return tx
     }
 
-    static func setBalance(_ newBalance: Decimal, of accountID: UUID, data: inout BankData) {
+    static func setBalance(_ newBalance: Decimal, of accountID: UUID, date: Date = Date(), data: inout BankData) {
         guard let idx = data.accounts.firstIndex(where: { $0.id == accountID }) else { return }
         let diff = newBalance - data.accounts[idx].balance
         guard diff != 0 else { return }
-        apply(amount: diff, to: accountID, date: Date(), counterparty: "직접 설정",
+        apply(amount: diff, to: accountID, date: date, counterparty: "직접 설정",
               memo: "잔액 조정", category: .adjustment, data: &data)
     }
 }

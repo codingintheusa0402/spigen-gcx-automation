@@ -107,6 +107,7 @@ struct ProductEditor: View {
             .navigationTitle(kind.title + " 가입")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("취소") { dismiss() } } }
             .onAppear {
+                start = store.now
                 linked = store.checkingAccounts.first?.id
                 switch kind {
                 case .installmentSavings: name = "Vaultly 자유적금"; rate = 5.0; amount = 500_000

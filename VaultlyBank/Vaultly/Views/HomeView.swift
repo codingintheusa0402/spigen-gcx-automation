@@ -63,7 +63,14 @@ struct HomeView: View {
             HStack {
                 Text("\(store.settings.ownerName)님의 총자산").font(.subheadline).foregroundStyle(.white.opacity(0.8))
                 Spacer()
-                Text(store.theme.tagline).font(.caption2).foregroundStyle(.white.opacity(0.6))
+                if store.clock.isRealTime {
+                    Text(store.theme.tagline).font(.caption2).foregroundStyle(.white.opacity(0.6))
+                } else {
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                        Label("\(speedLabel) · \(store.now.formatted(date: .numeric, time: .shortened))", systemImage: "forward.fill")
+                            .font(.caption2.weight(.semibold)).foregroundStyle(.white.opacity(0.9))
+                    }
+                }
             }
             MoneyText(amount: store.totalAssets, font: .system(size: 36, weight: .heavy))
                 .foregroundStyle(.white)
@@ -117,6 +124,10 @@ struct HomeView: View {
                 }
             }
         }
+    }
+
+    private var speedLabel: String {
+        TimeSpeed.allCases.first { $0.rawValue == store.clock.speed }?.short ?? "\(Int(store.clock.speed))x"
     }
 
     private func section<C: View>(_ title: String, @ViewBuilder content: () -> C) -> some View {

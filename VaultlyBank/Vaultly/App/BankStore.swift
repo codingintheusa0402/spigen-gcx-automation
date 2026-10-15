@@ -54,12 +54,22 @@ final class BankStore: ObservableObject {
 
     // MARK: Time-based settlement
 
+    /// Simulated "now" (equals wall-clock time at 1x).
+    var now: Date { data.clock.now() }
+    var clock: SimClock { data.clock }
+
     func catchUp() {
         var d = data
-        let fired = ScheduleEngine.processDue(now: Date(), data: &d)
-        InterestEngine.accrue(now: Date(), data: &d, taxRate: d.settings.interestTaxRate)
-        MarketSimulator.tick(now: Date(), portfolio: &d.portfolio)
-        LifestyleEngine.process(now: Date(), data: &d)
+        let now = d.clock.now()
+        let fired = ScheduleEngine.processDue(now: now, data: &d)
+        InterestEngine.accrue(now: now, data: &d, taxRate: d.settings.interestTaxRate)
+        MarketSimulator.tick(now: now, portfolio: &d.portfolio)
+        LifestyleEngine.process(now: now, data: &d)
+        // Fast-forward can create tens of thousands of rows; keep the ledger bounded.
+        if d.transactions.count > 4000 {
+            d.transactions.sort { $0.date < $1.date }
+            d.transactions.removeFirst(d.transactions.count - 2500)
+        }
         if d != data { data = d }
         if let last = fired.last {
             let amount = Money.format(abs(last.event.amount), code: currency)
@@ -71,7 +81,29 @@ final class BankStore: ObservableObject {
     }
 
     func syncNotifications() {
-        NotificationService.sync(events: data.events, accounts: data.accounts, currency: currency)
+        // Lock-screen notifications only make sense when simulated time == real time.
+        NotificationService.sync(events: data.clock.isRealTime ? data.events : [], accounts: data.accounts, currency: currency)
+    }
+
+    // MARK: Time control
+
+    func setSpeed(_ speed: TimeSpeed) {
+        var d = data; d.clock.setSpeed(speed.rawValue); data = d
+        catchUp()
+    }
+
+    /// Jump simulated time forward instantly (days/months/years).
+    func jump(_ component: Calendar.Component, value: Int) {
+        var d = data
+        let target = Calendar.current.date(byAdding: component, value: value, to: d.clock.now()) ?? d.clock.now()
+        d.clock.jump(by: target.timeIntervalSince(d.clock.now()))
+        data = d
+        catchUp()
+    }
+
+    func resetClockToRealTime() {
+        var d = data; d.clock = SimClock(); data = d
+        syncNotifications()
     }
 
     func requestNotifications() {
@@ -100,14 +132,14 @@ final class BankStore: ObservableObject {
         let acc = Account(name: name, kind: .checking, number: Account.generateNumber(), balance: 0, colorIndex: colorIndex)
         d.accounts.append(acc)
         if balance != 0 {
-            Ledger.apply(amount: balance, to: acc.id, date: Date(), counterparty: "직접 설정",
+            Ledger.apply(amount: balance, to: acc.id, date: now, counterparty: "직접 설정",
                          memo: "시작 잔액", category: .adjustment, data: &d)
         }
         data = d
     }
 
     func setBalance(_ balance: Decimal, of id: UUID) {
-        var d = data; Ledger.setBalance(balance, of: id, data: &d); data = d
+        var d = data; Ledger.setBalance(balance, of: id, date: now, data: &d); data = d
     }
 
     func rename(_ id: UUID, to name: String) {
@@ -138,12 +170,12 @@ final class BankStore: ObservableObject {
         switch target {
         case .own(let dst):
             guard let dstAcc = account(dst), dst != from else { return false }
-            Ledger.apply(amount: -amount, to: from, date: Date(), counterparty: dstAcc.name,
+            Ledger.apply(amount: -amount, to: from, date: now, counterparty: dstAcc.name,
                          memo: memo.isEmpty ? "내 계좌 이체" : memo, category: .transfer, data: &d)
-            Ledger.apply(amount: amount, to: dst, date: Date(), counterparty: src.name,
+            Ledger.apply(amount: amount, to: dst, date: now, counterparty: src.name,
                          memo: memo.isEmpty ? "내 계좌 이체" : memo, category: .transfer, data: &d)
         case .external(let name, let bank):
-            Ledger.apply(amount: -amount, to: from, date: Date(), counterparty: name,
+            Ledger.apply(amount: -amount, to: from, date: now, counterparty: name,
                          memo: memo.isEmpty ? bank : "\(bank) · \(memo)", category: .transfer, data: &d)
         }
         data = d
@@ -162,7 +194,7 @@ final class BankStore: ObservableObject {
         guard let i = data.events.firstIndex(where: { $0.id == id }) else { return }
         data.events[i].isEnabled.toggle()
         // re-enabling a past one-off: push it to the same time tomorrow
-        if data.events[i].isEnabled, data.events[i].nextFireDate <= Date(), data.events[i].repeatRule == .none,
+        if data.events[i].isEnabled, data.events[i].nextFireDate <= now, data.events[i].repeatRule == .none,
            let t = Calendar.current.date(byAdding: .day, value: 1, to: data.events[i].nextFireDate) {
             data.events[i].nextFireDate = t
         }
@@ -181,17 +213,18 @@ final class BankStore: ObservableObject {
         d.lifestyle.accountID = accountID
         d.lifestyle.seed = UInt64.random(in: 1...UInt64.max)
         if let tier, let accountID {
-            if resetBalance { Ledger.setBalance(tier.startingBalance, of: accountID, data: &d) }
-            d.lifestyle.lastProcessed = Calendar.current.date(byAdding: .day, value: -backfillDays, to: Date()) ?? Date()
+            let simNow = d.clock.now()
+            if resetBalance { Ledger.setBalance(tier.startingBalance, of: accountID, date: simNow, data: &d) }
+            d.lifestyle.lastProcessed = Calendar.current.date(byAdding: .day, value: -backfillDays, to: simNow) ?? simNow
             if backfillDays > 0 {
                 // Re-date the balance reset so it precedes the generated history
                 if resetBalance, let i = d.transactions.lastIndex(where: { $0.accountID == accountID && $0.category == .adjustment }) {
                     d.transactions[i].date = d.lifestyle.lastProcessed
                 }
-                LifestyleEngine.process(now: Date(), data: &d)
+                LifestyleEngine.process(now: simNow, data: &d)
             }
         } else {
-            d.lifestyle.lastProcessed = Date()
+            d.lifestyle.lastProcessed = d.clock.now()
         }
         data = d
     }
@@ -233,7 +266,7 @@ final class BankStore: ObservableObject {
         }
         h.price = price
         p.holdings[i] = h
-        p.trades.append(TradeRecord(holdingID: holdingID, date: Date(), isBuy: buy, shares: shares, price: price))
+        p.trades.append(TradeRecord(holdingID: holdingID, date: now, isBuy: buy, shares: shares, price: price))
         data.portfolio = p
         return true
     }

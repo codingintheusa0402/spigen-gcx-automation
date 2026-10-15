@@ -5,6 +5,7 @@ struct SettingsView: View {
     @State private var confirmReset = false
     @State private var name = ""
     @State private var showWealth = false
+    private let jumps: [(String, Calendar.Component, Int)] = [("+1일", .day, 1), ("+1주", .day, 7), ("+1달", .month, 1), ("+1년", .year, 1)]
 
     var body: some View {
         NavigationStack {
@@ -39,6 +40,30 @@ struct SettingsView: View {
                             Text(store.lifestyle.tier.map { "\($0.emoji) \($0.title)" } ?? "꺼짐").foregroundStyle(.secondary)
                         }
                     }
+                }
+                Section {
+                    Picker("속도", selection: Binding(get: { TimeSpeed.allCases.first { $0.rawValue == store.clock.speed } ?? .realtime },
+                                                   set: { store.setSpeed($0) })) {
+                        ForEach(TimeSpeed.allCases) { Text($0.title).tag($0) }
+                    }
+                    HStack {
+                        Text("시뮬레이션 시각"); Spacer()
+                        TimelineView(.periodic(from: .now, by: 1)) { _ in
+                            Text(store.now.formatted(date: .abbreviated, time: .shortened)).foregroundStyle(.secondary).monospacedDigit()
+                        }
+                    }
+                    HStack(spacing: 8) {
+                        Text("시간 점프")
+                        Spacer()
+                        ForEach(jumps, id: \.0) { item in
+                            Button(item.0) { store.jump(item.1, value: item.2) }.buttonStyle(.bordered).controlSize(.small)
+                        }
+                    }
+                    if !store.clock.isRealTime {
+                        Button("실시간으로 되돌리기 (현재 시각)") { store.resetClockToRealTime() }
+                    }
+                } header: { Text("시간 흐름") } footer: {
+                    Text("속도를 올리면 월급·생활비·이자·상환·예약 입금이 그 배속으로 진행됩니다. 1,200x면 실제 한 달 동안 100년이 지납니다. 가장 느린 설정이 실시간이며, 시간은 앞으로만 갑니다. 가속 중에는 잠금화면 알림 대신 앱 내 배너로 표시됩니다.")
                 }
                 Section("화면 모드") {
                     Picker("화면 모드", selection: Binding(get: { store.settings.appearance }, set: { v in store.update { $0.appearance = v } })) {

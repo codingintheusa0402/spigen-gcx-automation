@@ -187,6 +187,7 @@ struct BankData: Codable, Equatable {
     var settings = BankSettings()
     var portfolio = Portfolio.starter()
     var lifestyle = LifestyleState()
+    var clock = SimClock()
 
     static func starter() -> BankData {
         var d = BankData()

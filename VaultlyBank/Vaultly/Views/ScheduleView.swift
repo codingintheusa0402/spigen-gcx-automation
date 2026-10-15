@@ -135,7 +135,8 @@ struct EventEditor: View {
                     accountID = e.accountID; date = e.nextFireDate; rule = e.repeatRule
                 } else {
                     accountID = store.checkingAccounts.first?.id
-                    if date <= Date(), let t = Calendar.current.date(byAdding: .day, value: 1, to: date) { date = t }
+                    date = Calendar.current.date(bySettingHour: 16, minute: 0, second: 0, of: store.now) ?? store.now
+                    if date <= store.now, let t = Calendar.current.date(byAdding: .day, value: 1, to: date) { date = t }
                 }
             }
         }

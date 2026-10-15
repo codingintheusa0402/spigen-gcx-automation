@@ -102,7 +102,7 @@ enum InterestEngine {
     private static func processInstallments(now: Date, idx: Int, terms: inout ProductTerms, data: inout BankData) {
         var guardCount = 0
         while let due = calendar.date(byAdding: .month, value: 1, to: terms.lastInstallmentDate),
-              due <= now, due <= terms.maturityDate, guardCount < 600 {
+              due <= now, due <= terms.maturityDate, guardCount < 2400 {
             guardCount += 1
             // accrue interest up to the installment date before the balance changes
             let savedNow = due
@@ -132,7 +132,7 @@ enum InterestEngine {
     private static func processRepayments(now: Date, idx: Int, terms: inout ProductTerms, data: inout BankData) {
         var guardCount = 0
         while let due = calendar.date(byAdding: .month, value: 1, to: terms.lastInstallmentDate),
-              due <= now, guardCount < 600 {
+              due <= now, guardCount < 2400 {
             guardCount += 1
             let id = data.accounts[idx].id
             let debt = data.accounts[idx].balance

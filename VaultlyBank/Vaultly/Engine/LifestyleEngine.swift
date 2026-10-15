@@ -16,7 +16,7 @@ struct SplitMix64: RandomNumberGenerator {
 /// Generates the automatic cash flows of the selected wealth tier, day by day,
 /// from the last processed date up to now (also used to back-fill history).
 enum LifestyleEngine {
-    static let maxDays = 400
+    static let maxDays = 120
 
     static func process(now: Date = Date(), data: inout BankData) {
         guard let tier = data.lifestyle.tier,
@@ -55,6 +55,11 @@ enum LifestyleEngine {
             }
             guard let next = cal.date(byAdding: .day, value: 1, to: day) else { break }
             day = next
+            if day <= endDay, guardCount >= maxDays {
+                // budget exhausted: resume from the start of the next day on the next tick
+                data.lifestyle.lastProcessed = max(processed, day.addingTimeInterval(-1))
+                return
+            }
         }
         data.lifestyle.lastProcessed = max(processed, now)
     }
