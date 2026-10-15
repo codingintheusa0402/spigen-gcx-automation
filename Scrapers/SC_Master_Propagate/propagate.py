@@ -474,6 +474,18 @@ def phase_b_c_d_product(svc, product, dry_run=True):
     dest_id, dest_sheet = cfg["dest_id"], cfg["dest_sheet"]
     existing_ids = set(col_values(svc, dest_id, dest_sheet, cfg["dest_review_id_col"]))
     new_rows = [r for r in cand if r[SC_REVIEW_ID_IDX] not in existing_ids]
+    if product == "유지훈P":
+        # SC Device (col O) is a MAP/COUNTIF formula that flickers between reads:
+        # iPh18-shared ASINs read as "유지훈P, iPh18" (hidden by 유지훈P_finalize)
+        # one moment and plain "유지훈P" the next. On 2026-10-15 that leaked 167
+        # iPh18-shared rows into 유지훈P (user had them removed). Gate on the
+        # iPh18 book's ASINs instead of trusting the tag.
+        ip = PRODUCTS["iPh18"]
+        iph18_asins = {a.strip() for a in col_values(svc, ip["dest_id"], ip["dest_sheet"], "A") if a.strip()}
+        shared = [r for r in new_rows if r[0].strip() in iph18_asins]
+        if shared:
+            new_rows = [r for r in new_rows if r[0].strip() not in iph18_asins]
+            print(f"[{product}] skipped {len(shared)} iPh18-shared row(s) (ASIN in iPh18 book; Device-tag flicker guard)")
     print(f"[{product}] {len(existing_ids)} already in {dest_sheet}; "
           f"{len(new_rows)} genuinely new")
     if not new_rows:
