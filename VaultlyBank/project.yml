@@ -25,3 +25,23 @@ targets:
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+  VaultlyTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [VaultlyTests]
+    dependencies:
+      - target: Vaultly
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.vaultly.tests
+schemes:
+  Vaultly:
+    build:
+      targets:
+        Vaultly: all
+        VaultlyTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets: [VaultlyTests]

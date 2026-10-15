@@ -37,6 +37,11 @@ open Vaultly.xcodeproj
 ```
 Xcode 15+, iOS 17+. Signing Team만 지정하면 실기기 설치가 가능합니다.
 
+테스트 (엔진·이자·시계·라이프스타일·거래):
+```bash
+xcodebuild test -project Vaultly.xcodeproj -scheme Vaultly -destination 'platform=iOS Simulator,name=iPhone 15'
+```
+
 ## 구조
 ```
 Vaultly/
