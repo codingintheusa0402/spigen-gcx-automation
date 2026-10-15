@@ -158,8 +158,21 @@ struct ScheduledEvent: Identifiable, Codable, Equatable {
 
 // MARK: - Settings / root document
 
+enum Appearance: String, Codable, CaseIterable, Identifiable {
+    case system, light, dark
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .system: return "시스템"
+        case .light: return "라이트"
+        case .dark: return "다크"
+        }
+    }
+}
+
 struct BankSettings: Codable, Equatable {
     var themeID: String = "nova"
+    var appearance: Appearance = .system
     var currencyCode: String = "KRW"
     var ownerName: String = "홍길동"
     var interestTaxRate: Double = 0.154     // 이자소득세 15.4% (0이면 비과세)

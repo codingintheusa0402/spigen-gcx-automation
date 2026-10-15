@@ -23,7 +23,8 @@ struct Theme: Identifiable {
               cardPalette: [[.blue, .indigo], [.cyan, .blue], [.mint, .teal], [.indigo, .purple], [.orange, .pink], [.gray, .black]]),
         Theme(id: "heritage", bankName: "Heritage Trust", tagline: "Since 1887 · 신뢰의 전통",
               accent: Color(red: 0.07, green: 0.2, blue: 0.4), accentSecondary: Color(red: 0.8, green: 0.65, blue: 0.3),
-              background: Color(red: 0.96, green: 0.95, blue: 0.92), card: .white,
+              background: adaptive(light: (0.96, 0.95, 0.92), dark: (0.09, 0.09, 0.08)),
+              card: adaptive(light: (1, 1, 1), dark: (0.15, 0.15, 0.13)),
               fontDesign: .serif, cornerRadius: 12,
               cardGradient: [Color(red: 0.07, green: 0.2, blue: 0.4), Color(red: 0.05, green: 0.1, blue: 0.25)],
               cardPalette: [[Color(red: 0.07, green: 0.2, blue: 0.4), .black], [Color(red: 0.55, green: 0.1, blue: 0.15), .black],
@@ -31,7 +32,8 @@ struct Theme: Identifiable {
                             [.gray, .black], [.brown, .black]]),
         Theme(id: "orbit", bankName: "Orbit Pay", tagline: "지갑 하나로, 어디서나",
               accent: Color(red: 0.55, green: 0.25, blue: 0.95), accentSecondary: Color(red: 1.0, green: 0.45, blue: 0.6),
-              background: Color(red: 0.08, green: 0.07, blue: 0.12), card: Color(red: 0.14, green: 0.13, blue: 0.2),
+              background: adaptive(light: (0.95, 0.94, 0.98), dark: (0.08, 0.07, 0.12)),
+              card: adaptive(light: (1, 1, 1), dark: (0.14, 0.13, 0.2)),
               fontDesign: .default, cornerRadius: 26,
               cardGradient: [Color(red: 0.55, green: 0.25, blue: 0.95), Color(red: 1.0, green: 0.45, blue: 0.6)],
               cardPalette: [[.purple, .pink], [.pink, .orange], [.indigo, .purple], [.teal, .green], [.orange, .yellow], [.gray, .black]]),
@@ -39,7 +41,13 @@ struct Theme: Identifiable {
 
     static func named(_ id: String) -> Theme { all.first { $0.id == id } ?? all[0] }
 
-    var isDark: Bool { id == "orbit" }
+    /// Color that follows the current light/dark trait, so every theme works in both modes.
+    static func adaptive(light: (Double, Double, Double), dark: (Double, Double, Double)) -> Color {
+        Color(UIColor { trait in
+            let c = trait.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: c.0, green: c.1, blue: c.2, alpha: 1)
+        })
+    }
     func gradient(for index: Int) -> LinearGradient {
         let pair = cardPalette[abs(index) % cardPalette.count]
         return LinearGradient(colors: pair, startPoint: .topLeading, endPoint: .bottomTrailing)

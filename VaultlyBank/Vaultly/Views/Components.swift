@@ -191,9 +191,10 @@ struct SuccessCheck: View {
 }
 
 extension View {
-    func themed(_ theme: Theme) -> some View {
-        self.fontDesign(theme.fontDesign)
+    func themed(_ theme: Theme, appearance: Appearance) -> some View {
+        let scheme: ColorScheme? = appearance == .light ? .light : appearance == .dark ? .dark : nil
+        return self.fontDesign(theme.fontDesign)
             .tint(theme.accent)
-            .preferredColorScheme(theme.isDark ? .dark : nil)
+            .preferredColorScheme(scheme)
     }
 }

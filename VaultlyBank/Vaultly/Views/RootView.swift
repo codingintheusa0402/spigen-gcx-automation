@@ -23,7 +23,7 @@ struct RootView: View {
             }
         }
         .animation(.spring(duration: 0.4), value: store.banner)
-        .themed(store.theme)
+        .themed(store.theme, appearance: store.settings.appearance)
         .sheet(isPresented: Binding(get: { !store.settings.hasOnboarded }, set: { _ in })) {
             OnboardingView().interactiveDismissDisabled()
         }

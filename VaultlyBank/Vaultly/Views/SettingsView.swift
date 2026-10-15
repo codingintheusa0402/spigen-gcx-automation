@@ -30,6 +30,11 @@ struct SettingsView: View {
                         }.buttonStyle(.plain)
                     }
                 }
+                Section("화면 모드") {
+                    Picker("화면 모드", selection: Binding(get: { store.settings.appearance }, set: { v in store.update { $0.appearance = v } })) {
+                        ForEach(Appearance.allCases) { Text($0.title).tag($0) }
+                    }.pickerStyle(.segmented)
+                }
                 Section("표시") {
                     Picker("통화", selection: Binding(get: { store.settings.currencyCode }, set: { c in store.update { $0.currencyCode = c } })) {
                         Text("원 (KRW)").tag("KRW"); Text("달러 (USD)").tag("USD"); Text("유로 (EUR)").tag("EUR"); Text("엔 (JPY)").tag("JPY")
