@@ -1067,6 +1067,8 @@ Zendesk 소스와 달리 이 소스는 **내부 노트를 안 쓴다.** 팀원�
 - 컬럼 상수는 `Config.gs`의 `TCT_LOG_SHEET_ID`/`TCT_LOG_TABS`/`TCT_LOG_COL`에 정의.
 
 ## Notes / gotchas
+- 운영 기준(호스트 전환·운영 시간·장애 대응·OS 업데이트 점검)은 `OPERATIONS_MANUAL.md` 참고. 특히 §13:
+  서버 Windows/Ubuntu 주요 업데이트는 관리자(사용자) 착수 승인 없이 시작하지 않으며, 점검 공지 게시 후 리포트 전송을 중단한다.
 - Webhook 메시지는 편집·삭제 불가. 잘못 보내면 사용자가 Chat에서 수동 삭제.
 - 카드 본문 HTML은 Google Chat이 지원하는 태그만 해석: `<b> <i> <u> <s>
   <font color="#hex"> <a href> <br>`. `<ul>/<li>`·마크다운(`*`,`**`)은 안 됨 → 숫자/`+`
