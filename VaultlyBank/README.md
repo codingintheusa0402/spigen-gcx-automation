@@ -35,7 +35,7 @@ cd VaultlyBank
 xcodegen generate
 open Vaultly.xcodeproj
 ```
-Xcode 15+, iOS 17+. Signing Team만 지정하면 실기기 설치가 가능합니다.
+Xcode 15+, iOS 17+. 실기기(USB 연결) 설치는 `scripts/install_device.sh` 한 줄로 끝납니다 (개인 팀 자동 서명, 번들 ID `com.kevinkim.vaultly`).
 
 테스트 (엔진·이자·시계·라이프스타일·거래):
 ```bash
