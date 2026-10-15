@@ -2,8 +2,13 @@ import SwiftUI
 
 @main
 struct VaultlyApp: App {
-    @StateObject private var store = BankStore()
+    @StateObject private var store: BankStore
     @Environment(\.scenePhase) private var scenePhase
+
+    init() {
+        if CommandLine.arguments.contains("-uitest-reset") { Persistence.reset() }
+        _store = StateObject(wrappedValue: BankStore())
+    }
 
     var body: some Scene {
         WindowGroup {

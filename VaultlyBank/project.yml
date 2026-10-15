@@ -34,14 +34,25 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.vaultly.tests
+  VaultlyUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [VaultlyUITests]
+    dependencies:
+      - target: Vaultly
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.vaultly.uitests
+        TEST_TARGET_NAME: Vaultly
 schemes:
   Vaultly:
     build:
       targets:
         Vaultly: all
         VaultlyTests: [test]
+        VaultlyUITests: [test]
     run:
       config: Debug
     test:
       config: Debug
-      targets: [VaultlyTests]
+      targets: [VaultlyTests, VaultlyUITests]
