@@ -43,9 +43,9 @@ final class EngineTests: XCTestCase {
     // MARK: Interest engine
 
     func testAnnuityPayment() {
-        // 30,000,000 @ 4.2% / 36 months ≈ 888,502
+        // 30,000,000 @ 4.2% / 36 months: 30M × 0.0035 / (1 − 1.0035⁻³⁶) ≈ 888,391
         let pay = InterestEngine.annuityPayment(principal: 30_000_000, annualRate: 0.042, months: 36)
-        XCTAssertEqual(pay.doubleValue, 888_502, accuracy: 5)
+        XCTAssertEqual(pay.doubleValue, 888_391, accuracy: 5)
         XCTAssertEqual(InterestEngine.annuityPayment(principal: 1200, annualRate: 0, months: 12), 100)
     }
 
