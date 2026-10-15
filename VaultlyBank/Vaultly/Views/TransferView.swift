@@ -56,7 +56,6 @@ struct TransferForm: View {
                 }
             }
             .navigationTitle("송금")
-            .toolbar { ToolbarItem(placement: .topBarLeading) { SimBadge() } }
             .onAppear {
                 if bank.isEmpty { bank = store.brand.bank }
                 if from == nil { from = presetFrom ?? store.checkingAccounts.first?.id }

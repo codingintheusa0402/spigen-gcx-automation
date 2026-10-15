@@ -17,7 +17,6 @@ struct InvestView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     if store.theme.style == .toss {
                         TossHeader(title: store.brand.broker, subtitle: AnyView(tickerInline)) {
-                            SimBadge()
                             Button { adding = true } label: { Image(systemName: "plus").font(.app(.title3)).foregroundStyle(.primary) }
                         }
                         HStack(spacing: 8) {
@@ -48,7 +47,6 @@ struct InvestView: View {
             .toolbar(store.theme.style == .toss ? .hidden : .visible, for: .navigationBar)
             .navigationDestination(for: Holding.self) { HoldingDetailView(holdingID: $0.id) }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { SimBadge() }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { adding = true } label: { Image(systemName: "plus") }
                 }

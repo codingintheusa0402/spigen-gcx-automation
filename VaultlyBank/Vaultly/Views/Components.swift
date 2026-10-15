@@ -1,17 +1,5 @@
 import SwiftUI
 
-/// Always-visible "simulation" marker (App Store Guideline 1.1.6 — no fake/trick functionality).
-struct SimBadge: View {
-    var body: some View {
-        Text("SIM")
-            .font(.app(size: 10, .bold))
-            .padding(.horizontal, 6).padding(.vertical, 3)
-            .background(Capsule().fill(Color.orange.opacity(0.9)))
-            .foregroundStyle(.white)
-            .accessibilityLabel("시뮬레이션 모드")
-    }
-}
-
 struct MoneyText: View {
     @EnvironmentObject var store: BankStore
     let amount: Decimal

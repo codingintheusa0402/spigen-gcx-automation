@@ -72,7 +72,6 @@ struct WealthView: View {
             }
             .navigationTitle("재력 설정")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { SimBadge() }
                 ToolbarItem(placement: .cancellationAction) { Button("취소") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("적용") {

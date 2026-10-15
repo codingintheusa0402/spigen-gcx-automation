@@ -139,6 +139,26 @@ final class EngineTests: XCTestCase {
         XCTAssertGreaterThan(a.count, 60)
     }
 
+    func testEverydayMerchantsStayRealisticForTycoon() {
+        // 재벌이어도 GS25·맥도날드 결제가 수백만 원이 될 수는 없다 — scaling은 .fixed / .capped 로 묶여 있어야 한다.
+        XCTAssertEqual(LifeEventSpec.Scaling.fixed.factor(90), 1)
+        XCTAssertEqual(LifeEventSpec.Scaling.capped(1.5).factor(90), 1.5)
+        XCTAssertEqual(LifeEventSpec.Scaling.capped(1.5).factor(0.18), 0.6, accuracy: 0.0001)   // 거지도 밥값은 반값 이하로 안 내려감
+        XCTAssertEqual(LifeEventSpec.Scaling.full.factor(90), 90)
+
+        var data = BankData.starter()
+        data.lifestyle = LifestyleState(tier: .tycoon, accountID: data.accounts[0].id, debtAccountID: nil,
+                                        tierStart: date(2026, 1, 1), lastProcessed: date(2026, 1, 1), seed: 7)
+        LifestyleEngine.process(now: date(2026, 4, 1), data: &data)
+        let everyday = ["GS25", "CU ", "세븐일레븐", "이마트24", "맥도날드", "스타벅스", "김밥천국", "맘스터치", "카카오T", "우버", "타다"]
+        let hits = data.transactions.filter { tx in everyday.contains { tx.counterparty.contains($0) } }
+        XCTAssertGreaterThan(hits.count, 20, "tycoon still buys coffee and takes taxis")
+        for tx in hits {
+            XCTAssertLessThanOrEqual(abs(tx.amount), 150_000, "\(tx.counterparty) \(tx.amount)")
+        }
+        XCTAssertFalse(data.transactions.contains { $0.counterparty == "모범택시" || $0.counterparty == "편의점" || $0.counterparty == "맥도날드" })
+    }
+
     func testSalaryRisesWithYears() {
         var data = BankData.starter()
         data.accounts[0].balance = 0

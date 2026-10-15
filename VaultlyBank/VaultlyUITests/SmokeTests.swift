@@ -35,8 +35,7 @@ final class SmokeTests: XCTestCase {
         let tabs = app.tabBars.firstMatch
         XCTAssertTrue(tabs.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["내 계좌"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.otherElements["시뮬레이션 모드"].exists || app.staticTexts["시뮬레이션 모드"].exists || app.staticTexts["SIM"].exists,
-                      "SIM badge must be visible on Home")
+        XCTAssertFalse(app.staticTexts["SIM"].exists, "SIM badge was removed on user request")
         snap("01-home")
 
         for (tab, expect) in [("증권", "내 투자"), ("상품", "금융 상품"), ("예약 알림", "예약 알림"), ("설정", "내 정보")] {

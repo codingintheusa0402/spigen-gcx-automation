@@ -41,6 +41,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kevinkim.vaultly.tests
+        GENERATE_INFOPLIST_FILE: YES
         DEVELOPMENT_TEAM: 6Z44CDGL2Q
   VaultlyUITests:
     type: bundle.ui-testing
@@ -51,6 +52,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kevinkim.vaultly.uitests
+        GENERATE_INFOPLIST_FILE: YES
         DEVELOPMENT_TEAM: 6Z44CDGL2Q
         TEST_TARGET_NAME: Vaultly
 schemes:

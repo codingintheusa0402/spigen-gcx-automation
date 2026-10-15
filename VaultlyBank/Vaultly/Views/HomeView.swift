@@ -14,7 +14,6 @@ struct HomeView: View {
                 VStack(spacing: 14) {
                     TossHeader(title: store.brand.bank, symbol: "building.columns.fill",
                                subtitle: AnyView(Image(systemName: "chevron.right").font(.app(.caption, .semibold)).foregroundStyle(.secondary))) {
-                        SimBadge()
                         Button { store.update { $0.hideBalances.toggle() } } label: {
                             Image(systemName: store.settings.hideBalances ? "eye.slash" : "eye").font(.app(.title3)).foregroundStyle(.primary)
                         }
@@ -116,7 +115,6 @@ struct HomeView: View {
             .navigationTitle(store.brand.bank)
             .navigationDestination(for: UUID.self) { AccountDetailView(accountID: $0) }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { SimBadge() }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { store.update { $0.hideBalances.toggle() } } label: {
                         Image(systemName: store.settings.hideBalances ? "eye.slash" : "eye")

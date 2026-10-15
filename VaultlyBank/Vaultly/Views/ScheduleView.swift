@@ -34,7 +34,6 @@ struct ScheduleView: View {
             }
             .navigationTitle("예약 알림")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { SimBadge() }
                 ToolbarItem(placement: .topBarTrailing) { Button { creating = true } label: { Image(systemName: "plus") } }
             }
             .sheet(isPresented: $creating) { EventEditor(event: nil) }

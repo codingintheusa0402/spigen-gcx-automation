@@ -26,7 +26,6 @@ struct ProductsView: View {
             .background(store.theme.background)
             .navigationTitle("금융 상품")
             .navigationDestination(for: UUID.self) { AccountDetailView(accountID: $0) }
-            .toolbar { ToolbarItem(placement: .topBarLeading) { SimBadge() } }
             .sheet(item: $opening) { ProductEditor(kind: $0) }
         }
     }

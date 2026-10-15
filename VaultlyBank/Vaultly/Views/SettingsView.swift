@@ -92,7 +92,6 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("설정")
-            .toolbar { ToolbarItem(placement: .topBarLeading) { SimBadge() } }
             .sheet(isPresented: $showWealth) { WealthView() }
             .sheet(isPresented: $editCash) { CashEditorSheet() }
             .confirmationDialog("모든 계좌·거래·예약을 삭제하고 처음 상태로 되돌릴까요?", isPresented: $confirmReset, titleVisibility: .visible) {

@@ -82,7 +82,7 @@ enum LifestyleEngine {
                 guard fires else { continue }
                 let cp = spec.counterparties[Int.random(in: 0..<spec.counterparties.count, using: &rng)]
                 let memo = spec.memos[Int.random(in: 0..<spec.memos.count, using: &rng)]
-                let amount = randomAmount(Decimal(spec.baseMin), Decimal(spec.baseMax), factor: scale * inflation, using: &rng)
+                let amount = randomAmount(Decimal(spec.baseMin), Decimal(spec.baseMax), factor: spec.scaling.factor(scale) * inflation, using: &rng)
                 emit(amount, hour: spec.hour, second: 10 + i, counterparty: cp, memo: memo, category: spec.category)
             }
 
