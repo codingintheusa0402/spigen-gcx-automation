@@ -322,6 +322,8 @@ function activate(id) {
   { const s = snap.sessions.find(x => x.owner === id); if (s) seen(s.sid); }
   for (const [k, t] of terms) t.el.classList.toggle('on', k === id);
   renderTabs(); markFocus();
+  const tab = document.querySelector(`#tabs .tab[data-id="${id}"]`);   // bring the tab into view in a long tab row
+  if (tab) tab.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
   requestAnimationFrame(() => { fitAll(); const t = terms.get(id); if (t) t.term.focus(); });
 }
 function markFocus() { for (const [k, t] of terms) t.el.classList.toggle('focus', k === activeTerm); }
