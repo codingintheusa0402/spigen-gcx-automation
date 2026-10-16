@@ -1,0 +1,23 @@
+// TEMPLATE (bi-weekly-builder §3): copy to ../../AaTransplant.js, set DST/SRC and the index lists, clasp push,
+// run aaTransplant (first function of AaTransplant.gs), then delete AaTransplant.js, touch Code.js, clasp push.
+// DST = Drive copy of the previous SENT deck (golden base). SRC = this period's Apple working copy.
+function aaTransplant() {
+  const DST = '<golden-base copy id>', SRC = '<apple working copy id>';
+  const dst = SlidesApp.openById(DST), src = SlidesApp.openById(SRC);
+  const S = src.getSlides(), D = dst.getSlides(), n = D.length;
+  // dst keeps: cover, index, dashboard, the Appendix (objectId apl_appendix) and the closing (last) — everything else
+  // (gauges, TOP-7, cards, SIREN tables, SIREN issue cards, bad-review backups) is replaced by this period's slides.
+  D.forEach(function(sl, i) { if (i > 2 && i < n - 1 && sl.getObjectId() !== 'apl_appendix') sl.remove(); });
+  // src order (Apple working copy): 0 cover,1 idx,2 dash,3 전제품,4-6 claim TOP3,7-9 TOP-7,10..k cards,
+  // then SIREN table slides, (its own appendix), bad-review TOP3 backups, closing.
+  const srcAppendix = S.findIndex(function(s) { return s.getObjectId() === 'apl_appendix'; });
+  let at = 3;
+  for (let i = 3; i < srcAppendix; i++) dst.insertSlide(at++, S[i]);   // 전제품 … SIREN tables
+  at++;                                                                 // skip dst Appendix
+  for (let i = srcAppendix + 1; i < S.length - 1; i++) dst.insertSlide(at++, S[i]);  // bad-review backups
+  const sc = S[2].getImages().filter(function(im) { return im.getTitle() === 'apl_chart'; })[0];
+  const dc = dst.getSlides()[2].getImages().filter(function(im) { return im.getTitle() === 'apl_chart'; })[0];
+  if (sc && dc) dc.replace(sc.getBlob());
+  dst.saveAndClose();
+  Logger.log('slides now ' + SlidesApp.openById(DST).getSlides().length);
+}

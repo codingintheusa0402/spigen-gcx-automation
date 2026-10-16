@@ -1,86 +1,104 @@
-import sys, os, json, re, time
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+"""SIREN issue cards (§7c): one Apple claim/review card per pick in siren_cards.json, inserted right after the last
+'5. GCX SIREN (26년 …)' table slide of the FINAL deck (report.json apple_deck). Idempotent per pick (card id = siren_card_<n>).
+siren_cards.json: {"picks": [{"deck": <SIREN deck id>, "slide": <slide objectId>, "type": "claim"|"review",
+  "sku": "ACS11561", "asin": "B0…", "reason": "카메라링 변형", "product": "Air Skin Aramid MagFit ㅣGlx. Z Fold 8",
+  "rating": "4.5점  Global Ratings: 427", "detail": "<optional shortened text>"}]}
+Source slide layout (siren-report decks): table cells 구분/국가/구매일/인입일/결함기간/링크 header row, then values, then 상세 내용."""
+import sys, os, json, re
+HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, os.path.join(HERE, '..'))
 from rate_pipeline import creds
 from googleapiclient.discovery import build
-s = build('slides', 'v1', credentials=creds()).presentations()
 from cfg import CFG
-N = CFG['apple_deck']; E = 12700
-SP = os.path.dirname(os.path.abspath(__file__)) + '/'
-SRC = json.load(open(SP + 'siren_src.json'))
-TPL = 'SLIDES_API1905798936_9485'
-TESLA = 'https://docs.google.com/presentation/d/1KSykjC0-9eEKYQWY3Vi1gY8LS4VJrEiUAMVlYrgSWJ8/edit'
-FOLD = 'https://docs.google.com/presentation/d/18URXgcRQoo0j4F_V3rCWVhmqOZ62CVfMqlOSWNJfDYA/edit'
-TESLA_NAME = '전면 카메라 보호 커버 (TO331) ㅣTesla Model Y'
-FOLD_NAME = 'Air Skin Aramid MagFit ㅣGlx. Z Fold 8'
-CARDS = [  # (source slide, type, sku, asin, reason, product, rating, siren deck)
-    ('g3bbe1be880a_0_24', 'claim', 'ACS11561', 'B0GMSKSKX8', '카메라링 변형', FOLD_NAME, '4.5점  Global Ratings: 427', FOLD),
-    ('g2e14a09965c_0_19', 'claim', 'ACS11561', 'B0GMSKSKX8', '카메라링 변형', FOLD_NAME, '4.5점  Global Ratings: 427', FOLD),
-    ('siren_slide_0035', 'claim', 'ACP12263', 'B0HC1H9BXW', '결로', TESLA_NAME, '2.5점 (DE)', TESLA),
-    ('siren_slide_0040', 'claim', 'ACP12263', 'B0HC1H9BXW', '결로', TESLA_NAME, '2.5점 (DE)', TESLA),
-    ('siren_slide_0056', 'review', 'ACP11231', 'B0G3YGP6QM', '결로', TESLA_NAME, '2.5점 (DE)', TESLA),
-]
-p = s.get(presentationId=N).execute()
-ids = [x['objectId'] for x in p['slides']]
+S = build('slides', 'v1', credentials=creds()).presentations()
+N = os.environ.get('BW_DECK') or CFG['apple_deck']; E = 12700
 T = lambda e: ''.join(x.get('textRun', {}).get('content', '') for x in e.get('shape', {}).get('text', {}).get('textElements', [])).strip()
-siren_ix = max(i for i, sl in enumerate(p['slides']) if any('GCX SIREN (26년' in T(e) for e in sl['pageElements']))
-tpl = next(x for x in p['slides'] if x['objectId'] == TPL)
-role = {}  # template element text -> id
-for e in tpl['pageElements']:
-    role[T(e) or e['objectId']] = e['objectId']
-# Amazon source icon from any review card (for the review card)
+picks = json.load(open(os.path.join(HERE, 'siren_cards.json')))['picks']
+
+def source(deck, sid):
+    sl = next(x for x in S.get(presentationId=deck).execute()['slides'] if x['objectId'] == sid)
+    cells, imgs, links = [], [], []
+    def w(es):
+        for e in es:
+            if 'elementGroup' in e: w(e['elementGroup']['children'])
+            if 'image' in e:
+                tr, sz = e['transform'], e['size']; W = sz['width']['magnitude'] * tr.get('scaleX', 1) / E; Hh = sz['height']['magnitude'] * tr.get('scaleY', 1) / E
+                if W > 60: imgs.append({'url': e['image']['contentUrl'], 'w': W, 'h': Hh})
+            for r in e.get('table', {}).get('tableRows', []):
+                for c in r['tableCells']:
+                    te = c.get('text', {}).get('textElements', [])
+                    links.extend(x['textRun']['style']['link'].get('url') for x in te if x.get('textRun', {}).get('style', {}).get('link'))
+                    t = ''.join(x.get('textRun', {}).get('content', '') for x in te).strip()
+                    if t: cells.append(t)
+    w(sl['pageElements'])
+    v = cells[6:12]   # country, purchase, inbound, period, ref
+    detail = re.sub(r'^\[[A-Z]{3}\d{5}\]\s*', '', cells[12]).replace('\n', ' ').strip()
+    return {'country': v[0], 'date': v[2].replace('-', '.'), 'ref': v[4], 'detail': detail, 'imgs': imgs, 'link': next((l for l in links if l), '')}
+
+p = S.get(presentationId=N).execute()
+ids = [x['objectId'] for x in p['slides']]
+tpl = next(sl for sl in p['slides'] if any(T(e) == 'SIREN 등록됨' for e in sl['pageElements']) and any(T(e) == '클레임 내용' for e in sl['pageElements'])
+           and not sl['objectId'].startswith('siren_card'))
+els = {T(e) or e['objectId']: e for e in tpl['pageElements']}
+role = lambda pred: next(e['objectId'] for e in tpl['pageElements'] if pred(T(e)))
+R = {'title': role(lambda t: t.endswith('Claims / Reviews')), 'detail': role(lambda t: len(t) > 25 and not t.endswith('Reviews') and 'ㅣ' not in t and 'Global' not in t),
+     'date': role(lambda t: re.fullmatch(r'\d{4}\.\d{2}\.\d{2}', t) is not None), 'product': role(lambda t: 'ㅣ' in t),
+     'rating': role(lambda t: 'Global Ratings' in t), 'sku': role(lambda t: re.fullmatch(r'A[A-Z]{2}\d{5}', t) is not None),
+     'asin': role(lambda t: re.fullmatch(r'B0[A-Z0-9]{8}', t) is not None), 'btn': role(lambda t: t.endswith('바로가기')),
+     'badge': role(lambda t: t == 'SIREN 등록됨'), 'head': role(lambda t: t in ('클레임 내용', '리뷰 내용')), 'src': role(lambda t: t.startswith('From '))}
+geo = lambda e: (e['transform'].get('translateX', 0) / E, e['transform'].get('translateY', 0) / E)
+cty = next(e for e in tpl['pageElements'] if re.fullmatch(r'[A-Z]{2}', T(e)))
+rsn = min([e for e in tpl['pageElements'] if T(e) and e is not cty and abs(geo(e)[1] - geo(cty)[1]) < 3 and geo(e)[0] > geo(cty)[0]], key=lambda e: geo(e)[0])
+R['country'], R['reason'] = cty['objectId'], rsn['objectId']
+# button text style from an existing review card ('배드리뷰 바로가기' fits there) and the template claim button
+btn_style = lambda txt: next((dict((k, v) for k, v in x['textRun']['style'].items() if k != 'link') for sl in p['slides'] if not sl['objectId'].startswith('siren_card')
+                              for e in sl['pageElements'] if T(e) == txt for x in e['shape']['text']['textElements'] if 'textRun' in x), None)
+photos = [e for e in tpl['pageElements'] if 'image' in e and e['size']['width']['magnitude'] * e['transform'].get('scaleX', 1) / E > 60]
+src_icon = next((e for e in tpl['pageElements'] if e.get('title') == 'apl_icon' and abs(geo(e)[1] - geo(next(x for x in tpl['pageElements'] if x['objectId'] == R['src']))[1]) < 10), None)
 amz_icon = None
 for sl in p['slides']:
-    els = sl['pageElements']
-    if any(T(e) == 'From Amazon' for e in els):
-        ic = [e for e in els if e.get('title') == 'apl_icon' and round(e['transform'].get('translateY', 0) / E) == 84]
-        if ic: amz_icon = ic[0]['image']['contentUrl']; break
-
-def settext(oid, new):
-    old = next(T(e) for e in tpl['pageElements'] if e['objectId'] == oid)
-    return [{'insertText': {'objectId': oid, 'insertionIndex': 0, 'text': new}},
-            {'deleteText': {'objectId': oid, 'textRange': {'type': 'FIXED_RANGE', 'startIndex': len(new), 'endIndex': len(new) + len(old)}}}]
-
-reqs = []
-for n, (sid, kind, sku, asin, reason, prod, rating, deck) in enumerate(CARDS):
-    c = SRC[sid]['cells']; v = dict(zip(c[:6], c[6:12]))
-    country = c[6]; date = (c[9] if '인입' in c[3] else c[9]).replace('-', '.')
-    ref = c[10]; detail = re.sub(r'^\[[A-Z]{3}\d{5}\]\s*', '', c[12]).replace('\n', ' ').strip()
+    if any(T(e) == 'From Amazon' for e in sl['pageElements']):
+        a = next((e for e in sl['pageElements'] if e.get('title') == 'apl_icon' and src_icon and abs(geo(e)[1] - geo(src_icon)[1]) < 3), None)
+        if a: amz_icon = a['image']['contentUrl']; break
+old = lambda oid: T(next(e for e in tpl['pageElements'] if e['objectId'] == oid))
+reqs, new_ids = [], []
+for n, pk in enumerate(picks):
     new = f'siren_card_{n}'
-    m = {o: f'{new}_{o[-5:]}' for o in [e['objectId'] for e in tpl['pageElements']]}
-    reqs.append({'duplicateObject': {'objectId': TPL, 'objectIds': {TPL: new, **m}}})
-    reqs.append({'updateSlidesPosition': {'slideObjectIds': [new], 'insertionIndex': siren_ix + 1 + n}})
-    R = lambda key: m[role[key]]
+    if new in ids: reqs.append({'deleteObject': {'objectId': new}})
+    sdat = source(pk['deck'], pk['slide']); new_ids.append(new)
+    m = {e['objectId']: f'{new}_{i}' for i, e in enumerate(tpl['pageElements'])}
+    reqs.append({'duplicateObject': {'objectId': tpl['objectId'], 'objectIds': {tpl['objectId']: new, **m}}})
     def st(key, val):
-        oid = role[key]; old = key
-        return [{'insertText': {'objectId': m[oid], 'insertionIndex': 0, 'text': val}},
-                {'deleteText': {'objectId': m[oid], 'textRange': {'type': 'FIXED_RANGE', 'startIndex': len(val), 'endIndex': len(val) + len(old)}}}]
-    tpl_detail = next(T(e) for e in tpl['pageElements'] if e['objectId'] == 'SLIDES_API1905798936_9529')
-    reqs += st('4. Galaxy Z8 Series Claims / Reviews', '5. GCX SIREN 신규 등록 이슈 사례')
-    reqs += st(tpl_detail, detail)
-    reqs += st('2026.10.06', date)
-    reqs += st('FR', country)
-    reqs += st('유격', reason)
-    reqs += st('B0GMSKSKX8', asin)
-    reqs += st('ACS11561', sku)
-    reqs += st('4.5점  Global Ratings: 427', rating)
-    reqs += st('Air Skin Aramid MagFit ㅣGlx. Z Fold 8', prod)
-    link = f'https://spigenhelp.zendesk.com/agent/tickets/{ref}' if kind == 'claim' else next(iter(SRC[sid]['links']))
-    btn = m[role['클레임 바로가기']]
-    if kind == 'review':
-        reqs += st('클레임 바로가기', '배드리뷰 바로가기') + st('클레임 내용', '리뷰 내용') + st('From Zendesk', 'From Amazon')
-    reqs.append({'updateTextStyle': {'objectId': btn, 'textRange': {'type': 'ALL'}, 'style': {'link': {'url': link}}, 'fields': 'link'}})
-    reqs.append({'updateTextStyle': {'objectId': m[role['SIREN 등록됨']], 'textRange': {'type': 'ALL'}, 'style': {'link': {'url': deck}}, 'fields': 'link'}})
-    if kind == 'review' and amz_icon:
-        reqs.append({'replaceImage': {'imageObjectId': m['SLIDES_API1905798936_9553'], 'url': amz_icon}})
-    # photos: fit inside the photo tile area (50,124)-(426,372)
-    reqs.append({'deleteObject': {'objectId': m['SLIDES_API1905798936_9538']}})
-    imgs = SRC[sid]['imgs']; AX, AY, AW, AH, G = 50, 124, 376, 248, 9
-    cw = (AW - G * (len(imgs) - 1)) / len(imgs)
+        o = R[key]; L = len(old(o))
+        return [{'insertText': {'objectId': m[o], 'insertionIndex': 0, 'text': val}},
+                {'deleteText': {'objectId': m[o], 'textRange': {'type': 'FIXED_RANGE', 'startIndex': len(val), 'endIndex': len(val) + L}}}]
+    review = pk['type'] == 'review'
+    for k, val in (('title', '5. GCX SIREN 신규 등록 이슈 사례'), ('detail', pk.get('detail') or sdat['detail']), ('date', sdat['date']),
+                   ('country', sdat['country']), ('reason', pk['reason']), ('asin', pk['asin']), ('sku', pk['sku']),
+                   ('rating', pk['rating']), ('product', pk['product'])):
+        reqs += st(k, val)
+    if review: reqs += st('btn', '배드리뷰 바로가기') + st('head', '리뷰 내용') + st('src', 'From Amazon')
+    link = sdat['link'] or (f"https://spigenhelp.zendesk.com/agent/tickets/{sdat['ref']}" if not review else '')
+    bs = btn_style('배드리뷰 바로가기' if review else '클레임 바로가기')
+    if bs: reqs.append({'updateTextStyle': {'objectId': m[R['btn']], 'textRange': {'type': 'ALL'}, 'style': bs, 'fields': ','.join(bs)}})
+    if link: reqs.append({'updateTextStyle': {'objectId': m[R['btn']], 'textRange': {'type': 'ALL'}, 'style': {'link': {'url': link}}, 'fields': 'link'}})
+    reqs.append({'updateTextStyle': {'objectId': m[R['btn']], 'textRange': {'type': 'ALL'}, 'style': {'underline': False,
+                 'foregroundColor': {'opaqueColor': {'rgbColor': {'red': 1, 'green': 1, 'blue': 1}}}}, 'fields': 'underline,foregroundColor'}})
+    reqs.append({'updateTextStyle': {'objectId': m[R['badge']], 'textRange': {'type': 'ALL'}, 'style': {'link': {'url': f"https://docs.google.com/presentation/d/{pk['deck']}/edit"}}, 'fields': 'link'}})
+    if review and amz_icon and src_icon: reqs.append({'replaceImage': {'imageObjectId': m[src_icon['objectId']], 'url': amz_icon}})
+    reqs += [{'deleteObject': {'objectId': m[ph['objectId']]}} for ph in photos]
+    AX, AY, AW, AH, G = 50, 124, 376, 248, 9; imgs = sdat['imgs'][:3]; cw = (AW - G * (len(imgs) - 1)) / max(1, len(imgs))
     for k, im in enumerate(imgs):
         sc = min(cw / im['w'], AH / im['h']); w, h = im['w'] * sc, im['h'] * sc
-        x = AX + k * (cw + G) + (cw - w) / 2; y = AY + (AH - h) / 2
         reqs.append({'createImage': {'objectId': f'{new}_ph{k}', 'url': im['url'], 'elementProperties': {'pageObjectId': new,
                      'size': {'width': {'magnitude': w * E, 'unit': 'EMU'}, 'height': {'magnitude': h * E, 'unit': 'EMU'}},
-                     'transform': {'scaleX': 1, 'scaleY': 1, 'translateX': x * E, 'translateY': y * E, 'unit': 'EMU'}}}})
-s.batchUpdate(presentationId=N, body={'requests': reqs}).execute()
-print('cards', len(CARDS), 'requests', len(reqs), 'after slide', siren_ix + 1)
+                     'transform': {'scaleX': 1, 'scaleY': 1, 'translateX': (AX + k * (cw + G) + (cw - w) / 2) * E, 'translateY': (AY + (AH - h) / 2) * E, 'unit': 'EMU'}}}})
+S.batchUpdate(presentationId=N, body={'requests': reqs}).execute()
+# position: move cards one by one (re-reading the order each time) to sit right after the last SIREN table slide
+for nid in new_ids:
+    sl = S.get(presentationId=N, fields='slides(objectId,pageElements(shape(text(textElements(textRun(content))))))').execute()['slides']
+    order = [x['objectId'] for x in sl]
+    last = max(i for i, x in enumerate(sl) if any('GCX SIREN (26년' in T(e) for e in x.get('pageElements', [])))
+    prev = [i for i, o in enumerate(order) if o in new_ids[:new_ids.index(nid)]]
+    at = (max(prev) if prev else last) + 1
+    S.batchUpdate(presentationId=N, body={'requests': [{'updateSlidesPosition': {'slideObjectIds': [nid], 'insertionIndex': at}}]}).execute()
+print('cards', len(new_ids), '— now run apple_type.py fix, align_icons.py, then render')

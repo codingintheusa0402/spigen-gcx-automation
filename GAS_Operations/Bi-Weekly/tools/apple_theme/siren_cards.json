@@ -1,0 +1,57 @@
+{
+ "_comment": "261016 example — replace per period (§7c)",
+ "picks": [
+  {
+   "deck": "18URXgcRQoo0j4F_V3rCWVhmqOZ62CVfMqlOSWNJfDYA",
+   "slide": "g3bbe1be880a_0_24",
+   "type": "claim",
+   "sku": "ACS11561",
+   "asin": "B0GMSKSKX8",
+   "reason": "카메라링 변형",
+   "product": "Air Skin Aramid MagFit ㅣGlx. Z Fold 8",
+   "rating": "4.5점  Global Ratings: 427"
+  },
+  {
+   "deck": "18URXgcRQoo0j4F_V3rCWVhmqOZ62CVfMqlOSWNJfDYA",
+   "slide": "g2e14a09965c_0_19",
+   "type": "claim",
+   "sku": "ACS11561",
+   "asin": "B0GMSKSKX8",
+   "reason": "카메라링 변형",
+   "product": "Air Skin Aramid MagFit ㅣGlx. Z Fold 8",
+   "rating": "4.5점  Global Ratings: 427",
+   "detail": "케이스 뒷면의 금속 카메라 보호 프레임이 본체에서 들뜨기 시작함. 낙하·충격 이력이 없어 제조상 결함으로 판단됨."
+  },
+  {
+   "deck": "1KSykjC0-9eEKYQWY3Vi1gY8LS4VJrEiUAMVlYrgSWJ8",
+   "slide": "siren_slide_0035",
+   "type": "claim",
+   "sku": "ACP12263",
+   "asin": "B0HC1H9BXW",
+   "reason": "결로",
+   "product": "전면 카메라 보호 커버 (TO331) ㅣTesla Model Y",
+   "rating": "2.5점 (DE)",
+   "detail": "부착 후 보호 글라스 안쪽에 습기·결로가 생겨 뿌옇게 됨. 외부 세척으로 해결되지 않아 카메라 기능 저하 우려 — 환불 또는 개선품 교체 문의."
+  },
+  {
+   "deck": "1KSykjC0-9eEKYQWY3Vi1gY8LS4VJrEiUAMVlYrgSWJ8",
+   "slide": "siren_slide_0040",
+   "type": "claim",
+   "sku": "ACP12263",
+   "asin": "B0HC1H9BXW",
+   "reason": "결로",
+   "product": "전면 카메라 보호 커버 (TO331) ㅣTesla Model Y",
+   "rating": "2.5점 (DE)"
+  },
+  {
+   "deck": "1KSykjC0-9eEKYQWY3Vi1gY8LS4VJrEiUAMVlYrgSWJ8",
+   "slide": "siren_slide_0056",
+   "type": "review",
+   "sku": "ACP11231",
+   "asin": "B0G3YGP6QM",
+   "reason": "결로",
+   "product": "전면 카메라 보호 커버 (TO331) ㅣTesla Model Y",
+   "rating": "2.5점 (DE)"
+  }
+ ]
+}
