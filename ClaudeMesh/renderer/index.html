@@ -20,7 +20,7 @@
     <button data-view="split" title="Mesh + terminals (⌘2)">Split</button>
     <button data-view="grid" title="All terminals tiled (⌘3)">Grid</button>
   </div>
-  <button id="pixelBtn" class="icon-btn" title="Pixel mode — lightweight retro look (⌘P)">▦ PIXEL</button>
+  <button id="simpleBtn" class="icon-btn" title="Simple mode — no animation or motion, best over Screen Sharing / VNC (⌘P)">Simple</button>
   <button id="schedBtn" class="icon-btn on" title="Schedules — when each job runs, on the Mac or the server">⏱</button>
   <button id="phoneBtn" class="icon-btn on" title="Use GCX Mesh on your iPhone">📱</button>
   <button id="bell" class="icon-btn on" title="Notify when a session finishes or errors">🔔</button>
@@ -43,6 +43,7 @@
   <main id="main">
     <section id="meshWrap">
       <canvas id="mesh"></canvas>
+      <div id="board"></div>
       <div id="meshHint">Click a session to control it · right-click for commands · click the mother bubble to broadcast · drag a session to change its orbit · pinch or scroll to zoom · double-click to reset</div>
       <div id="loading">Reading transcripts…</div>
     </section>
@@ -70,7 +71,6 @@
 <script src="mother.js"></script>
 <script src="bubbles.js"></script>
 <script src="organism.js"></script>
-<script src="pixel.js"></script>
 <script src="app.js"></script>
 <script src="commands.js"></script>
 <script src="history.js"></script>

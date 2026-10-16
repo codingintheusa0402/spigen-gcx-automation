@@ -44,7 +44,7 @@ window.api.onTelemetry(s => {
   snap = s;
   if (s.ready) $('#loading').style.display = 'none';
   viz.update(s);
-  renderHeader(); renderList(); renderToday(); renderPanel(); syncTermTitles(); notifyTransitions(); renderRail();
+  renderHeader(); renderList(); renderToday(); renderPanel(); syncTermTitles(); notifyTransitions(); renderRail(); renderBoard();
 });
 
 function renderHeader() {
@@ -71,6 +71,20 @@ function renderList() {
   for (const el of document.querySelectorAll('.srow')) el.onclick = () => select(el.dataset.sid);
 }
 
+// Simple-mode stand-in for the mesh: one static card per session; repainted only when its text changes
+let lastBoard = '';
+function renderBoard() {
+  if (!isSimple()) return;
+  const html = snap.sessions.map(s => `<div class="bcard ${s.sid === selected ? 'sel' : ''}" data-sid="${s.sid}">
+    <div class="n"><span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span></div>
+    <div class="m"><span style="color:${FAMILY_COLOR[s.family]}">${esc((s.model || '—').replace('claude-', ''))}</span><span>${fmt$(s.todayUsd)}</span><span>${s.health === 'working' ? 'working' : s.health}</span></div>
+  </div>`).join('') || '<div class="bempty">No live sessions.</div>';
+  if (html === lastBoard) return;
+  lastBoard = html; $('#board').innerHTML = html;
+}
+$('#board').addEventListener('click', e => { const c = e.target.closest('.bcard'); if (c) select(c.dataset.sid); });
+$('#board').addEventListener('contextmenu', e => { const c = e.target.closest('.bcard'); if (c) { e.preventDefault(); openCmdMenu(c.dataset.sid, e.clientX, e.clientY); } });
+
 function renderToday() {
   const tot = snap.todayUsd || 0;
   const burn = snap.models.reduce((a, m) => a + m.liveUsdHr, 0);
@@ -89,7 +103,7 @@ function select(sid) {
   $('#panel').classList.toggle('hidden', !sid);
   $('#panelBody').innerHTML = sid ? '<div id="pStatic"></div><div id="pCtl"></div>' : '';
   if (sid) { renderCtl(); renderPanel(); }
-  renderList();
+  renderList(); renderBoard();
   // an in-app session: bring its terminal tab to the front in the dock (Split / Grid views)
   const s = sid && snap.sessions.find(x => x.sid === sid);
   if (s && s.owner && terms.has(s.owner) && s.owner !== activeTerm && document.body.dataset.view !== 'mesh') activate(s.owner);
@@ -281,7 +295,7 @@ async function newTerm(opts) {
   el.innerHTML = `<div class="tlabel"><span class="hdot h-idle"></span><span class="ttl"></span></div><div class="xt"></div>`;
   $('#terms').appendChild(el);
   const term = new Terminal({ 
-    fontFamily: '"SF Mono", Menlo, monospace', fontSize: 12.5, lineHeight: 1.15, cursorBlink: true, allowProposedApi: true,
+    fontFamily: '"SF Mono", Menlo, monospace', fontSize: 12.5, lineHeight: 1.15, cursorBlink: !isSimple(), allowProposedApi: true,
     macOptionIsMeta: true, scrollback: 20000,
     theme: { background: '#06051a', foreground: '#e6e9f2', cursor: '#a78bfa', selectionBackground: '#3b4a7a88',
       black: '#1b1f2a', brightBlack: '#555e78', blue: '#7aa2f7', brightBlue: '#9ab8ff', magenta: '#bb9af7', cyan: '#2dd4bf', green: '#34d399', red: '#f87171', yellow: '#fbbf24' },
@@ -328,7 +342,7 @@ function activate(id) {
   for (const [k, t] of terms) t.el.classList.toggle('on', k === id);
   renderTabs(); markFocus();
   const tab = document.querySelector(`#tabs .tab[data-id="${id}"]`);   // bring the tab into view in a long tab row
-  if (tab) tab.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+  if (tab) tab.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: isSimple() ? 'auto' : 'smooth' });
   requestAnimationFrame(() => { fitAll(); const t = terms.get(id); if (t) t.term.focus(); });
 }
 function markFocus() { for (const [k, t] of terms) t.el.classList.toggle('focus', k === activeTerm); }
@@ -388,15 +402,19 @@ setView(store.get('view', 'split'));
 })();
 
 $('#newBtn').onclick = openNew;
-function setPixel(on) {
-  document.body.classList.toggle('pixel', on); store.set('pixel', on);
-  $('#pixelBtn').classList.toggle('on', on);
-  viz.setPixel(on);
-  for (const [, t] of terms) t.term.options.fontFamily = on ? 'Monaco, Menlo, monospace' : '"SF Mono", Menlo, monospace';
-  requestAnimationFrame(fitAll);
+// Simple mode: no canvas animation, glow or motion. The mesh becomes a static session board, so a
+// Screen Sharing / VNC client (e.g. from the iPhone) only receives pixels that actually changed.
+function isSimple() { return document.body.classList.contains('simple'); }
+function setSimple(on) {
+  document.body.classList.toggle('simple', on); store.set('simple', on);
+  $('#simpleBtn').classList.toggle('on', on);
+  viz.paused = on;
+  for (const [, t] of terms) t.term.options.cursorBlink = !on;
+  lastBoard = ''; renderBoard();
+  requestAnimationFrame(() => { viz.resize(); fitAll(); });
 }
-$('#pixelBtn').onclick = () => { setPixel(!document.body.classList.contains('pixel')); toast(document.body.classList.contains('pixel') ? 'Pixel mode on — lightweight' : 'Pixel mode off'); };
-setPixel(store.get('pixel', false));
+$('#simpleBtn').onclick = () => { setSimple(!isSimple()); toast(isSimple() ? 'Simple mode on: no animation' : 'Simple mode off'); };
+setSimple(store.get('simple', false));
 $('#bell').classList.toggle('on', bell);
 $('#bell').onclick = () => { bell = !bell; store.set('bell', bell); $('#bell').classList.toggle('on', bell); toast(bell ? 'Notifications on' : 'Notifications off'); };
 addEventListener('keydown', e => {
@@ -406,7 +424,7 @@ addEventListener('keydown', e => {
   else if (e.key === '3') { e.preventDefault(); setView('grid'); }
   else if (e.key === 't') { e.preventDefault(); openNew(); }
   else if (e.key === 'b') { e.preventDefault(); openBroadcast(); }
-  else if (e.key === 'p') { e.preventDefault(); $('#pixelBtn').click(); }
+  else if (e.key === 'p') { e.preventDefault(); $('#simpleBtn').click(); }
   else if (/^[4-9]$/.test(e.key)) { const id = [...terms.keys()][+e.key - 4]; if (id) { e.preventDefault(); activate(id); } }
 });
 

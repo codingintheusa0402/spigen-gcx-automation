@@ -178,38 +178,6 @@ textarea, input, select { background: rgba(8,6,30,.6); border-color: var(--line2
 .dropping { outline: 2px dashed rgba(124,196,255,.8); outline-offset: -4px; box-shadow: inset 0 0 40px rgba(124,196,255,.18); }
 
 /* ---- Pixel mode: flat retro skin, no blur/glow/gradients (cheap to paint) ---- */
-body.pixel { --mono: Monaco, Menlo, monospace; background: #0b0f2a; font: 12px/1.45 Monaco, Menlo, "Apple SD Gothic Neo", monospace; -webkit-font-smoothing: none; }
-body.pixel *, body.pixel *::before { border-radius: 0 !important; backdrop-filter: none !important; transition: none !important; }
-body.pixel #top, body.pixel #side, body.pixel #panel { background: #10153a; border-color: #29adff; border-width: 0 0 2px 0; }
-body.pixel #side { border-width: 0 2px 0 0; } body.pixel #panel { border-width: 0 0 0 2px; }
-body.pixel .brand { letter-spacing: .25em; font-weight: 700; }
-body.pixel .logo { background: #29adff; box-shadow: 2px 2px 0 #fff1e8; width: 12px; height: 12px; }
-body.pixel button { background: #1d2b53; border: 2px solid #fff1e8; box-shadow: 3px 3px 0 #05061a; text-transform: uppercase; font-size: 11px; letter-spacing: .06em; }
-body.pixel button:hover { background: #29466f; box-shadow: 3px 3px 0 #05061a; }
-body.pixel button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #05061a; }
-body.pixel button.primary { background: #ff004d; color: #fff1e8; border-color: #fff1e8; }
-body.pixel .icon-btn.on { background: #ffec27; color: #05061a; opacity: 1; }
-body.pixel .seg { border: 2px solid #fff1e8; background: #1d2b53; box-shadow: 3px 3px 0 #05061a; }
-body.pixel .seg button { border: 0; box-shadow: none; }
-body.pixel .seg button.on { background: #29adff; color: #05061a; box-shadow: none; }
-body.pixel .mchip, body.pixel .hpill { background: #1d2b53; border: 2px solid #5f6aa8; box-shadow: 2px 2px 0 #05061a; }
-body.pixel .mchip .dot, body.pixel .hdot { border-width: 2px; box-shadow: none !important; }
-body.pixel .h-working { background: #00e436 !important; border-color: #00e436; }
-body.pixel .h-error { background: #ff004d !important; border-color: #ff004d; }
-body.pixel .h-waiting, body.pixel .h-quiet { background: #ffec27 !important; border-color: #ffec27; }
-body.pixel .side-h, body.pixel .sec h3 { color: #ffec27; letter-spacing: .15em; font-weight: 700; }
-body.pixel .srow.sel { background: #29466f; border: 2px solid #fff1e8; box-shadow: none; }
-body.pixel .srow:hover { background: #1d2b53; }
-body.pixel .kpi { background: #1d2b53; border: 2px solid #5f6aa8; }
-body.pixel .bar { background: #1d2b53; height: 6px; } body.pixel .bar > div { box-shadow: none; }
-body.pixel .today .big { font-weight: 700; font-size: 24px; color: #ffec27; }
-body.pixel #dock { background: #070a20; } body.pixel #dockHandle { background: #29adff; height: 4px; }
-body.pixel .tab.on { background: #1d2b53; border: 2px solid #29adff; border-bottom: 0; }
-body.pixel .card { background: #10153a; border: 3px solid #fff1e8; box-shadow: 6px 6px 0 #05061a; }
-body.pixel textarea, body.pixel input, body.pixel select { background: #070a20; border: 2px solid #5f6aa8; }
-body.pixel #meshHint { color: #5f6aa8; letter-spacing: .1em; }
-body.pixel #toast { background: #ffec27; color: #05061a; border: 2px solid #05061a; box-shadow: 3px 3px 0 #05061a; }
-body.pixel .log div { border-left-width: 3px; }
 body:not(.pixel) #meshText { display: none; }
 
 #top button, #top .hpill, #top .mchip { white-space: nowrap; flex: none; }
@@ -239,8 +207,6 @@ body:not(.pixel) #meshText { display: none; }
 .cmd-ac div b { font-family: var(--mono); } .cmd-ac div span { color: var(--dim); }
 .cmd-ac div.on { background: rgba(110,130,255,.22); }
 button.danger-solid { background: #c0344b !important; border-color: #ff8a9a !important; color: #fff !important; }
-body.pixel #cmdMenu, body.pixel .cmd-ac { background: #10153a; border: 3px solid #fff1e8; box-shadow: 6px 6px 0 #05061a; backdrop-filter: none; }
-body.pixel #cmdMenu .cm-i.on, body.pixel .cmd-ac div.on { background: #29466f; }
 
 /* controls first: header → Control/Commands → stats/log */
 #panelBody { display: flex; flex-direction: column; }
@@ -281,16 +247,13 @@ body.pixel #cmdMenu .cm-i.on, body.pixel .cmd-ac div.on { background: #29466f; }
 .ast-stopped, .ast-done, .ast-completed { border-color: var(--faint) !important; }
 .card pre.logs { max-height: 50vh; overflow: auto; font-size: 11px; background: rgba(0,0,0,.3); padding: 10px; border-radius: 10px; white-space: pre-wrap; }
 .card textarea { width: 100%; min-height: 70px; }
-body.pixel .hrow, body.pixel .arow { border-radius: 0; }
-body.pixel .hrow:hover, body.pixel .arow:hover { background: #1d2b53; }
 
 /* perf: the header, sidebars, buttons and chips never sit over the animated canvas, so their
    frosted-glass blur was invisible but cost ~10% CPU (re-blurred every frame). Only floating
    cards/menus that overlap the mesh keep backdrop-filter. */
 
 /* header logo = the app icon */
-.logo, body.pixel .logo { width: 22px; height: 22px; background: none; box-shadow: none; border-radius: 5px; filter: drop-shadow(0 0 2px rgba(140,170,255,.15));   /* outer glow at 1/3 */ }
-body.pixel .logo { image-rendering: pixelated; border-radius: 0; filter: none; }
+.logo { width: 22px; height: 22px; background: none; box-shadow: none; border-radius: 5px; filter: drop-shadow(0 0 2px rgba(140,170,255,.15));   /* outer glow at 1/3 */ }
 
 /* iPhone pairing */
 .ph-qrs { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
@@ -312,7 +275,6 @@ body.pixel .logo { image-rendering: pixelated; border-radius: 0; filter: none; }
 #holdCard .hd-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
 #holdCard .hd-chip { padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line2); background: rgba(60,56,150,.3); font-size: 11.5px; }
 #holdCard .hd-chip.skill { border-color: rgba(125,255,196,.4); color: #c8ffe6; } #holdCard .hd-chip i { font-style: normal; color: var(--dim); margin-left: 5px; }
-body.pixel #holdCard { border-radius: 0; background: #10153a; border: 3px solid #fff1e8; box-shadow: 6px 6px 0 #05061a; }
 #holdCard .hd-what .hd-md { max-height: 260px; overflow-y: auto; padding-right: 6px; }
 #holdCard ::-webkit-scrollbar, #holdCard::-webkit-scrollbar { width: 6px; height: 6px; background: transparent; }
 #holdCard ::-webkit-scrollbar-thumb, #holdCard::-webkit-scrollbar-thumb { background: rgba(160,175,255,.25); border-radius: 3px; }
@@ -345,7 +307,6 @@ body.pixel #holdCard { border-radius: 0; background: #10153a; border: 3px solid 
 .sc-times button, .sc-days button { padding: 3px 10px; font-size: 12px; } .sc-days button.on { background: rgba(125,196,255,.35); border-color: #7cc4ff; }
 .sc-edit-b { display: flex; gap: 8px; align-items: center; } .sc-dim { color: var(--faint); font-size: 11.5px; }
 .sc-cloud { font-size: 12.5px; color: var(--dim); padding: 6px 2px; line-height: 1.5; } .sc-cloud b { color: var(--text); }
-body.pixel .sc-row, body.pixel .sc-edit { border-radius: 0; }
 
 .sc-gas-h { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin: 4px 0 8px; }
 .sc-trig { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0; font-size: 11.5px; }
@@ -509,3 +470,16 @@ body[data-size="mini"] #rail { display: flex; flex: none; gap: 6px; padding: 6px
 /* a pill that doesn't fit drops out whole (wraps to a hidden 2nd line) instead of being sliced */
 #top > .models, #top > .health { flex-wrap: wrap; align-items: center; align-content: flex-start; }
 #top > .models { height: 29px; } #top > .health { height: 25px; }   /* exactly one row of pills */
+
+/* Simple mode: static board instead of the animated mesh; no motion, glow, blur or shadow anywhere */
+#board { display: none; }
+body.simple #mesh, body.simple #meshHint { display: none; }
+body.simple #board { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); align-content: start; gap: 8px; padding: 12px; position: absolute; inset: 0; overflow-y: auto; }
+body.simple .bcard { padding: 10px 12px; border: 1px solid var(--line2); border-radius: 6px; cursor: pointer; background: #000; }
+body.simple .bcard:hover { background: #111; }
+body.simple .bcard.sel { border-color: var(--star); }
+body.simple .bcard .n { display: flex; align-items: center; gap: 7px; font-weight: 500; white-space: nowrap; overflow: hidden; }
+body.simple .bcard .n .t { overflow: hidden; text-overflow: ellipsis; }
+body.simple .bcard .m { display: flex; gap: 8px; color: var(--dim); font-size: 11.5px; margin-top: 4px; padding-left: 15px; }
+body.simple .bempty { color: var(--dim); padding: 8px; }
+body.simple *, body.simple *::before, body.simple *::after { animation: none !important; transition: none !important; box-shadow: none !important; text-shadow: none !important; backdrop-filter: none !important; filter: none !important; scroll-behavior: auto !important; }

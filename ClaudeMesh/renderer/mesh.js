@@ -97,7 +97,7 @@ class Mesh {
 
   // ambient medium: motes drift, wrap back in from the edges, and part around the cursor
   simAmbient(dt, cspd) {
-    const cur = this.cursor, v = this.view(), target = Math.round((this.pixel ? 24 : 40) * Math.min(2.2, 1 / (this.cam.s * this.cam.s)) ** .5);
+    const cur = this.cursor, v = this.view(), target = Math.round(40 * Math.min(2.2, 1 / (this.cam.s * this.cam.s)) ** .5);
     while (this.ambient.length < target) this.ambient.push(this.newAmbient(false));
     if (this.ambient.length > target) this.ambient.length = target;
     for (const m of this.ambient) {
@@ -174,7 +174,6 @@ class Mesh {
   }
 
   resize() {
-    if (this.pixel) return this.resizePixel();
     const r = this.c.getBoundingClientRect(), d = devicePixelRatio || 1;
     this.w = r.width; this.h = r.height;
     this.c.width = Math.max(1, r.width * d); this.c.height = Math.max(1, r.height * d);
@@ -226,14 +225,13 @@ class Mesh {
   // Frame governor: 60 fps while you interact (pointer, drag, zoom, pan), 30 otherwise;
   // nothing at all while the window is hidden/minimised or the mesh is off-screen (Grid view).
   frame(now) {
-    if (document.hidden || this.offscreen || document.body.dataset.view === 'grid' || !this.w) {
+    if (document.hidden || this.offscreen || this.paused || document.body.dataset.view === 'grid' || !this.w) {
       this.last = this.lastPx = 0; setTimeout(() => requestAnimationFrame(t => this.frame(t)), 250); return;
     }
     const c = this.cam, busy = now - (this.lastInput || 0) < 2500 || this.drag || this.pan || Math.abs(c.s - c.ts) > .002 || Math.abs(c.tx - c.ttx) > .5;
     const fps = busy ? 60 : 30;
     if (now - (this.lastDraw || 0) < 1000 / fps - 3) { requestAnimationFrame(t => this.frame(t)); return; }
     this.lastDraw = now;
-    if (this.pixel) { this.framePixel(now); requestAnimationFrame(t => this.frame(t)); return; }
     const realDt = Math.min(.1, (now - (this.last || now)) / 1000); this.last = now;
     const dt = realDt; this.time += dt; this.stepCam(realDt);
     const ctx = this.ctx, W = this.w, H = this.h, cur = this.cursor;
