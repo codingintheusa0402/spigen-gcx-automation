@@ -1,16 +1,17 @@
 {
-  "title": "Amazon ASIN Rating Scraper input",
+  "title": "Amazon ASIN Rating & Review Count Scraper",
   "type": "object",
   "schemaVersion": 1,
   "properties": {
     "asins": {
-      "title": "ASINs",
+      "title": "ASINs or product URLs",
       "type": "array",
       "editor": "stringList",
-      "description": "Amazon ASINs (10 chars) or product URLs. A product URL (e.g. https://www.amazon.co.jp/dp/B0...) is scraped on its own marketplace, so one run can mix marketplaces; bare ASINs use the Marketplace field below.",
+      "description": "One per line, or paste a whole spreadsheet column. Accepts bare ASINs (<code>B0G7RYP439</code>) or product links (<code>https://www.amazon.de/dp/B0GDHRZFWH</code>). A link is scraped on its own marketplace, so one run can mix countries. Duplicates and non-ASIN cells are skipped automatically.",
       "prefill": [
         "B0G7RYP439",
-        "B0G7QZ7RMD"
+        "B0G7QZ7RMD",
+        "https://www.amazon.de/dp/B0GDHRZFWH"
       ],
       "default": [
         "B0G7RYP439",
@@ -18,7 +19,7 @@
       ]
     },
     "marketplace": {
-      "title": "Marketplace",
+      "title": "Marketplace for bare ASINs",
       "type": "string",
       "editor": "select",
       "default": "com",
@@ -43,15 +44,38 @@
         "com.br",
         "com.tr"
       ],
-      "description": "Amazon domain suffix (amazon.<marketplace>) for bare ASINs. Product URLs keep their own domain."
+      "description": "Which Amazon store to use for bare ASINs. Product links always use their own store.",
+      "enumTitles": [
+        "🇺🇸 amazon.com",
+        "🇬🇧 amazon.co.uk",
+        "🇩🇪 amazon.de",
+        "🇫🇷 amazon.fr",
+        "🇮🇹 amazon.it",
+        "🇪🇸 amazon.es",
+        "🇯🇵 amazon.co.jp",
+        "🇮🇳 amazon.in",
+        "🇨🇦 amazon.ca",
+        "🇦🇺 amazon.com.au",
+        "🇲🇽 amazon.com.mx",
+        "🇳🇱 amazon.nl",
+        "🇸🇪 amazon.se",
+        "🇵🇱 amazon.pl",
+        "🇦🇪 amazon.ae",
+        "🇸🇦 amazon.sa",
+        "🇸🇬 amazon.sg",
+        "🇧🇷 amazon.com.br",
+        "🇹🇷 amazon.com.tr"
+      ]
     },
     "maxConcurrency": {
-      "title": "Max concurrency",
+      "title": "Parallel sessions",
       "type": "integer",
       "default": 40,
       "minimum": 1,
       "maximum": 50,
-      "description": "Parallel browser-like sessions (each with its own IP and cookies). Automatically capped to what the run memory supports (~1 session per 12 MB: 512 MB → 42, 1 GB → 50). The actor backs off on its own if Amazon starts blocking."
+      "description": "How many products are fetched at once (each with its own IP and cookies). Default 40. It is capped automatically to fit the run memory and slows down by itself if Amazon pushes back.",
+      "sectionCaption": "Advanced settings",
+      "sectionDescription": "The defaults work for almost everyone."
     },
     "proxyConfiguration": {
       "title": "Proxy",
@@ -63,16 +87,17 @@
       "default": {
         "useApifyProxy": true
       },
-      "description": "Default: Apify datacenter proxy, automatically escalating to residential for ASINs that get blocked. Pick a proxy group to force it for every request."
+      "description": "Default: fast Apify datacenter proxies, switching to residential only for products that keep getting blocked. Change this only if you want to force a proxy group or use your own proxies."
     },
     "debugHtml": {
-      "title": "Save HTML (debug)",
+      "title": "Save raw pages (debug)",
       "type": "boolean",
       "default": false,
-      "description": "Store fetched pages in the key-value store for troubleshooting."
+      "description": "Store each fetched page in the run's key-value store so you can inspect what Amazon returned. Leave off for normal use."
     }
   },
   "required": [
     "asins"
-  ]
+  ],
+  "description": "Paste ASINs or Amazon product links and click Start. Each product returns its star rating, total ratings count, title and link. Results are in the Output tab (Excel, CSV, JSON)."
 }

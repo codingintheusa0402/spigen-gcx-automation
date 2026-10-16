@@ -3,26 +3,118 @@
   "fields": {
     "type": "object",
     "properties": {
-      "asin": {"type": "string"},
-      "found": {"type": ["boolean", "null"]},
-      "url": {"type": ["string", "null"]},
-      "title": {"type": ["string", "null"]},
-      "rating": {"type": ["number", "null"]},
-      "ratingsCount": {"type": ["integer", "null"]},
-      "marketplace": {"type": "string"},
-      "scrapedAt": {"type": ["string", "null"]},
-      "error": {"type": ["string", "null"]}
+      "asin": {
+        "type": "string",
+        "description": "Amazon ASIN"
+      },
+      "found": {
+        "type": [
+          "boolean",
+          "null"
+        ],
+        "description": "true = product page found; false = not sold on this marketplace; null = blocked after all retries"
+      },
+      "url": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Product page link"
+      },
+      "title": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Product title as shown on Amazon"
+      },
+      "rating": {
+        "type": [
+          "number",
+          "null"
+        ],
+        "description": "Average star rating out of 5 (null if no ratings yet)"
+      },
+      "ratingsCount": {
+        "type": [
+          "integer",
+          "null"
+        ],
+        "description": "Total number of global ratings"
+      },
+      "marketplace": {
+        "type": "string",
+        "description": "Amazon store the data came from"
+      },
+      "scrapedAt": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Scrape time (UTC, ISO 8601)"
+      },
+      "error": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Why the product could not be scraped (only when found is null)"
+      }
     }
   },
   "views": {
     "overview": {
-      "title": "Overview",
-      "transformation": {"fields": ["asin", "title", "rating", "ratingsCount", "marketplace", "found", "url", "scrapedAt", "error"]},
-      "display": {"component": "table", "properties": {
-        "url": {"label": "Link", "format": "link"},
-        "rating": {"label": "Rating", "format": "number"},
-        "ratingsCount": {"label": "Ratings", "format": "number"}
-      }}
+      "title": "Ratings overview",
+      "transformation": {
+        "fields": [
+          "asin",
+          "title",
+          "rating",
+          "ratingsCount",
+          "marketplace",
+          "url",
+          "found",
+          "scrapedAt",
+          "error"
+        ]
+      },
+      "display": {
+        "component": "table",
+        "properties": {
+          "url": {
+            "label": "Link",
+            "format": "link"
+          },
+          "rating": {
+            "label": "Rating",
+            "format": "number"
+          },
+          "ratingsCount": {
+            "label": "Ratings",
+            "format": "number"
+          },
+          "asin": {
+            "label": "ASIN"
+          },
+          "title": {
+            "label": "Product"
+          },
+          "marketplace": {
+            "label": "Marketplace"
+          },
+          "found": {
+            "label": "Found",
+            "format": "boolean"
+          },
+          "scrapedAt": {
+            "label": "Scraped at",
+            "format": "date"
+          },
+          "error": {
+            "label": "Error"
+          }
+        }
+      }
     }
   }
 }

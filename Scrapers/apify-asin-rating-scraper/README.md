@@ -47,7 +47,7 @@ Duplicates are removed automatically, and anything that isn't an ASIN or Amazon 
     "B0G7RYP439",
     "B0G7QZ7RMD",
     "https://www.amazon.de/dp/B0GDHRZFWH",
-    "https://www.amazon.co.jp/dp/B0FD1YH78G"
+    "https://www.amazon.co.uk/dp/B0H2BX5FF2"
   ],
   "marketplace": "com"
 }
@@ -178,4 +178,4 @@ Memory: 512 MB (default) handles any list size. More memory doesn't make it fast
 
 ## 💬 Feedback & support
 
-Missing a field, marketplace or integration? Open an issue on the **Issues** tab. Requests are usually answered within a day. If the actor saves you time, a ⭐ review helps other people find it.
+Missing a field, marketplace or integration? Open an issue on the **Issues** tab. If the actor saves you time, a ⭐ review helps other people find it.
