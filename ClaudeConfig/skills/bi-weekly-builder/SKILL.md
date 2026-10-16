@@ -204,6 +204,18 @@ dashboard, Appendix and closing exactly (hand-made design). Then:
 4. Delete the temp GAS file; `clasp push` (touch Code.js first — clasp says "already up to date" after a pure delete
    and leaves the remote file). Render and compare with the golden deck slide by slide.
 
+## 7c. SIREN issue cards (user rule 2026-10-16 — always)
+For every SIREN registered in this period (26년 SIREN rows with 날짜 inside the date range), open its SIREN deck
+(C-column chip link) and pick **2–3 claim/review slides that show defect photos** (prefer 인입일 inside the period).
+Add one Apple card per pick right after the SIREN table slides, title `5. GCX SIREN 신규 등록 이슈 사례`:
+duplicate an Apple claim card that has the red SIREN capsule, replace texts by insert-then-delete (keeps style),
+date = 인입일 (not 결함 발생 기간), detail without the `[SKU]` prefix (shorten to ≤ ~4 lines), country/인입사유/ASIN/SKU
+from the deck's 개요 slide, rating = the deck's Global 리뷰 평점, button link = Zendesk ticket or Amazon review URL
+(review → 리뷰 내용 / From Amazon / 배드리뷰 바로가기 + Amazon icon, copy the button text style from an existing
+review card), SIREN capsule link = the SIREN deck; photos via createImage from the source slide contentUrl, fit-scaled
+side by side in the photo tile (50,124)-(426,372). Then `apple_type.py fix`, `align_icons.py`, render.
+Index 05 list gets `2026 GCX 신규 SIREN 이슈 사례`. 261016 example: Z Fold 8 카메라링 변형 ×2, Tesla TO331 결로 ×3.
+
 ## 8b. Sharing + naming (user rules 2026-10-16 — always)
 - Every deck created → Drive permission `anyone`/`writer` (link-only).
 - Every deck's **bound Apps Script project is renamed to exactly the deck's name** (Slides → Extensions → Apps Script →
