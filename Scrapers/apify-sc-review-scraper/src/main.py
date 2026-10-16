@@ -505,7 +505,7 @@ async def main() -> None:
         markets = [m.upper() for m in (inp.get('marketplaces') or ['US'])]
         unknown = [m for m in markets if m not in MARKETS]
         if unknown:
-            await Actor.fail(status_message=f'Unknown marketplace(s): {unknown}. Use {list(MARKETS)}')
+            await Actor.exit(status_message=f'⚠️ Unknown marketplace(s): {unknown}. Use {list(MARKETS)}')
             return
         by_region: dict[str, list[str]] = {}
         for m in (EU_ORDER + [x for x in MARKETS if x not in EU_ORDER]):
@@ -518,7 +518,7 @@ async def main() -> None:
             try:
                 parsed = parse_session(raw, REGIONS[region]['host'])
             except Exception as e:
-                await Actor.fail(status_message=f'{region} session could not be read ({e}). Paste the Cookie-Editor JSON export or the Cookie header.')
+                await Actor.exit(status_message=f'⚠️ {region} session could not be read ({e}). Paste the Cookie-Editor JSON export or the Cookie header.')
                 return
             if not parsed:
                 missing.append(region)
@@ -572,7 +572,9 @@ async def main() -> None:
         bad = {m: h['status'] for m, h in health.items() if h['status'] != 'OK'}
         Actor.log.info(f'Session health: {health}')
         if bad and len(bad) == len(markets):
-            await Actor.fail(status_message=f'No marketplace scraped: {bad}. Refresh your sessions and run again.')
+            # User-side problem (expired/missing session) — report clearly, don't count as an actor failure.
+            await Actor.exit(status_message=f'⚠️ No marketplace scraped: {bad}. Refresh your sessions and run again '
+                                            f'(details: key-value store record SESSION_HEALTH).')
             return
         msg = f'{report["reviews"]} reviews' + (f' · needs attention: {bad}' if bad else ' · all sessions healthy')
         await Actor.exit(status_message=msg)
