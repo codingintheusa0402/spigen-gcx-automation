@@ -10,7 +10,7 @@ import spigen_images as SI
 
 E = 12700
 F = "-apple-system,BlinkMacSystemFont,'SF Pro Text','Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',Arial,sans-serif"
-INK, GRAY, GRAY2, BLUE, LINK, RED, CANVAS, HAIR = '#1D1D1F', '#6E6E73', '#86868B', '#0071E3', '#0066CC', '#FF3B30', '#F5F5F7', '#E5E5EA'
+INK, GRAY, GRAY2, BLUE, LINK, RED, CANVAS, HAIR = '#1D1D1F', '#6E6E73', '#86868B', '#0071E3', '#0066CC', '#FF3B30', '#F5F5F7', '#EEE'
 RING = ['#0071E3', '#64D2FF', '#5E5CE6', '#D2D2D7']
 DECK = CFG['apple_deck']; DECK_URL = f'https://docs.google.com/presentation/d/{DECK}/edit?usp=sharing'
 
@@ -112,13 +112,14 @@ def gauges(sl):
             L, V = [l for l, _ in pairs], [v for _, v in pairs]
             vals = [int(v) for v in V if v.strip().isdigit()]; tot = sum(vals) or 1
             bar = ''.join(f'<td style="background:{RING[j % 4]};height:6px;width:{max(1, round(v / tot * 100))}%"></td>' for j, v in enumerate(vals) if v)
-            rows = ''.join(f'<tr><td style="font:400 11px {F};color:{INK};padding:2px 0;{NW}max-width:132px;overflow:hidden;text-overflow:ellipsis"><span style="display:inline-block;width:7px;height:7px;border-radius:4px;background:{RING[j % 4]};margin-right:5px"></span>{esc(l)}</td>'
-                           f'<td align="right" style="font:400 11px {F};color:{GRAY};padding:2px 0 2px 6px;{NW}">{v}</td></tr>' for j, (l, v) in enumerate(zip(L, V)))
+            cut = lambda t: t if len(t) <= 24 else t[:23].rstrip() + '…'
+            rows = ''.join(f'<tr><td style="font:400 11px {F};color:{INK};padding:2px 0"><span style="display:inline-block;width:7px;height:7px;border-radius:4px;background:{RING[j % 4]};margin-right:5px"></span>{esc(cut(l))}</td>'
+                           f'<td align="right" style="font:400 11px {F};color:{GRAY};padding:2px 0 2px 6px">{v}</td></tr>' for j, (l, v) in enumerate(zip(L, V)))
             cells += (f'<td width="33%" valign="top" style="padding:0 {8 if i < 2 else 0}px 0 0"><div style="background:{CANVAS};border-radius:14px;padding:14px 14px 10px">'
                       f'<div style="font:600 10px {F};color:{GRAY2}">{i + 1}</div><div style="font:700 20px {F};color:{INK};line-height:1.2;{NW}">{esc(txt(c))}</div>'
-                      f'<div style="font:400 11px {F};color:{GRAY};margin:2px 0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{esc(name)}</div>'
+                      f'<div style="font:400 11px {F};color:{GRAY};margin:2px 0 8px;{NW}">{esc(cut(name))}</div>'
                       f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-radius:3px;overflow:hidden;margin-bottom:8px"><tr>{bar}</tr></table>'
-                      f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0">{rows}</table></div></td>')
+                      f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="white-space:nowrap">{rows}</table></div></td>')
         out += lab(sec, kind) + f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:14px"><tr>{cells}</tr></table>'
     return tile(out, '22px 24px 8px')
 
@@ -134,14 +135,14 @@ def top7(sl):
     for r in range(1, tb['rows']):
         name = cell(r, 1).split('\n'); sku, asin = cell(r, 2), cell(r, 3); rate = cell(r, 7)
         img = SI.resolve(cat, sku, name[0])
-        pic = f'<img src="{img}" width="30" height="30" style="display:block;width:30px;height:30px;object-fit:contain;border-radius:8px;background:{CANVAS}">' if img else f'<div style="width:30px;height:30px;border-radius:8px;background:{CANVAS}"></div>'
+        pic = f'<img src="{img}" width="30" height="30" style="border-radius:8px;background:{CANVAS}">' if img else f'<div style="width:30px;height:30px;border-radius:8px;background:{CANVAS}"></div>'
         red = float(rate.rstrip('%') or 0) >= 2
-        rows += (f'<tr><td style="padding:7px 4px;border-bottom:1px solid {HAIR}"><table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="padding-right:8px">{pic}</td>'
+        rows += (f'<tr><td style="padding:7px 4px;border-bottom:1px solid {HAIR};white-space:normal"><table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="padding-right:8px">{pic}</td>'
                  f'<td style="font:600 11px {F};color:{INK}">{esc(name[0])}<div style="font:400 10px {F};color:{GRAY2}">{esc(" ".join(name[1:]))}</div></td></tr></table></td>'
-                 + ''.join(f'<td align="center" style="font:400 11px {F};color:{INK};padding:7px 4px;border-bottom:1px solid {HAIR};{NW}">{esc(v)}</td>' for v in (sku, asin, cell(r, 4), cell(r, 5), cell(r, 6)))
-                 + f'<td align="center" style="font:600 11px {F};color:{RED if red else INK};padding:7px 4px;border-bottom:1px solid {HAIR};{NW}">{esc(rate)}</td></tr>')
+                 + ''.join(f'<td align="center" style="font:400 11px {F};color:{INK};padding:7px 4px;border-bottom:1px solid {HAIR}">{esc(v)}</td>' for v in (sku, asin, cell(r, 4), cell(r, 5), cell(r, 6)))
+                 + f'<td align="center" style="font:600 11px {F};color:{RED if red else INK};padding:7px 4px;border-bottom:1px solid {HAIR}">{esc(rate)}</td></tr>')
     t = title_of(sl); m = re.match(r'^(Overview \([^)]*\))\s*(.*)$', t)
-    return tile(h2(m.group(1), m.group(2), slide_link(sl['objectId'])) + f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>{hdr}</tr>{rows}</table>'
+    return tile(h2(m.group(1), m.group(2), slide_link(sl['objectId'])) + f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="white-space:nowrap"><tr>{hdr}</tr>{rows}</table>'
                 f'<div style="font:400 9px {F};color:{GRAY2};margin-top:8px;line-height:1.5">{esc(foot)}</div>')
 
 # ---------- SIREN tables ----------
@@ -160,16 +161,16 @@ def siren(slides):
             link = next((x['textRun']['style']['link']['url'] for x in cs[1].get('text', {}).get('textElements', []) if x.get('textRun', {}).get('style', {}).get('link')), '')
             view = f'<a href="{link}" style="color:{LINK};text-decoration:none;font-weight:600">보기</a>' if link else ''
             new = ct(0) >= CFG['period']['start'].replace('-', '/')
-            rows += (f'<tr><td style="font:400 11px {F};color:{RED if new else INK};padding:7px 4px;border-bottom:1px solid {HAIR};white-space:nowrap">{esc(ct(0))}</td>'
-                     f'<td align="center" style="font:400 11px {F};padding:7px 4px;border-bottom:1px solid {HAIR};{NW}">{view}</td>'
-                     f'<td style="font:400 11px {F};color:{INK};padding:7px 4px;border-bottom:1px solid {HAIR}">{esc(ct(2))}</td>'
-                     f'<td style="font:400 11px {F};color:{INK};padding:7px 4px;border-bottom:1px solid {HAIR};{NW}">{esc(ct(3)).replace(chr(10), "<br>")}</td>'
-                     f'<td style="font:400 11px {F};color:{INK};padding:7px 4px;border-bottom:1px solid {HAIR}">{esc(ct(4))}</td>'
+            rows += (f'<tr><td style="font:400 11px {F};color:{RED if new else INK};padding:7px 4px;border-bottom:1px solid {HAIR}">{esc(ct(0))}</td>'
+                     f'<td align="center" style="font:400 11px {F};padding:7px 4px;border-bottom:1px solid {HAIR}">{view}</td>'
+                     f'<td style="font:400 11px {F};color:{INK};padding:7px 4px;border-bottom:1px solid {HAIR};white-space:normal">{esc(ct(2))}</td>'
+                     f'<td style="font:400 11px {F};color:{INK};padding:7px 4px;border-bottom:1px solid {HAIR}">{esc(ct(3)).replace(chr(10), "<br>")}</td>'
+                     f'<td style="font:400 11px {F};color:{INK};padding:7px 4px;border-bottom:1px solid {HAIR};white-space:normal">{esc(ct(4))}</td>'
                      f'<td align="center" style="font:400 11px {F};color:{INK};padding:7px 4px;border-bottom:1px solid {HAIR}">{esc(ct(5))}</td></tr>')
     hdr = ''.join(f'<td style="font:600 10px {F};color:{GRAY2};padding:6px 4px;border-bottom:1px solid {HAIR};{NW}" align="{a}">{h}</td>' for h, a in (('날짜', 'left'), ('SIREN', 'center'), ('기종+제품', 'left'), ('SKU', 'left'), ('이슈', 'left'), ('등록', 'center')))
     foot = (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:14px"><tr><td><a href="{sheet}" style="display:inline-block;border:1.5px solid {BLUE};color:{BLUE};font:600 12px {F};text-decoration:none;padding:8px 16px;border-radius:980px">26년 SIREN 시트 열기</a></td>'
             f'<td align="right" style="{NW}"><span style="font:400 12px {F};color:{GRAY}">2026 SIREN Registered by GCX</span> <span style="font:700 26px {F};color:{INK};vertical-align:middle">{esc(count)}</span></td></tr></table>')
-    return tile(h2(title_of(slides[0]), href=slide_link(slides[0]['objectId'])) + f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>{hdr}</tr>{rows}</table>' + foot)
+    return tile(h2(title_of(slides[0]), href=slide_link(slides[0]['objectId'])) + f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="white-space:nowrap"><tr>{hdr}</tr>{rows}</table>' + foot)
 
 # ---------- assemble ----------
 S = p['slides']
