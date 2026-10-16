@@ -150,7 +150,8 @@ ipcMain.on('pty:resize', (_e, id, c, r) => {
 function termResize(id, c, r) {
   const p = ptys.get(id);
   if (!p || !(c >= 20 && c <= 500 && r >= 5 && r <= 200)) return { ok: false };
-  if (c !== p.proc.cols || r !== p.proc.rows) try { p.proc.resize(c, r); ptyBus.emit('resize', id, c, r); } catch { return { ok: false }; }
+  if (c !== p.proc.cols || r !== p.proc.rows) try { p.proc.resize(c, r); } catch { return { ok: false }; }
+  ptyBus.emit('resize', id, c, r);   // also when unchanged: the asking mirror waits for this as confirmation
   if (win) win.webContents.send('pty:remoteSize', id, c, r);
   return { ok: true };
 }

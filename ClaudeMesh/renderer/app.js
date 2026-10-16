@@ -375,14 +375,21 @@ const termVisible = t => document.body.dataset.view === 'grid' || t.el.classList
 function fitOwn(id, t) {
   if (t.term.options.fontSize !== BASE_FONT) t.term.options.fontSize = BASE_FONT;
   if (!t.peer) return t.fit.fit();
-  const d = t.fit.proposeDimensions(); if (!d || !(d.cols > 0) || !(d.rows > 0)) return;
+  const box = t.el.querySelector('.xt'); if (box.clientWidth < 200 || box.clientHeight < 80) return;   // not laid out yet
+  const d = t.fit.proposeDimensions(); if (!d || !(d.cols >= 20) || !(d.rows >= 5)) return;
   t.cols = Math.max(20, d.cols); t.rows = Math.max(5, d.rows);
   if (t.term.cols !== t.cols || t.term.rows !== t.rows) t.term.resize(t.cols, t.rows);
-  if (t.sentCols !== t.cols || t.sentRows !== t.rows) { t.sentCols = t.cols; t.sentRows = t.rows; window.api.peerTerm.resize(id, t.cols, t.rows); }
+  if (t.sentCols !== t.cols || t.sentRows !== t.rows) {
+    t.sentCols = t.cols; t.sentRows = t.rows; window.api.peerTerm.resize(id, t.cols, t.rows);
+    // no confirmation (host offline, or a build that can't resize): show the host's real size again
+    clearTimeout(t.confirmT);
+    t.confirmT = setTimeout(() => { if (t.driving && (t.hostCols !== t.cols || t.hostRows !== t.rows)) { t.driving = false; t.sentCols = t.sentRows = 0; t.cols = t.hostCols || t.cols; t.rows = t.hostRows || t.rows; fitScaled(t); } }, 2000);
+  }
 }
 function fitTerm(id, t) { (t.peer ? t.driving : !t.remote) ? fitOwn(id, t) : fitScaled(t); }
 let lastUse = 0;
-function windowUsed() {
+function windowUsed(e) {
+  if (!e.isTrusted || document.body.dataset.size === 'mini') return;   // real input only; the compact window never takes the size
   if (Date.now() - lastUse < 700) return; lastUse = Date.now();
   for (const [id, t] of terms) {
     if (!termVisible(t)) continue;
@@ -390,8 +397,8 @@ function windowUsed() {
     else if (!t.peer && t.remote) { t.remote = false; fitOwn(id, t); }
   }
 }
+// (not window focus: bringing the app to the front — e.g. `open` over ssh — is not using it)
 ['keydown', 'mousedown', 'wheel'].forEach(ev => addEventListener(ev, windowUsed, true));
-addEventListener('focus', windowUsed);
 // the other machine took the size of one of our terminals
 window.api.peerTerm.onRemoteSize((id, c, r) => { const t = terms.get(id); if (!t || t.peer) return; t.remote = true; t.cols = c; t.rows = r; fitScaled(t); });
 // the exact current screen (+ recent scrollback) of one of our terminals, for a phone or the peer opening it
@@ -403,12 +410,13 @@ window.api.termSnap.onRequest((rq, id) => {
 });
 window.api.peerTerm.onInit((id, i) => {
   const t = terms.get(id); if (!t) return;
-  t.cols = i.cols; t.rows = i.rows; t.term.reset(); t.term.options.fontSize = BASE_FONT; fitScaled(t); t.term.write(i.backlog || '');
+  t.cols = t.hostCols = i.cols; t.rows = t.hostRows = i.rows; t.term.reset(); t.term.options.fontSize = BASE_FONT; fitScaled(t); t.term.write(i.backlog || '');
   if (t.driving) { t.sentCols = t.sentRows = 0; fitOwn(id, t); }   // reconnected while this window had the size: ask again
 });
 window.api.peerTerm.onSize((id, i) => {
   const t = terms.get(id); if (!t) return;
-  if (t.driving && i.cols === t.cols && i.rows === t.rows) return;   // our own request, echoed
+  t.hostCols = i.cols; t.hostRows = i.rows;
+  if (t.driving && i.cols === t.cols && i.rows === t.rows) return;   // our own request, confirmed
   t.driving = false; t.cols = i.cols; t.rows = i.rows; fitScaled(t);   // the host (or a phone) set another size
 });
 window.api.peerTerm.onClosed(id => { const t = terms.get(id); if (t) t.attached = false; });   // reconnects on the next telemetry tick
