@@ -34,8 +34,10 @@ from zoneinfo import ZoneInfo
 
 KST = ZoneInfo("Asia/Seoul")
 IS_MAC = sys.platform == "darwin"          # 2026-10-14: the same gate also runs on the Mac (launchd, every 5 min)
-HOST_LABEL = "Mac" if IS_MAC else "GCX server"
-PROJECT_DIR = "-Users-kevinkim" if IS_MAC else "-home-kevinkim"
+# 2026-10-17: the Mac mini (user kevin) is the host; the MacBook is fallback only; the Linux laptop server is retired.
+IS_MINI = IS_MAC and os.path.expanduser("~") == "/Users/kevin"
+HOST_LABEL = "Mac mini server" if IS_MINI else ("MacBook" if IS_MAC else "GCX server")
+PROJECT_DIR = os.path.expanduser("~").replace("/", "-")
 EXCLUDE_HOLIDAYS = {"07-17"}  # 제헌절 — no longer a non-working day since 2008
 TASK_NAME = "sc-propagate-daily"
 TASK_DIR = os.path.expanduser("~/.gcx-tasks")
@@ -64,7 +66,9 @@ PROMPT = """Run today's full sc-review-propagate pipeline end to end, autonomous
    - `python3 propagate.py --all-products` again — must end at 0 pending everywhere; if a product shows new pending on a second check (known Sheets-recalc lag), commit it and re-check once more
    - `python3 propagate.py --cleanup --notify --new-sheet CaspiLM_<yymmdd> --commit` (Phase F + E — posts the completion card to the GCX Chat webhook; mention the freshness-staleness flag here too if applicable, per step 2)
 
-6. **Phase G — already scripted, just run it**: `python3 phase_g.py --commit` from the same directory (reads today's KST date automatically; override with `--date <yyyy-mm-dd>` only if needed). This replaces the old claude-in-chrome-driven version — it's a plain Playwright script using the dedicated ~/.chrome-phaseg-profile. If it reports amazon.es rows skipped (needs login), just note that in your final summary — never log in yourself.
+5b. **Caspi stale → also run the live SC scraper (user rule 2026-10-15: "if no fresher exist, use sc scraper")**: if step 2 found Caspi stale (newest review > 2 days old or no load in 24h), after the Caspi pass run `cd ~/Desktop/GCX/Scrapers/SC_Review_Scraper && python3 scrape_sc_reviews.py < /dev/null` (all markets, defaults; it uploads `SC_<yymmdd>`), then repeat the step-5 propagate sequence with `--new-sheet SC_<yymmdd>` (Phase A → B → C → pending check), and run the single Phase F+E `--cleanup --notify --commit` with `--new-sheet SC_<yymmdd>` and `--alert "Caspi 데이터 미갱신 → 로컬 SC 스크레이퍼로 수집"` ONCE at the very end (never post the card twice). On the Mac mini the scraper attaches to the unified Amazon Chrome (CDP :9223, launchd com.gcx.amazon-chrome) — never launch another browser/profile. If the scraper log shows "Not logged in" / LOGIN REDIRECT / `selection_required` for a marketplace, do not wait for it: stop the scraper, finish with the markets that worked, and say in the card alert which Seller Central login the user must redo via Screen Sharing.
+
+6. **Phase G — already scripted, just run it**: `python3 phase_g.py --commit` from the same directory (reads today's KST date automatically; override with `--date <yyyy-mm-dd>` only if needed). It's a plain Playwright script (on the Mac mini it attaches to the unified Amazon Chrome on :9223). If it reports amazon.es rows skipped (needs login), just note that in your final summary — never log in yourself.
 
 7. If you hit any propagate.py or phase_g.py bug, fix it, verify live, and note it in your summary. If you're unsure of an existing live formula/structure you're about to depend on, verify it live rather than assuming from memory notes, since those can go stale.
 
@@ -112,10 +116,10 @@ def notify_catchup(today_str, now, late_minutes):
         print(f"WARN: catch-up chat alert failed: {e}", file=sys.stderr)
 
 
-def server_reachable():
-    """Ubuntu-side ssh over Tailscale — the gate on the server runs in that very Ubuntu, so this is the right probe."""
+def mini_reachable():
+    """Is the Mac mini host up? Probed from the MacBook over Tailscale ssh (~/.ssh/config host gcx-macmini)."""
     try:
-        return subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "kevinkim@gcx-server", "true"],
+        return subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "gcx-macmini", "true"],
                               capture_output=True, timeout=25).returncode == 0
     except Exception:
         return False
@@ -125,16 +129,18 @@ def owner_is_other_host(state, today_str):
     """Both hosts share this gate (and the git-synced state file). Exactly one of them launches per day:
     the server unless it is unreachable at launch time, or unless state["force_mac_dates"] lists today
     (set 2026-10-14 by the user: "use my mac tomorrow"). Returns a skip reason, or None to launch here."""
+    # 2026-10-17: the Mac mini owns every day; the MacBook launches only if force_mac_dates names today or the
+    # mini is unreachable; the retired Linux laptop server never launches.
     forced = today_str in (state.get("force_mac_dates") or [])
+    if IS_MINI:
+        return "force_mac_dates names today → the MacBook owns today's run, mini skips" if forced else None
     if IS_MAC:
         if forced:
             return None
-        if server_reachable():
-            return "server reachable → the server owns today's run, Mac skips"
+        if mini_reachable():
+            return "Mac mini reachable → the mini owns today's run, MacBook skips"
         return None
-    if forced:
-        return "force_mac_dates names today → the Mac owns today's run, server skips"
-    return None
+    return "Linux laptop server retired 2026-10-16 → the Mac mini owns the run"
 
 
 def launch_pipeline():
@@ -148,7 +154,7 @@ def launch_pipeline():
 export PATH=$HOME/.local/bin:/opt/homebrew/bin:$PATH
 tmux has-session -t gcx 2>/dev/null || tmux new-session -d -s gcx -c "$HOME"
 tmux kill-window -t gcx:{TASK_NAME} 2>/dev/null
-tmux new-window -t gcx: -n {TASK_NAME} 'cd ~ && export PATH=$HOME/.local/bin:/opt/homebrew/bin:$PATH; claude --remote-control gcx-{TASK_NAME}-mac "$(cat {prompt_path})"; echo; echo "[session ended]"; exec zsh'
+tmux new-window -t gcx: -n {TASK_NAME} 'cd ~ && export PATH=$HOME/.local/bin:/opt/homebrew/bin:$PATH; claude --remote-control gcx-{TASK_NAME}-{"mini" if IS_MINI else "mac"} "$(cat {prompt_path})"; echo; echo "[session ended]"; exec zsh'
 """
     else:
         launch_cmd = f"""
