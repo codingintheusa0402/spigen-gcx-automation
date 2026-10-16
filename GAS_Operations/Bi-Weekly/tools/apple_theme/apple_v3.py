@@ -93,9 +93,11 @@ def build_all():
         # hero buttons
         reqs += pill(cid, 'ap3_btn1', 238, 248, 116, 30, 'Overview 보기', 'filled', 11, slide=overview)
         reqs += pill(cid, 'ap3_btn2', 366, 248, 116, 30, 'Appendix 보기', 'outline', 11, slide='apl_appendix', under='#FFFFFF')
-    # ---- appendix slide (before the closing slide) ----
+    # ---- appendix slide: right after the last SIREN slide (bad-review TOP3 backups follow it, then the closing) ----
     if 'apl_appendix' not in ids:
-        reqs.append({'createSlide': {'objectId': 'apl_appendix', 'insertionIndex': len(ids) - 1,
+        siren_ix = [i for i, s in enumerate(p['slides']) if any('GCX SIREN' in ''.join(x.get('textRun', {}).get('content', '') for x in e.get('shape', {}).get('text', {}).get('textElements', [])) for e in s.get('pageElements', []))]
+        at = siren_ix[-1] + 1 if siren_ix else len(ids) - 1
+        reqs.append({'createSlide': {'objectId': 'apl_appendix', 'insertionIndex': at,
                                      'slideLayoutReference': {'layoutId': 'p12'}}})
     else:
         app = next(s for s in p['slides'] if s['objectId'] == 'apl_appendix')

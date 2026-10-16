@@ -6,7 +6,7 @@ const BW_RUN = {
   start: '2026-10-02', end: '2026-10-15',                 // 작성 날짜 window for the claim/review cards
   deck: '18r_Ceuaxr_on73M4pueuHYL1NgDCeOkKxr7C8itKlko',    // this period's classic deck (blank → the bound deck)
   sources: ['glxZ8', 'pixel11', 'iphone18'],              // CLAIM_SLIDE_SOURCES keys
-  appleDeck: '1quCr9Xj-pSsVXKrYuaEOq0LPILZMN2LPUwBkY1f_GFI',
+  appleDeck: '1F_zb9N_R0oAxBKCmDeEUxqSBY-demuW7Woldh2Ok4SQ',
   // Overview TOP3 slides: claims = Zendesk 4. Product Issue (cumulative, device filter per series);
   // bad reviews = series 1-3점 minus '긍정 리뷰'; 전제품 = 2026-01-01 ~ latest.
   overview: [

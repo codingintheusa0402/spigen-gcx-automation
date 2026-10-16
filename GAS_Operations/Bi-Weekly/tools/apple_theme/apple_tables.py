@@ -55,7 +55,7 @@ for s in p['slides']:
             reqs.append({'updateShapeProperties': {'objectId': e['objectId'], 'shapeProperties': {'shapeBackgroundFill': {'solidFill': {'color': {'rgbColor': rgb(TILE)}}}}, 'fields': 'shapeBackgroundFill.solidFill.color'}})
         if txt(e) == '2026 SIREN Registered by GCX':
             reqs.append({'updateTextStyle': {'objectId': e['objectId'], 'textRange': {'type': 'ALL'}, 'style': {'foregroundColor': {'opaqueColor': {'rgbColor': rgb(GRAY)}}}, 'fields': 'foregroundColor'}})
-        if txt(e) == '40':
+        if __import__('re').fullmatch(r'\d{1,4}', txt(e) or '') and any(txt(x) == '2026 SIREN Registered by GCX' for x in s['pageElements']):
             reqs.append({'updateTextStyle': {'objectId': e['objectId'], 'textRange': {'type': 'ALL'}, 'style': {'bold': True, 'fontSize': {'magnitude': 22, 'unit': 'PT'}, 'foregroundColor': {'opaqueColor': {'rgbColor': rgb(INK)}}}, 'fields': 'bold,fontSize,foregroundColor'}})
     print('table slide', sid)
 for i in range(0, len(reqs), 300):
