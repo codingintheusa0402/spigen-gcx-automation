@@ -26,15 +26,19 @@ struct AccountDetailView: View {
                             }.buttonStyle(.bordered)
                         }
                     }
+                    HStack {
+                        Text("거래 내역").font(.app(.headline, .semibold))
+                        Spacer()
+                        NavigationLink { TransactionsView(accountID: accountID) } label: { Text("기간·분류별 보기").font(.app(.subheadline)) }
+                    }
                     if store.theme.style == .toss {
-                        TossTransactionList(transactions: store.transactions(for: accountID))
+                        TossTransactionList(transactions: Array(store.transactions(for: accountID).prefix(60)))
                     } else {
                         Card {
-                            Text("거래 내역").font(.app(.headline, .semibold))
-                            let txs = store.transactions(for: accountID)
+                            let txs = Array(store.transactions(for: accountID).prefix(60))
                             if txs.isEmpty { Text("거래 내역이 없습니다").foregroundStyle(.secondary).padding(.top, 4) }
                             ForEach(txs) { tx in
-                                TransactionRow(tx: tx)
+                                NavigationLink(value: tx) { TransactionRow(tx: tx) }.buttonStyle(.plain)
                                 if tx.id != txs.last?.id { Divider() }
                             }
                         }
@@ -63,6 +67,7 @@ struct AccountDetailView: View {
             }
             .navigationTitle(account.name)
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: Transaction.self) { TransactionDetailView(tx: $0) }
             .toolbarRole(store.theme.style == .toss ? .editor : .automatic)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

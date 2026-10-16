@@ -48,6 +48,7 @@ struct TossTransactionList: View {
     @EnvironmentObject var store: BankStore
     let transactions: [Transaction]
     var showAccount = false
+    var tappable = true
 
     private var days: [(String, [Transaction])] {
         let cal = Calendar.current
@@ -68,6 +69,7 @@ struct TossTransactionList: View {
         VStack(spacing: 0) {
             ForEach(days, id: \.0) { day, txs in
                 ForEach(Array(txs.enumerated()), id: \.element.id) { idx, tx in
+                    NavigationLink(value: tx) {
                     HStack(alignment: .top, spacing: 12) {
                         Text(idx == 0 ? day : "").font(.app(.subheadline)).foregroundStyle(.secondary).frame(width: 44, alignment: .leading)
                         VStack(alignment: .leading, spacing: 3) {
@@ -82,6 +84,10 @@ struct TossTransactionList: View {
                         }
                     }
                     .padding(.vertical, 10)
+                    .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!tappable)
                 }
             }
         }

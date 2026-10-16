@@ -69,7 +69,7 @@ final class BankStore: ObservableObject {
         let fired = ScheduleEngine.processDue(now: now, data: &d)
         InterestEngine.accrue(now: now, data: &d, taxRate: d.settings.interestTaxRate)
         MarketSimulator.tick(now: now, portfolio: &d.portfolio)
-        LifestyleEngine.process(now: now, data: &d)
+        let lifeMessages = LifestyleEngine.process(now: now, data: &d)
         // Fast-forward can create tens of thousands of rows; keep the ledger bounded.
         if d.transactions.count > 4000 {
             d.transactions.sort { $0.date < $1.date }
@@ -77,7 +77,11 @@ final class BankStore: ObservableObject {
         }
         settleGoals(now: now, data: &d)
         if d != data { data = d }
-        if let last = fired.last {
+        if let msg = lifeMessages.last {
+            banner = BannerMessage(title: msg.hasPrefix("📩") ? "새로운 선택" : (msg.hasPrefix("🏁") ? "인생 결산" : "선택의 결과"),
+                                   body: msg.replacingOccurrences(of: "📩 ", with: "").replacingOccurrences(of: "🏁 ", with: ""),
+                                   positive: !msg.contains("손실") && !msg.contains("벌금") && !msg.contains("적발"))
+        } else if let last = fired.last {
             banner = BannerMessage(title: last.event.isInternal ? "자동이체" : (last.event.isIncoming ? "입금" : "출금"),
                                    body: NotificationService.bankLine(bank: brand.bank, date: last.transaction.date, incoming: last.event.isIncoming && !last.event.isInternal,
                                                                       amount: abs(last.event.amount), counterparty: last.event.counterparty,
@@ -111,6 +115,13 @@ final class BankStore: ObservableObject {
         // Lock-screen notifications only make sense when simulated time == real time.
         NotificationService.sync(events: data.clock.isRealTime ? data.events : [], accounts: data.accounts, bank: brand.bank, currency: currency)
         LiveActivityService.sync(events: data.clock.isRealTime ? data.events : [], accounts: data.accounts, bank: brand.bank, currency: currency)
+        // Quest notifications work at any speed: convert the simulated date to the real instant.
+        var upcoming: (Quest, Date)? = nil
+        if let pid = data.game.pendingQuestID, let q = QuestLibrary.quest(pid) { upcoming = (q, Date().addingTimeInterval(2)) }
+        else if let nid = data.game.nextQuestID, let q = QuestLibrary.quest(nid), let next = data.game.nextQuestDate {
+            upcoming = (q, data.clock.realDate(for: next))
+        }
+        NotificationService.syncQuest(upcoming, pendingAlreadyShown: data.game.pendingQuestID != nil)
     }
 
     /// Next enabled incoming event (widgets / live activity).
@@ -246,7 +257,11 @@ final class BankStore: ObservableObject {
     /// Pick a wealth tier. Optionally resets the account balance to the tier's
     /// typical amount and back-fills the last `backfillDays` of transactions.
     func applyTier(_ tier: WealthTier?, accountID: UUID?, resetBalance: Bool, backfillDays: Int) {
+        if let tier, !data.game.isUnlocked(tier) { return }      // 중산층~재벌 are earned through quests
         var d = data
+        if tier != nil, d.game.birthDate == nil {
+            d.game.birthDate = Calendar.current.date(byAdding: .year, value: -d.game.startAge, to: d.clock.now())
+        }
         // drop the previous tier's auto-created debt account
         if let old = d.lifestyle.debtAccountID {
             d.accounts.removeAll { $0.id == old }
@@ -369,6 +384,168 @@ final class BankStore: ObservableObject {
         d.goals.removeAll { $0.id == id }
         data = d
         syncNotifications()
+    }
+
+    // MARK: 인생 게임 (quests / tiers)
+
+    var game: GameState { data.game }
+    var pendingQuest: Quest? { data.game.pendingQuestID.flatMap(QuestLibrary.quest) }
+    var currentTier: WealthTier { data.lifestyle.tier ?? .broke }
+    var netWorth: Decimal { QuestEngine.netWorth(data) }
+    var age: Int { data.game.age(at: now) }
+
+    struct QuestResult {
+        let title: String
+        let text: String
+        let cash: Decimal
+        let delayed: Bool
+        let delayMonths: Int
+    }
+
+    /// Apply the chosen option of the pending quest.
+    @discardableResult
+    func answerQuest(_ optionIndex: Int) -> QuestResult? {
+        guard let q = pendingQuest, q.options.indices.contains(optionIndex) else { return nil }
+        let opt = q.options[optionIndex]
+        let e = opt.effect
+        var d = data
+        let simNow = d.clock.now()
+        let cal = Calendar.current
+        guard let accID = d.lifestyle.accountID ?? d.accounts.first(where: { $0.kind == .checking })?.id else { return nil }
+        let brand = d.settings.brand
+        var lines: [String] = []
+        if !opt.note.isEmpty { lines.append(opt.note) }
+        if let t = e.afterText { lines.append(t) }
+
+        if e.cash != 0 {
+            Ledger.apply(amount: e.cash, to: accID, date: simNow, counterparty: brand.resolve(e.employer ?? q.category.title), memo: "[선택] \(String(q.title.prefix(28)))",
+                         category: .transfer, tag: (e.cash > 0 ? SpendingCategory.income : categoryTag(q.category)).rawValue, data: &d)
+        }
+        if let memo = e.cancelFlowMemo { d.game.flows.removeAll { $0.memo.contains(memo) || $0.counterparty.contains(memo) } }
+        for f in [e.flow, e.flow2].compactMap({ $0 }) { d.game.flows.append(activeFlow(f, questID: q.id, from: simNow)) }
+        if e.salaryMultiplier != 1 { d.game.salaryMultiplier *= e.salaryMultiplier }
+        if let emp = e.employer { d.game.employer = emp }
+        if let job = e.jobTitle { d.game.jobTitle = job }
+        if e.salaryPauseMonths > 0 { d.game.salaryPausedUntil = cal.date(byAdding: .month, value: e.salaryPauseMonths, to: simNow) }
+        if e.expenseMultiplier != 1 { d.game.expenseMultiplier *= e.expenseMultiplier }
+        if e.medicalMultiplier != 1 { d.game.medicalMultiplier *= e.medicalMultiplier }
+        if let m = e.netWorthMultiplier, let acc = d.accounts.first(where: { $0.id == accID }), acc.balance > 0 {
+            Ledger.apply(amount: -(acc.balance * Decimal(double: 1 - m)).rounded(), to: accID, date: simNow, counterparty: "재산 분할",
+                         memo: "[선택] \(String(q.title.prefix(28)))", category: .transfer, tag: SpendingCategory.other.rawValue, data: &d)
+        }
+        if let t = e.promoteTo { promote(to: t, data: &d, at: simNow) }
+        if e.resist > 0 { data = d; logResist(kind: .shopping, title: String(q.title.prefix(20)), amount: e.resist); d = data }
+
+        var answer = QuestAnswer(questID: q.id, optionIndex: optionIndex, date: simNow, title: q.title, choice: opt.title, outcome: nil, cash: e.cash)
+        var delayed = false
+        var delayMonths = 0
+        var rng = SplitMix64(seed: UInt64.random(in: 1...UInt64.max))
+        if let g = e.gamble {
+            let success = Double.random(in: 0..<1, using: &rng) < g.chance
+            delayMonths = g.delayMonths; delayed = true
+            let fire = cal.date(byAdding: .month, value: g.delayMonths, to: simNow) ?? simNow
+            var o = PendingOutcome(answerID: answer.id, questID: q.id, fireDate: fire, success: success, cash: success ? g.win : g.lose,
+                                   text: success ? g.winText : g.loseText, counterparty: g.counterparty)
+            if success {
+                if let f = g.winFlow { o.flow = activeFlow(f, questID: q.id, from: fire); o.flowMonths = f.months }
+                if let m = e.counterSalary ?? e.successSalary { o.salaryMultiplier = m }
+            } else {
+                if let f = g.loseFlow { o.flow = activeFlow(f, questID: q.id, from: fire); o.flowMonths = f.months }
+                o.salaryPause = max(g.loseSalaryPause, e.loseSalaryPause)
+                o.fine = g.loseFine
+                o.netWorthMultiplier = e.loseNetWorthMultiplier
+                o.demoteTo = e.loseDemoteTo
+            }
+            if o.text.isEmpty { o.text = success ? "별다른 일 없이 지나갔습니다." : "안 좋은 결과가 나왔습니다." }
+            d.game.outcomes.append(o)
+            lines.append("결과는 \(g.delayMonths)개월 뒤에 알 수 있습니다.")
+        }
+        if let v = e.venture {
+            let success = Double.random(in: 0..<1, using: &rng) < v.chance
+            delayMonths = max(delayMonths, v.delayMonths); delayed = true
+            let fire = cal.date(byAdding: .month, value: v.delayMonths, to: simNow) ?? simNow
+            var o = PendingOutcome(answerID: answer.id, questID: q.id, fireDate: fire, success: success, cash: 0,
+                                   text: success ? v.winText : v.loseText, counterparty: v.winFlow.template.counterparty)
+            if success { o.flow = activeFlow(v.winFlow, questID: q.id, from: fire); o.flowMonths = v.winFlow.months }
+            else if let lf = v.loseFlow { o.flow = activeFlow(lf, questID: q.id, from: fire); o.flowMonths = lf.months }
+            d.game.outcomes.append(o)
+            lines.append("사업 결과는 \(v.delayMonths)개월 뒤에 드러납니다.")
+        }
+        if !delayed { answer.outcome = lines.joined(separator: " ") }
+        d.game.answers.append(answer)
+        d.game.pendingQuestID = nil; d.game.pendingSince = nil; d.game.pendingExpires = nil
+        QuestEngine.scheduleNext(from: simNow, tier: d.lifestyle.tier ?? .broke, age: d.game.age(at: simNow), netWorth: QuestEngine.netWorth(d), rng: &rng, data: &d)
+        data = d
+        syncNotifications()
+        unlockAchievements(now: now)
+        WidgetBridge.publish(store: self)
+        return QuestResult(title: opt.title, text: lines.joined(separator: "\n"), cash: e.cash, delayed: delayed, delayMonths: delayMonths)
+    }
+
+    /// Answer from a notification action: the quest must be the pending one (catchUp ran first).
+    func handleQuestNotification(questID: String, optionIndex: Int?) {
+        catchUp()
+        guard data.game.pendingQuestID == questID else { return }
+        if let i = optionIndex { answerQuest(i) }
+    }
+
+    /// Test/UI-test hook: make a specific quest the pending one right now.
+    func forcePendingQuest(_ id: String) {
+        guard QuestLibrary.quest(id) != nil else { return }
+        var d = data
+        if d.lifestyle.tier == nil, let acc = d.accounts.first(where: { $0.kind == .checking }) {
+            d.lifestyle.tier = .working; d.lifestyle.accountID = acc.id; d.lifestyle.lastProcessed = d.clock.now()
+        }
+        if d.game.birthDate == nil { d.game.birthDate = Calendar.current.date(byAdding: .year, value: -d.game.startAge, to: d.clock.now()) }
+        d.game.pendingQuestID = id; d.game.pendingSince = d.clock.now()
+        d.game.pendingExpires = Calendar.current.date(byAdding: .day, value: GameState.questWindowDays, to: d.clock.now())
+        data = d
+    }
+
+    func dismissQuest() {
+        var d = data
+        d.game.pendingQuestID = nil; d.game.pendingSince = nil; d.game.pendingExpires = nil
+        d.game.nextQuestDate = Calendar.current.date(byAdding: .day, value: 2, to: d.clock.now())
+        data = d
+        syncNotifications()
+    }
+
+    private func activeFlow(_ f: QuestFlow, questID: String, from: Date) -> ActiveFlow {
+        let t = f.template
+        var day = 25
+        if case .monthly(let d) = t.frequency { day = d }
+        return ActiveFlow(questID: questID, counterparty: t.counterparty, memo: t.memo, amount: t.minAmount, day: day, category: t.category, hour: t.hour,
+                          until: f.months.flatMap { Calendar.current.date(byAdding: .month, value: $0, to: from) })
+    }
+
+    private func categoryTag(_ c: QuestCategory) -> SpendingCategory {
+        switch c {
+        case .insurance: return .insurance
+        case .housing: return .housing
+        case .invest, .finance: return .finance
+        case .business: return .other
+        case .family: return .family
+        case .education: return .education
+        case .health: return .medical
+        case .luxury: return .shopping
+        case .tax: return .tax
+        default: return .other
+        }
+    }
+
+    /// Tier change by quest: keeps balances, unlocks the tier, restarts raise/inflation anchors.
+    private func promote(to tier: WealthTier, data d: inout BankData, at date: Date) {
+        if !d.game.unlockedTiers.contains(tier) { d.game.unlockedTiers.append(tier) }
+        d.lifestyle.tier = tier
+        d.lifestyle.tierStart = date
+        d.lifestyle.seed = UInt64.random(in: 1...UInt64.max)
+        if tier != .broke, let debt = d.lifestyle.debtAccountID {
+            d.accounts.removeAll { $0.id == debt }; d.transactions.removeAll { $0.accountID == debt }; d.lifestyle.debtAccountID = nil
+        }
+    }
+
+    func restartLife() {
+        resetAll()
     }
 
     // MARK: Scenarios

@@ -21,14 +21,17 @@ struct SplitMix64: RandomNumberGenerator {
 ///  - 거지 only: a capital loan that auto-tops-up the account and compounds with late interest,
 ///    so the ending is always a mountain of debt.
 enum LifestyleEngine {
-    static let maxDays = 120
+    static let maxDays = 400
     static let debtMonthlyRate = 0.031        // ~연 37% (이자 + 연체 가산)
     static let debtLateFee: Decimal = 50_000
 
-    static func process(now: Date = Date(), data: inout BankData) {
+    @discardableResult
+    static func process(now: Date = Date(), data: inout BankData) -> [String] {
+        var messages: [String] = []
         guard let tier = data.lifestyle.tier,
               let accountID = data.lifestyle.accountID,
-              data.accounts.contains(where: { $0.id == accountID }) else { return }
+              data.accounts.contains(where: { $0.id == accountID }) else { return messages }
+        if data.game.isEnded { data.lifestyle.lastProcessed = max(data.lifestyle.lastProcessed, now); return messages }
         let cal = Calendar.current
         var day = cal.startOfDay(for: data.lifestyle.lastProcessed)
         let endDay = cal.startOfDay(for: now)
@@ -47,6 +50,11 @@ enum LifestyleEngine {
             let years = max(0, cal.dateComponents([.year], from: data.lifestyle.tierStart, to: day).year ?? 0)
             let inflation = pow(1 + WealthTier.inflation, Double(years))
             let salaryFactor = pow(1 + tier.annualRaise, Double(years)) * pow(tier.promotionBump, Double(years / tier.promotionEveryYears))
+                * QuestEngine.salaryFactor(data.game, day: day)
+            let expenseFactor = data.game.expenseMultiplier
+            let medicalFactor = data.game.medicalMultiplier
+            let employer = data.game.employer
+            let jobTitle = data.game.jobTitle
 
             func emit(_ amount: Decimal, hour: Int, second: Int, counterparty: String, memo: String, category: TransactionCategory, tag: SpendingCategory? = nil) {
                 let minute = Int.random(in: 0..<60, using: &rng)
@@ -66,10 +74,13 @@ enum LifestyleEngine {
                 case .daily(let chance): fires = Double.random(in: 0..<1, using: &rng) < chance
                 }
                 guard fires else { continue }
-                let factor = flow.isSalary ? salaryFactor : inflation
+                let factor = flow.isSalary ? salaryFactor : inflation * (flow.minAmount < 0 ? expenseFactor : 1)
+                if flow.isSalary, factor == 0 { continue }                       // 급여 중단 (실직·휴직·징역)
                 let amount = randomAmount(flow.minAmount, flow.maxAmount, factor: factor, using: &rng)
-                let memo = flow.isSalary && years > 0 ? "\(flow.memo) (\(years + 1)년차)" : flow.memo
-                emit(amount, hour: flow.hour, second: i, counterparty: flow.counterparty, memo: memo, category: flow.category)
+                var memo = flow.isSalary && years > 0 ? "\(flow.memo) (\(years + 1)년차)" : flow.memo
+                if flow.isSalary, let t = jobTitle { memo = "\(t) 급여" }
+                emit(amount, hour: flow.hour, second: i, counterparty: flow.isSalary ? (employer ?? flow.counterparty) : flow.counterparty, memo: memo, category: flow.category,
+                     tag: flow.minAmount > 0 ? .income : nil)
             }
 
             // 2. life events library
@@ -83,10 +94,19 @@ enum LifestyleEngine {
                 guard fires else { continue }
                 let cp = spec.counterparties[Int.random(in: 0..<spec.counterparties.count, using: &rng)]
                 let memo = spec.memos[Int.random(in: 0..<spec.memos.count, using: &rng)]
-                let amount = randomAmount(Decimal(spec.baseMin), Decimal(spec.baseMax), factor: spec.scaling.factor(scale) * inflation, using: &rng)
+                var f = spec.scaling.factor(scale) * inflation
+                if spec.id.hasPrefix("med_") { f *= medicalFactor }                                  // 실손 없으면 병원비 ↑
+                else if spec.id.hasPrefix("bonus_") || spec.id.hasPrefix("holiday_bonus") || spec.id == "overtime" { f *= max(0, QuestEngine.salaryFactor(data.game, day: day)) }  // 상여금은 연봉 따라
+                else if spec.baseMin < 0 { f *= expenseFactor }
+                if f == 0 { continue }
+                let amount = randomAmount(Decimal(spec.baseMin), Decimal(spec.baseMax), factor: f, using: &rng)
                 emit(amount, hour: spec.hour, second: 10 + i, counterparty: cp, memo: memo, category: spec.category,
                      tag: amount > 0 ? .income : SpendingCategory.forSpec(spec.id))
             }
+
+            // 2b. life decisions (quests), their flows and delayed outcomes
+            messages += QuestEngine.day(day, now: now, tier: tier, accountID: accountID, comps: comps, lastDay: lastDay, rng: &rng, data: &data)
+            if data.game.isEnded { data.lifestyle.lastProcessed = max(processed, now); return messages }
 
             // 3. 거지 debt spiral (end of day)
             if tier == .broke, let debtID = data.lifestyle.debtAccountID,
@@ -126,10 +146,11 @@ enum LifestyleEngine {
             day = next
             if day <= endDay, guardCount >= maxDays {
                 data.lifestyle.lastProcessed = max(processed, day.addingTimeInterval(-1))
-                return
+                return messages
             }
         }
         data.lifestyle.lastProcessed = max(processed, now)
+        return messages
     }
 
     private static func randomAmount(_ lo: Decimal, _ hi: Decimal, factor: Double, using rng: inout SplitMix64) -> Decimal {

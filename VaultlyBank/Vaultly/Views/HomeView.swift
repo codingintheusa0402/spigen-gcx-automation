@@ -34,6 +34,8 @@ struct HomeView: View {
                             }
                         }
                     }
+                    lifeRow
+                    if let q = store.pendingQuest { QuestCard(quest: q) }
                     quickTiles
                     goalsCard
                     Card {
@@ -56,7 +58,11 @@ struct HomeView: View {
                     upcoming
                     Card {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("최근 거래").font(.app(.title3, .bold))
+                            HStack {
+                                Text("최근 거래").font(.app(.title3, .bold))
+                                Spacer()
+                                NavigationLink { TransactionsView() } label: { Text("전체보기").font(.app(.subheadline)).foregroundStyle(.secondary) }
+                            }
                             TossTransactionList(transactions: Array(store.recentTransactions.prefix(10)), showAccount: true)
                         }
                     }
@@ -66,7 +72,36 @@ struct HomeView: View {
             .background(store.theme.background)
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: UUID.self) { AccountDetailView(accountID: $0) }
+            .navigationDestination(for: Transaction.self) { TransactionDetailView(tx: $0) }
             .sheet(isPresented: $showAddAccount) { AddAccountSheet() }
+            .sheet(isPresented: Binding(get: { store.game.isEnded && !endingShown }, set: { _ in endingShown = true })) { EndingView() }
+        }
+    }
+
+    @State private var endingShown = false
+
+    /// "만 34세 · 🏠 중산층 · 부자까지 12%" → 내 인생
+    @ViewBuilder private var lifeRow: some View {
+        if store.lifestyle.tier != nil {
+            NavigationLink { LifeView() } label: {
+                HStack(spacing: 10) {
+                    Text(store.currentTier.emoji)
+                    Text("만 \(store.age)세 · \(store.currentTier.title)").font(.app(.subheadline, .semibold))
+                    if let next = GameState.nextTier(after: store.currentTier) {
+                        let th = GameState.threshold(for: next)
+                        let p = th > 0 ? min(1, max(0, (store.netWorth / th).doubleValue)) : 0
+                        Text("· \(next.title)까지 \(Int(p * 100))%").font(.app(.caption)).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if store.pendingQuest != nil { Circle().fill(store.theme.accentSecondary).frame(width: 8, height: 8) }
+                    Image(systemName: "chevron.right").font(.app(.caption)).foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 14).padding(.vertical, 11)
+                .background(store.theme.card, in: RoundedRectangle(cornerRadius: store.theme.cornerRadius, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: store.theme.cornerRadius, style: .continuous).stroke(Color.primary.opacity(0.06)))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("life-row")
         }
     }
 
@@ -75,6 +110,8 @@ struct HomeView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     totalCard
+                    lifeRow
+                    if let q = store.pendingQuest { QuestCard(quest: q) }
                     quickTiles
                     goalsCard
                     section("내 계좌", trailing: {
@@ -95,13 +132,13 @@ struct HomeView: View {
                         }
                     }
                     upcoming
-                    section("최근 거래") {
+                    section("최근 거래", trailing: { NavigationLink { TransactionsView() } label: { Text("전체보기").font(.app(.subheadline)) } }) {
                         Card {
                             if store.recentTransactions.isEmpty {
                                 Text("거래 내역이 없습니다").foregroundStyle(.secondary)
                             }
                             ForEach(store.recentTransactions.prefix(8)) { tx in
-                                TransactionRow(tx: tx, showAccount: true)
+                                NavigationLink(value: tx) { TransactionRow(tx: tx, showAccount: true) }.buttonStyle(.plain)
                                 if tx.id != store.recentTransactions.prefix(8).last?.id { Divider() }
                             }
                         }
@@ -112,6 +149,8 @@ struct HomeView: View {
             .background(store.theme.background)
             .navigationTitle(store.brand.bank)
             .navigationDestination(for: UUID.self) { AccountDetailView(accountID: $0) }
+            .navigationDestination(for: Transaction.self) { TransactionDetailView(tx: $0) }
+            .sheet(isPresented: Binding(get: { store.game.isEnded && !endingShown }, set: { _ in endingShown = true })) { EndingView() }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { store.update { $0.hideBalances.toggle() } } label: {

@@ -14,18 +14,20 @@ struct WealthView: View {
             Form {
                 Section {
                     ForEach(WealthTier.allCases) { t in
-                        Button { tier = t } label: {
+                        let locked = !store.game.isUnlocked(t)
+                        Button { if !locked { tier = t } } label: {
                             HStack(alignment: .top, spacing: 12) {
-                                Text(t.emoji).font(.app(.title))
+                                Text(t.emoji).font(.app(.title)).opacity(locked ? 0.4 : 1)
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
                                         Text(t.title).font(.app(.headline, .semibold))
                                         Text("잔액 \(Money.format(t.startingBalance, code: store.currency))").font(.app(.caption)).foregroundStyle(.secondary)
                                     }
-                                    Text(t.summary).font(.app(.caption)).foregroundStyle(.secondary)
+                                    Text(locked ? "잠김 · 순자산 \(Money.format(GameState.threshold(for: t), code: store.currency)) 이상에서 승급 퀘스트로 해제" : t.summary).font(.app(.caption)).foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                if tier == t { Image(systemName: "checkmark.circle.fill").foregroundStyle(store.theme.accent) }
+                                if locked { Image(systemName: "lock.fill").foregroundStyle(.tertiary) }
+                                else if tier == t { Image(systemName: "checkmark.circle.fill").foregroundStyle(store.theme.accent) }
                             }
                             .contentShape(Rectangle())
                         }.buttonStyle(.plain)
@@ -34,7 +36,7 @@ struct WealthView: View {
                         HStack { Text("자동 흐름 끄기"); Spacer(); if tier == nil { Image(systemName: "checkmark") } }
                     }
                 } header: { Text("재력 정도") } footer: {
-                    Text("선택한 재력에 맞는 급여·지출·보험료·공과금·의료비·사고·경조사·세금·보너스 등이 자동으로 생깁니다. 급여는 연차에 따라 오르고, 앱을 안 켜도 다음 실행 때 그동안의 내역이 채워집니다.")
+                    Text("거지·서민에서 시작합니다. 중산층·부자·재벌은 순자산을 모으고 승급 퀘스트(이직·청약·스톡옵션·상장)를 통과해야 열립니다. 선택한 재력에 맞는 급여·지출·보험료·공과금·의료비·사고·경조사·세금·보너스가 자동으로 생기고, 며칠마다 인생을 바꾸는 선택지가 옵니다.")
                 }
                 if tier != nil {
                     Section("적용 대상") {

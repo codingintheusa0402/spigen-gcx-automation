@@ -256,6 +256,116 @@ final class EngineTests: XCTestCase {
         XCTAssertEqual(line, "[우리은행] 03/09 15:40 입금 31,440,000원 토스증권 잔액 123,760,684,504원")
     }
 
+    // MARK: 인생 게임 (quests · tiers)
+
+    func testQuestLibraryIsLargeAndWellFormed() {
+        let all = QuestLibrary.all
+        XCTAssertGreaterThanOrEqual(all.count, 300)
+        XCTAssertEqual(Set(all.map(\.id)).count, all.count, "ids unique")
+        for q in all { XCTAssertGreaterThanOrEqual(q.options.count, 2, q.id); XCTAssertFalse(q.title.isEmpty, q.id) }
+        for t in WealthTier.allCases { XCTAssertGreaterThanOrEqual(all.filter { $0.tiers.contains(t) }.count, 50, "\(t)") }
+        for t in [WealthTier.working, .middle, .rich, .tycoon] { XCTAssertTrue(all.contains { $0.promotion == t }, "promotion quest to \(t)") }
+        XCTAssertTrue(all.contains { $0.title.contains("삼성전자") && $0.title.contains("이직") })
+        XCTAssertTrue(all.contains { $0.title.contains("종신보험") })
+        XCTAssertTrue(all.contains { $0.id.hasPrefix("illegal_") && $0.options[0].effect.gamble?.loseSalaryPause ?? 0 > 0 }, "illegal job can end in prison")
+    }
+
+    func testQuestIsOfferedWithinTwoWeeksAndExpires() {
+        var data = BankData.starter()
+        data.lifestyle = LifestyleState(tier: .working, accountID: data.accounts[0].id, debtAccountID: nil, tierStart: date(2026, 1, 1), lastProcessed: date(2026, 1, 1), seed: 9)
+        LifestyleEngine.process(now: date(2026, 1, 20), data: &data)
+        XCTAssertNotNil(data.game.pendingQuestID, "a quest should be offered within 14 days")
+        XCTAssertNotNil(data.game.birthDate)
+        XCTAssertEqual(data.game.age(at: date(2026, 1, 20)), 22)
+        let q = QuestLibrary.quest(data.game.pendingQuestID!)!
+        XCTAssertTrue(q.tiers.contains(.working))
+        XCTAssertNil(q.promotion, "promotion quests need net worth first")
+        LifestyleEngine.process(now: date(2026, 3, 1), data: &data)   // 14-day window passed → expires, new one arrives
+        XCTAssertNotNil(data.game.pendingQuestID)
+    }
+
+    @MainActor func testAnsweringInsuranceQuestAddsPremiumFlowAndLowersMedicalBills() {
+        let store = BankStore(); store.resetAll()
+        store.forcePendingQuest("ins_01")                                  // 삼성화재 실손
+        let before = store.data.accounts[0].balance
+        let r = store.answerQuest(0)
+        XCTAssertNotNil(r)
+        XCTAssertEqual(store.game.flows.count, 1)
+        XCTAssertEqual(store.game.flows[0].amount, -95_000)
+        XCTAssertEqual(store.game.medicalMultiplier, 0.35, accuracy: 0.001)
+        XCTAssertEqual(store.data.accounts[0].balance, before)
+        XCTAssertNil(store.pendingQuest)
+        XCTAssertNotNil(store.game.nextQuestDate)
+        // declining raises hospital bills instead
+        store.resetAll(); store.forcePendingQuest("ins_01"); store.answerQuest(1)
+        XCTAssertEqual(store.game.medicalMultiplier, 1.8, accuracy: 0.001)
+        store.resetAll()
+    }
+
+    @MainActor func testJobChangeRaisesSalaryAndCashQuestMovesMoney() {
+        let store = BankStore(); store.resetAll()
+        store.forcePendingQuest("career_001")
+        let q = store.pendingQuest!
+        let mult = q.options[0].effect.salaryMultiplier
+        store.answerQuest(0)
+        XCTAssertEqual(store.game.salaryMultiplier, mult, accuracy: 0.001)
+        XCTAssertNotNil(store.game.employer)
+        store.forcePendingQuest("lux_bag")
+        let before = store.data.accounts[0].balance
+        store.answerQuest(0)
+        XCTAssertEqual(store.data.accounts[0].balance, before - 14_000_000)
+        XCTAssertEqual(store.game.answers.count, 2)
+        store.resetAll()
+    }
+
+    @MainActor func testGambleResolvesMonthsLaterViaEngine() {
+        let store = BankStore(); store.resetAll()
+        let id = QuestLibrary.all.first { $0.id.hasPrefix("inv_bitcoin") }!.id
+        store.forcePendingQuest(id)
+        store.answerQuest(0)
+        XCTAssertEqual(store.game.outcomes.count, 1)
+        XCTAssertNil(store.game.answers[0].outcome)
+        var d = store.data
+        let later = Calendar.current.date(byAdding: .month, value: 14, to: d.clock.now())!
+        LifestyleEngine.process(now: later, data: &d)
+        XCTAssertTrue(d.game.outcomes.isEmpty, "outcome settled")
+        XCTAssertNotNil(d.game.answers[0].outcome)
+        XCTAssertTrue(d.transactions.contains { $0.memo.hasPrefix("[선택 결과]") })
+        store.resetAll()
+    }
+
+    @MainActor func testTiersAreLockedUntilPromotionQuest() {
+        let store = BankStore(); store.resetAll()
+        let acc = store.data.accounts[0].id
+        store.applyTier(.middle, accountID: acc, resetBalance: false, backfillDays: 0)
+        XCTAssertNil(store.lifestyle.tier, "중산층 is locked at start")
+        store.applyTier(.working, accountID: acc, resetBalance: false, backfillDays: 0)
+        XCTAssertEqual(store.lifestyle.tier, .working)
+        // promotion quest cannot be picked below the threshold
+        var rng = SplitMix64(seed: 1)
+        let pick = QuestEngine.pick(tier: .working, age: 30, game: store.game, netWorth: 1_000, using: &rng)
+        XCTAssertNil(pick?.promotion)
+        XCTAssertTrue(QuestEngine.eligible(QuestLibrary.quest("up_middle_1")!, tier: .working, age: 30, game: store.game, netWorth: 60_000_000))
+        store.forcePendingQuest("up_middle_1")
+        store.answerQuest(0)
+        XCTAssertEqual(store.lifestyle.tier, .middle)
+        XCTAssertTrue(store.game.isUnlocked(.middle))
+        XCTAssertFalse(store.game.isUnlocked(.rich))
+        store.resetAll()
+    }
+
+    func testLifeEndsAtEightyAndMaxSpeedFitsTwelveHours() {
+        XCTAssertEqual(TimeSpeed.lifeIn12h.rawValue * 12 * 3600 / (365.25 * 86400), 60, accuracy: 0.1, "12 real hours = 60 simulated years")
+        var data = BankData.starter()
+        data.lifestyle = LifestyleState(tier: .working, accountID: data.accounts[0].id, debtAccountID: nil, tierStart: date(2026, 1, 1), lastProcessed: date(2026, 1, 1), seed: 3)
+        data.game.birthDate = Calendar.current.date(byAdding: .year, value: -80, to: date(2026, 1, 10))
+        LifestyleEngine.process(now: date(2026, 2, 1), data: &data)
+        XCTAssertTrue(data.game.isEnded)
+        let count = data.transactions.count
+        LifestyleEngine.process(now: date(2026, 6, 1), data: &data)
+        XCTAssertEqual(data.transactions.count, count, "nothing happens after the ending")
+    }
+
     func testSalaryRisesWithYears() {
         var data = BankData.starter()
         data.accounts[0].balance = 0

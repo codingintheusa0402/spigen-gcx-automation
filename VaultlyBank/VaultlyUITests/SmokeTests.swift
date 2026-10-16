@@ -87,6 +87,41 @@ final class SmokeTests: XCTestCase {
         snap("scenario-events")
     }
 
+    func testQuestCardAnswerAndTransactionHistory() {
+        app.terminate()
+        app.launchArguments = ["-uitest-reset", "-uitest-quest", "ins_01"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["내 계좌"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS '실손의료보험에 가입하시겠습니까'")).firstMatch.waitForExistence(timeout: 5), "quest card on home")
+        snap("quest-card")
+        app.buttons["quest-option-0"].tap()
+        XCTAssertTrue(app.buttons["이렇게 한다"].waitForExistence(timeout: 5))
+        app.buttons["이렇게 한다"].tap()
+        XCTAssertTrue(app.buttons["확인"].waitForExistence(timeout: 5))
+        snap("quest-outcome")
+        app.buttons["확인"].tap()
+        XCTAssertTrue(app.buttons["life-row"].waitForExistence(timeout: 5))
+        app.buttons["life-row"].tap()
+        XCTAssertTrue(app.navigationBars["내 인생"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["재력 단계"].exists)
+        snap("life")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        // 전체 거래내역 with period/category filters, then a transaction detail
+        let all = app.buttons["전체보기"]
+        XCTAssertTrue(all.waitForExistence(timeout: 5))
+        all.tap()
+        XCTAssertTrue(app.navigationBars["전체 거래내역"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["12개월"].exists && app.buttons["7일"].exists)
+        app.buttons["12개월"].tap()
+        snap("history")
+        let row = app.buttons.matching(NSPredicate(format: "label CONTAINS '₩'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        XCTAssertTrue(app.navigationBars["거래 상세"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["거래 후 잔액"].exists)
+        snap("transaction-detail")
+    }
+
     func testAccountDetailOpens() {
         let nameField = app.textFields["이름 (예: 홍길동)"]
         XCTAssertTrue(nameField.waitForExistence(timeout: 5))

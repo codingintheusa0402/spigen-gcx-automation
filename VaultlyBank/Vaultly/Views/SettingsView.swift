@@ -58,6 +58,9 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    NavigationLink { LifeView() } label: {
+                        HStack { Label("내 인생 (선택·승급)", systemImage: "figure.walk"); Spacer(); Text("만 \(store.age)세 · \(store.currentTier.title)").foregroundStyle(.secondary) }
+                    }
                     NavigationLink { ScenarioSettingsPage() } label: { Label("시나리오로 시작", systemImage: "sparkles") }
                     NavigationLink { GoalsView() } label: {
                         HStack { Label("저축 목표", systemImage: "target"); Spacer(); Text(store.goals.isEmpty ? "없음" : "\(store.goals.count)개").foregroundStyle(.secondary) }
@@ -204,7 +207,7 @@ struct TimeFlowSettings: View {
                     Button("실시간 속도로 (시뮬레이션 시각 유지)") { store.resetToRealSpeed() }
                 }
             } footer: {
-                Text("속도를 올리면 월급·생활비·이자·상환·예약 입금이 그 배속으로 진행됩니다. 1,200x면 실제 한 달 동안 100년이 지납니다. 가장 느린 설정이 실시간이며, 시간은 앞으로만 흐릅니다(점프 없음). 가속 중에는 잠금화면 알림 대신 앱 내 배너로 표시됩니다.")
+                Text("속도를 올리면 월급·생활비·이자·상환·예약 입금·인생 선택이 그 배속으로 진행됩니다. 43,800x면 실제 12시간에 60년(한 인생)이 지납니다. 가장 느린 설정이 실시간이며, 시간은 앞으로만 흐릅니다(점프 없음). 가속 중에는 잠금화면 알림 대신 앱 내 배너로 표시됩니다.")
             }
         }
         .navigationTitle("시간 흐름")

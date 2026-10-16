@@ -18,6 +18,11 @@ struct SimClock: Codable, Equatable {
     }
 
     var isRealTime: Bool { speed == 1 && abs(anchorVirtual.timeIntervalSince(anchorReal)) < 120 }
+
+    /// Real wall-clock instant at which simulated time reaches `virtual` (for notifications at any speed).
+    func realDate(for virtual: Date) -> Date {
+        anchorReal.addingTimeInterval(virtual.timeIntervalSince(anchorVirtual) / max(1, speed))
+    }
 }
 
 enum TimeSpeed: Double, CaseIterable, Identifiable {
@@ -26,6 +31,7 @@ enum TimeSpeed: Double, CaseIterable, Identifiable {
     case hourIsWeek = 168        // 1시간 = 1주
     case dayIsYear = 365         // 1일 = 1년
     case monthIsCentury = 1200   // 1달 = 100년
+    case lifeIn12h = 43800       // 12시간 = 60년 (한 인생)
     var id: Double { rawValue }
     var title: String {
         switch self {
@@ -34,6 +40,7 @@ enum TimeSpeed: Double, CaseIterable, Identifiable {
         case .hourIsWeek: return "1시간 = 1주 (168x)"
         case .dayIsYear: return "1일 = 1년 (365x)"
         case .monthIsCentury: return "1달 = 100년 (1,200x)"
+        case .lifeIn12h: return "12시간 = 인생 60년 (43,800x)"
         }
     }
     var short: String {
@@ -43,6 +50,7 @@ enum TimeSpeed: Double, CaseIterable, Identifiable {
         case .hourIsWeek: return "168x"
         case .dayIsYear: return "365x"
         case .monthIsCentury: return "1200x"
+        case .lifeIn12h: return "43800x"
         }
     }
 }

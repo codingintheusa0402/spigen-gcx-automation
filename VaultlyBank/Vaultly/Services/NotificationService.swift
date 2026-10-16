@@ -6,9 +6,37 @@ import UserNotifications
 enum NotificationService {
     private static let prefix = "vaultly.event."
 
+    static let questCategory = "VAULTLY_QUEST"
+    static let questPrefix = "vaultly.quest."
+
     static func requestAuthorization() async -> Bool {
         let center = UNUserNotificationCenter.current()
+        registerCategories()
         return (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+    }
+
+    static func registerCategories() {
+        let actions = (0..<3).map { UNNotificationAction(identifier: "opt\($0)", title: "선택 \($0 + 1)", options: [.foreground]) }
+        let cat = UNNotificationCategory(identifier: questCategory, actions: actions, intentIdentifiers: [], options: [])
+        UNUserNotificationCenter.current().setNotificationCategories([cat])
+    }
+
+    /// "새로운 선택" alert outside the app. Options are listed in the body and offered as action buttons.
+    static func syncQuest(_ upcoming: (Quest, Date)?, pendingAlreadyShown: Bool) {
+        let center = UNUserNotificationCenter.current()
+        center.getPendingNotificationRequests { pending in
+            center.removePendingNotificationRequests(withIdentifiers: pending.map(\.identifier).filter { $0.hasPrefix(questPrefix) })
+            guard let (q, fire) = upcoming, fire.timeIntervalSinceNow > (pendingAlreadyShown ? 0 : 20) else { return }
+            let content = UNMutableNotificationContent()
+            content.title = "새로운 선택 · \(q.category.title)"
+            content.body = q.title + "\n" + q.options.enumerated().map { "\($0.offset + 1). \($0.element.title)" }.joined(separator: "  ")
+            content.sound = .default
+            content.categoryIdentifier = questCategory
+            content.userInfo = ["questID": q.id]
+            content.interruptionLevel = .timeSensitive
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, fire.timeIntervalSinceNow), repeats: false)
+            center.add(UNNotificationRequest(identifier: questPrefix + q.id, content: content, trigger: trigger))
+        }
     }
 
     static func authorizationStatus() async -> UNAuthorizationStatus {

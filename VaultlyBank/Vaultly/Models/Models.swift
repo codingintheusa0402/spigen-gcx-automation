@@ -121,7 +121,7 @@ enum TransactionCategory: String, Codable {
     }
 }
 
-struct Transaction: Identifiable, Codable, Equatable {
+struct Transaction: Identifiable, Codable, Equatable, Hashable {
     var id = UUID()
     var accountID: UUID
     var date: Date
@@ -263,6 +263,7 @@ struct BankData: Codable, Equatable {
     var challenge = ChallengeState()
     var goals: [SavingsGoal] = []
     var achievements: [String: Date] = [:]
+    var game = GameState()
 
     init() {}
 
@@ -279,6 +280,7 @@ struct BankData: Codable, Equatable {
         challenge = try c.decodeIfPresent(ChallengeState.self, forKey: .challenge) ?? ChallengeState()
         goals = try c.decodeIfPresent([SavingsGoal].self, forKey: .goals) ?? []
         achievements = try c.decodeIfPresent([String: Date].self, forKey: .achievements) ?? [:]
+        game = try c.decodeIfPresent(GameState.self, forKey: .game) ?? GameState()
     }
 
     static func starter() -> BankData {
