@@ -310,6 +310,9 @@ class Scraper:
         extract = make_extract_js(market, market)
         rows_all, empty, p = [], 0, 1
         while p <= self.max_pages:
+            if not self.budget_left():
+                Actor.log.warning(f'[{market}] maximum cost per run reached — stopping (raise it in the run options to get more)')
+                break
             url = base + params + (f'&pageNumber={p}' if p > 1 else '')
             try:
                 await page.goto(url, wait_until='domcontentloaded', timeout=45000)
@@ -453,9 +456,16 @@ class Scraper:
             item = {h: r[IDX[h]] for h in OUTPUT_HEADERS}
             out.append({ENGLISH_KEYS[k]: v for k, v in item.items()} if self.english else item)
         if out:
-            await Actor.push_data(out)
+            # Pay-per-event: one 'review' event per row; the SDK never charges past the user's max charge.
+            await Actor.push_data(out, charged_event_name='review')
             self.pushed += len(out)
         return len(out)
+
+    def budget_left(self) -> bool:
+        try:
+            return not Actor.get_charging_manager().is_event_charge_limit_reached('review')
+        except Exception:
+            return True
 
     async def run_region(self, region: str, markets: list[str]):
         page = await self.ctx.new_page()
@@ -519,6 +529,16 @@ async def main() -> None:
             store = parse_session(inp['storefrontSession'], 'www.amazon.com')
             Actor.log.info(f'[storefront] session loaded: {fingerprint(store)}')
             cookies += store
+        if not cookies:
+            # Nothing to authenticate with (e.g. a first look at the actor, or Apify's automated
+            # daily test run on the prefilled input) — explain the setup instead of failing.
+            msg = ('No Seller Central session pasted. Paste a session for each region you selected '
+                   '(see "How to copy your login session" in the README), then start again.')
+            Actor.log.warning(msg)
+            await Actor.set_value('SESSION_HEALTH', {'finishedAt': datetime.now(timezone.utc).isoformat(), 'reviews': 0,
+                                                     'marketplaces': {m: {'status': 'NO_SESSION'} for m in markets}})
+            await Actor.exit(status_message=msg)
+            return
         for region in missing:
             Actor.log.error(f'No session pasted for {region} — skipping {by_region.pop(region)}')
 

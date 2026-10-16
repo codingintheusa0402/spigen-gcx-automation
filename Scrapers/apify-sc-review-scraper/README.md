@@ -110,6 +110,26 @@ Prefer English keys (`asin`, `createdDate`, `hasPhoto` …)? Set **Output field 
 
 ***
 
+### 💰 How much does it cost?
+
+**From $2.50 per 1,000 reviews.** It's pay-per-event, so platform usage isn't billed on top, and you're **charged only for review rows delivered**. Expired or missing sessions and failed regions cost nothing beyond the run start.
+
+| Your Apify plan | Price per review | Per 1,000 reviews |
+|---|---|---|
+| Free | $0.008 | $8.00 |
+| Starter | $0.006 | $6.00 |
+| Scale | $0.005 | $5.00 |
+| Business | $0.004 | $4.00 |
+| Platinum / Diamond | $0.003 / $0.0025 | $3.00 / $2.50 |
+
+Plus **$0.01 per run** (browser start).
+
+**Examples (Starter plan):** a daily incremental run of ~150 new reviews ≈ $0.91, a full export of 1,500 reviews × 4 marketplaces ≈ $36.01, and the Free plan's monthly credit covers about 600 reviews to test with.
+
+**Keep costs predictable:** set *Maximum cost per run* in the run options. The actor stops cleanly when it's reached, and it never bills past it.
+
+***
+
 ### 📸 Reviewer photos (optional)
 
 Amazon shows review photos only to **signed-in shoppers**, and that's a different login from Seller Central. To fill `사진 유무` / `Image URL`:
