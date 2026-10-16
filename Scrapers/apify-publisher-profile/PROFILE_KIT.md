@@ -39,6 +39,7 @@ We build focused, fast and fairly priced Apify actors:
 
 ### 🛒 E-commerce
 - [Amazon ASIN Rating & Review Count Scraper](https://apify.com/k-data-lab/amazon-asin-rating-scraper): star ratings and review counts for any ASIN list, 19 Amazon sites, from $2 / 1,000
+- [Amazon Seller Central Review Scraper](https://apify.com/k-data-lab/amazon-seller-central-review-scraper): export Brand Customer Reviews with Order IDs and photos for US/EU/JP/IN using your own session, from $4 / 1,000
 
 *Coming soon: Coupang, Naver Smart Store & Naver Shopping, Korean real estate (네이버부동산, 부동산114, KB부동산), Instagram.*
 
@@ -46,8 +47,12 @@ We build focused, fast and fairly priced Apify actors:
 Open an issue on any actor. Feature requests and new-site requests are welcome.
 ```
 
-## 3. Actor → Publication → Display information → Icon
-Upload `../apify-asin-rating-scraper/icon.png`.
+## 3. Actor icons (Console only — the API rejects any picture URL not uploaded through Console)
+Log in to Console as **cosmic_meteorite**, then for each actor: Actor → Publication → Display information → Icon → upload:
+- Amazon ASIN Rating & Review Count Scraper → `icons/amazon-asin-rating-scraper.png`
+- Amazon Seller Central Review Scraper → `icons/amazon-seller-central-review-scraper.png`
+
+Brand system: deep-blue gradient tile, white K-Data Lab "K" monogram badge top-left (gold lower arm), one gold accent symbol per actor, white main pictogram. Reuse `icons3.py`-style layout for every new actor.
 
 ## Naming convention for future actors (keeps the profile coherent)
 - Name pattern: `<platform>-<what>-scraper`, e.g. `coupang-product-scraper`, `naver-land-listings-scraper`
