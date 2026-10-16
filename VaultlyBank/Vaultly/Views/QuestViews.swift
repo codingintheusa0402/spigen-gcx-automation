@@ -4,7 +4,6 @@ import SwiftUI
 struct QuestCard: View {
     @EnvironmentObject var store: BankStore
     let quest: Quest
-    @State private var result: BankStore.QuestResult?
     @State private var confirmIndex: Int?
 
     var body: some View {
@@ -32,14 +31,10 @@ struct QuestCard: View {
             }
         }
         .confirmationDialog(confirmIndex.map { quest.options[$0].title } ?? "", isPresented: Binding(get: { confirmIndex != nil }, set: { if !$0 { confirmIndex = nil } }), titleVisibility: .visible) {
-            Button("이렇게 한다") { if let i = confirmIndex { result = store.answerQuest(i) }; confirmIndex = nil }
+            Button("이렇게 한다") { if let i = confirmIndex { store.answerQuest(i) }; confirmIndex = nil }
             Button("취소", role: .cancel) { confirmIndex = nil }
         } message: { Text("한 번 정하면 되돌릴 수 없습니다.") }
-        .sheet(item: Binding(get: { result.map { IdentifiedResult(r: $0) } }, set: { _ in result = nil })) { r in
-            OutcomeSheet(result: r.r).presentationDetents([.medium])
-        }
     }
-    private struct IdentifiedResult: Identifiable { let id = UUID(); let r: BankStore.QuestResult }
 
     private func optionLabel(_ opt: QuestOption, primary: Bool) -> some View {
         let fg: Color = primary ? store.theme.onAccent : .primary
@@ -105,6 +100,7 @@ struct LifeView: View {
             }
         }
         .sheet(isPresented: $showEnding) { EndingView() }
+        .sheet(item: $store.questResult) { OutcomeSheet(result: $0).presentationDetents([.medium]) }
         .onAppear { showEnding = store.game.isEnded }
         .onChange(of: store.game.isEnded) { _, ended in showEnding = ended }
     }

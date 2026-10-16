@@ -21,6 +21,7 @@ final class BankStore: ObservableObject {
     }
     @Published var banner: BannerMessage?
     @Published var notificationsAuthorized = false
+    @Published var questResult: QuestResult?       // last answered quest → OutcomeSheet (presented by Home/LifeView)
 
     private var timer: AnyCancellable?
 
@@ -394,7 +395,8 @@ final class BankStore: ObservableObject {
     var netWorth: Decimal { QuestEngine.netWorth(data) }
     var age: Int { data.game.age(at: now) }
 
-    struct QuestResult {
+    struct QuestResult: Identifiable {
+        let id = UUID()
         let title: String
         let text: String
         let cash: Decimal
@@ -479,7 +481,9 @@ final class BankStore: ObservableObject {
         syncNotifications()
         unlockAchievements(now: now)
         WidgetBridge.publish(store: self)
-        return QuestResult(title: opt.title, text: lines.joined(separator: "\n"), cash: e.cash, delayed: delayed, delayMonths: delayMonths)
+        let result = QuestResult(title: opt.title, text: lines.joined(separator: "\n"), cash: e.cash, delayed: delayed, delayMonths: delayMonths)
+        questResult = result
+        return result
     }
 
     /// Answer from a notification action: the quest must be the pending one (catchUp ran first).

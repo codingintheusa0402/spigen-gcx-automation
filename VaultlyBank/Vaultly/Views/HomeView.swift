@@ -1,5 +1,27 @@
 import SwiftUI
 
+/// Value-based routes for the Home stack. Mixing view-based NavigationLinks with
+/// navigationDestination(for:) makes the view links re-push when the path changes, so everything is a value.
+enum HomeRoute: Hashable {
+    case history(UUID?), life, challenge, report, goals
+}
+
+extension View {
+    func homeRoutes() -> some View {
+        self.navigationDestination(for: HomeRoute.self) { r in
+            switch r {
+            case .history(let id): TransactionsView(accountID: id)
+            case .life: LifeView()
+            case .challenge: ChallengeView()
+            case .report: ReportView()
+            case .goals: GoalsView()
+            }
+        }
+        .navigationDestination(for: UUID.self) { AccountDetailView(accountID: $0) }
+        .navigationDestination(for: Transaction.self) { TransactionDetailView(tx: $0) }
+    }
+}
+
 struct HomeView: View {
     @EnvironmentObject var store: BankStore
     @State private var showAddAccount = false
@@ -61,7 +83,7 @@ struct HomeView: View {
                             HStack {
                                 Text("최근 거래").font(.app(.title3, .bold))
                                 Spacer()
-                                NavigationLink { TransactionsView() } label: { Text("전체보기").font(.app(.subheadline)).foregroundStyle(.secondary) }
+                                NavigationLink(value: HomeRoute.history(nil)) { Text("전체보기").font(.app(.subheadline)).foregroundStyle(.secondary) }
                             }
                             TossTransactionList(transactions: Array(store.recentTransactions.prefix(10)), showAccount: true)
                         }
@@ -71,9 +93,9 @@ struct HomeView: View {
             }
             .background(store.theme.background)
             .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(for: UUID.self) { AccountDetailView(accountID: $0) }
-            .navigationDestination(for: Transaction.self) { TransactionDetailView(tx: $0) }
+            .homeRoutes()
             .sheet(isPresented: $showAddAccount) { AddAccountSheet() }
+            .sheet(item: $store.questResult) { OutcomeSheet(result: $0).presentationDetents([.medium]) }
             .sheet(isPresented: Binding(get: { store.game.isEnded && !endingShown }, set: { _ in endingShown = true })) { EndingView() }
         }
     }
@@ -83,7 +105,7 @@ struct HomeView: View {
     /// "만 34세 · 🏠 중산층 · 부자까지 12%" → 내 인생
     @ViewBuilder private var lifeRow: some View {
         if store.lifestyle.tier != nil {
-            NavigationLink { LifeView() } label: {
+            NavigationLink(value: HomeRoute.life) {
                 HStack(spacing: 10) {
                     Text(store.currentTier.emoji)
                     Text("만 \(store.age)세 · \(store.currentTier.title)").font(.app(.subheadline, .semibold))
@@ -132,7 +154,7 @@ struct HomeView: View {
                         }
                     }
                     upcoming
-                    section("최근 거래", trailing: { NavigationLink { TransactionsView() } label: { Text("전체보기").font(.app(.subheadline)) } }) {
+                    section("최근 거래", trailing: { NavigationLink(value: HomeRoute.history(nil)) { Text("전체보기").font(.app(.subheadline)) } }) {
                         Card {
                             if store.recentTransactions.isEmpty {
                                 Text("거래 내역이 없습니다").foregroundStyle(.secondary)
@@ -148,8 +170,8 @@ struct HomeView: View {
             }
             .background(store.theme.background)
             .navigationTitle(store.brand.bank)
-            .navigationDestination(for: UUID.self) { AccountDetailView(accountID: $0) }
-            .navigationDestination(for: Transaction.self) { TransactionDetailView(tx: $0) }
+            .homeRoutes()
+            .sheet(item: $store.questResult) { OutcomeSheet(result: $0).presentationDetents([.medium]) }
             .sheet(isPresented: Binding(get: { store.game.isEnded && !endingShown }, set: { _ in endingShown = true })) { EndingView() }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -198,12 +220,12 @@ struct HomeView: View {
         let saved = store.challenge.total(inMonthOf: now)
         let report = store.report(for: now)
         return HStack(spacing: 12) {
-            NavigationLink { ChallengeView() } label: {
+            NavigationLink(value: HomeRoute.challenge) {
                 quickTile(title: "무지출 챌린지", symbol: "flame.fill", tint: .orange,
                           value: Money.format(saved, code: store.currency),
                           sub: streak > 0 ? "🔥 \(streak)일 연속" : "참은 돈 쌓기")
             }.buttonStyle(.plain).accessibilityIdentifier("tile-challenge")
-            NavigationLink { ReportView() } label: {
+            NavigationLink(value: HomeRoute.report) {
                 quickTile(title: "이번 달 소비", symbol: "chart.pie.fill", tint: store.theme.accent,
                           value: Money.format(report.spent, code: store.currency),
                           sub: report.changeRatio.map { String(format: "지난달 대비 %@%.0f%%", $0 >= 0 ? "+" : "", $0 * 100) } ?? "리포트 보기")
@@ -235,7 +257,7 @@ struct HomeView: View {
                     HStack {
                         Text("저축 목표").font(.app(.headline, .semibold))
                         Spacer()
-                        NavigationLink { GoalsView() } label: { Text("전체").font(.app(.subheadline)).foregroundStyle(.secondary) }
+                        NavigationLink(value: HomeRoute.goals) { Text("전체").font(.app(.subheadline)).foregroundStyle(.secondary) }
                     }
                     ForEach(store.goals.prefix(3)) { g in
                         let bal = store.account(g.accountID)?.balance ?? 0

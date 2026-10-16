@@ -73,7 +73,6 @@ struct TransactionsView: View {
         .background(store.theme.background)
         .navigationTitle(accountID == nil ? "전체 거래내역" : "거래내역")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(for: Transaction.self) { TransactionDetailView(tx: $0) }
     }
 
     private var summary: some View {

@@ -12,7 +12,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        [.banner, .sound, .list]
+        // The quest card is already on screen while the app is open; only alert outside the app.
+        notification.request.content.categoryIdentifier == NotificationService.questCategory ? [] : [.banner, .sound, .list]
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {

@@ -29,7 +29,7 @@ struct AccountDetailView: View {
                     HStack {
                         Text("거래 내역").font(.app(.headline, .semibold))
                         Spacer()
-                        NavigationLink { TransactionsView(accountID: accountID) } label: { Text("기간·분류별 보기").font(.app(.subheadline)) }
+                        NavigationLink(value: HomeRoute.history(accountID)) { Text("기간·분류별 보기").font(.app(.subheadline)) }
                     }
                     if store.theme.style == .toss {
                         TossTransactionList(transactions: Array(store.transactions(for: accountID).prefix(60)))
@@ -67,7 +67,6 @@ struct AccountDetailView: View {
             }
             .navigationTitle(account.name)
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(for: Transaction.self) { TransactionDetailView(tx: $0) }
             .toolbarRole(store.theme.style == .toss ? .editor : .automatic)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
