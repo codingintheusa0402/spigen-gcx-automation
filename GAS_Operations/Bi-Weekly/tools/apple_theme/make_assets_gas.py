@@ -14,6 +14,12 @@ chart = b64(os.path.join(HERE, 'weekly_chart.png')) if os.path.exists(os.path.jo
 LAYOUT = [('p5','category',146,58,12),('p5','donut',146,232,12),('p7','bag',466,83,10),('p7','globe',466,207.5,9),('p7','report',586,207.5,9),
           ('p7','code',466,267.5,9),('p7','box',586,267.5,9),('p7','star',466,327.5,9),('p9','photos',43,85,10),('p9','sheet',175,85,10),
           ('p9','db',307,85,10),('p9','siren',439,85,10),('p9','doc',571,85,10)]
+# index icons follow report.json series order (newest first): 01 Overview, 02.. series, last SIREN
+_SERIES_ICON = {'iphone': 'iphone', 'pixel': 'phone', 'glx': 'fold', 'galaxy': 'fold'}
+IDX = {'01': 'insights'}
+for i, se in enumerate(CFG['series'], 2):
+    IDX['%02d' % i] = next((v for k, v in _SERIES_ICON.items() if se['key'].lower().startswith(k)), 'phone')
+IDX['%02d' % (len(CFG['series']) + 2)] = 'siren'
 js = '''// TEMP (bi-weekly-builder): icons + weekly chart + layout icons for the Apple deck. Delete after running.
 function aaRun() { aaPlaceIcons(); aaSwapChart(); aaLayoutIcons(); }
 const AA_DECK = '%(deck)s';
@@ -26,7 +32,7 @@ function _aaText(el) { try { return el.asShape().getText().asString().trim(); } 
 function aaPlaceIcons() {
   const pres = SlidesApp.openById(AA_DECK);
   const cardKeys = ['globe', 'report', 'code', 'box', 'star'], appx = ['photos', 'sheet', 'db', 'siren', 'doc'];
-  const idxKeys = { '01': 'insights', '02': 'fold', '03': 'phone', '04': 'iphone', '05': 'siren' };
+  const idxKeys = %(idx)s;
   pres.getSlides().forEach(function(slide) {
     const els = slide.getPageElements();
     if (els.some(function(e) { return e.getTitle && e.getTitle() === 'apl_icon'; })) return;
@@ -68,6 +74,6 @@ function aaLayoutIcons() {
   AA_LAYOUT.forEach(function(p) { if (byId[p[0]]) _aaIcon(byId[p[0]], p[1], p[2], p[3], p[4], 'lay_icon'); });
   pres.saveAndClose();
 }
-''' % {'deck': CFG['apple_deck'], 'icons': json.dumps(icons), 'chart': chart, 'layout': json.dumps(LAYOUT)}
+''' % {'idx': json.dumps(IDX), 'deck': CFG['apple_deck'], 'icons': json.dumps(icons), 'chart': chart, 'layout': json.dumps(LAYOUT)}
 out = os.path.join(HERE, '..', '..', 'AppleAssets.js')
 open(out, 'w').write(js); print('wrote', os.path.normpath(out), len(js), 'chars; icons', sorted(icons))

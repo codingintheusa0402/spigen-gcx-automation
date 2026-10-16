@@ -50,7 +50,7 @@ def siren_and_end():
                 t = txt(e)
                 if t == LABEL or (_isnum(t) and bx - 20 <= _bbox(e)[0] + _bbox(e)[2]/2 <= bx + bw + 20 and by - 30 <= _bbox(e)[1] + _bbox(e)[3]/2 <= by + bh + 30):
                     sw, sh = e['size']['width']['magnitude'], e['size']['height']['magnitude']
-                    x, w = (bx + 14, bw - 70) if t == LABEL else (bx + bw - 58, 46)
+                    x, w = (bx + 10, bw - 58) if t == LABEL else (bx + bw - 58, 46)
                     reqs.append({'updatePageElementTransform': {'objectId': e['objectId'], 'applyMode': 'ABSOLUTE', 'transform': {
                         'scaleX': w*E/sw, 'scaleY': bh*E/sh, 'translateX': x*E, 'translateY': by*E, 'unit': 'EMU'}}})
                     reqs.append({'updateShapeProperties': {'objectId': e['objectId'], 'shapeProperties': {'contentAlignment': 'MIDDLE', 'autofit': {'autofitType': 'NONE'}}, 'fields': 'contentAlignment,autofit.autofitType'}})
