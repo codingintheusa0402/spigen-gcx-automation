@@ -23,6 +23,12 @@ def runs(e): return [x['textRun'] for x in e.get('shape', {}).get('text', {}).ge
 def txt(e): return ''.join(r['content'] for r in runs(e)).strip()
 def xy(e): t = e['transform']; return t.get('translateX', 0) / E, t.get('translateY', 0) / E
 def esc(s): return H.escape(s)
+def pname(n):   # same rule as Code.js _chartProductName: drop SP_, "_new_biz__ev25mfaq" -> "EV25MFAQ"
+    n = n.strip(); n = n[3:] if n.startswith('SP_') else n
+    if '_' not in n: return n
+    parts = [t for t in n.split('_') if t]; return parts[-1].upper() if parts else n
+UNKNOWN = re.compile(r'^(알\s*수\s*없음|unknown|n/?a|없음|-)$', re.I)
+NW = 'white-space:nowrap;'
 def title_of(sl): return next((txt(e) for e in walk(sl['pageElements']) if xy(e)[1] < 30 and txt(e)), '')
 def slide_link(sid): return f'https://docs.google.com/presentation/d/{DECK}/edit#slide=id.{sid}'
 
@@ -30,8 +36,8 @@ def slide_link(sid): return f'https://docs.google.com/presentation/d/{DECK}/edit
 def tile(inner, pad='22px 24px', mb=14): return f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:18px;margin:0 0 {mb}px"><tr><td style="padding:{pad};font-size: 11px;color:#1D1D1F">{inner}</td></tr></table>'
 def h2(t, sub='', href=''):
     a = f'<a href="{href}" style="color:#1d1d1f;text-decoration:none">{esc(t)}</a>' if href else esc(t)
-    s = f' <span style="color:{GRAY2};font-weight:600">{esc(sub)}</span>' if sub else ''
-    return f'<div style="font:700 19px {F};color:{INK};margin:4px 0 12px;line-height:1.3">{a}{s}</div>'
+    s = f'<div style="font:600 12px {F};color:{GRAY2};margin-top:3px">{esc(sub)}</div>' if sub else ''
+    return f'<div style="font:700 19px {F};color:{INK};margin:4px 0 12px;line-height:1.25">{a}{s}</div>'
 def lab(t, extra=''): return f'<div style="font:600 13px {F};color:{INK};margin:2px 0 10px">{esc(t)} <span style="color:{GRAY2};font-weight:400">{esc(extra)}</span></div>'
 def num(n): return f'{n:,}'
 
@@ -57,9 +63,9 @@ def dashboard(sl):
         main = next(t for t in ts if re.search(r'\d', t)); eng = next((t for t in ts if re.fullmatch(r'[A-Za-z ]+', t)), '')
         tiles.append((rank, main, eng, icons[min(n, len(icons) - 1)]['image']['imageProperties']['link']['url']))
     head_link = min(imgs, key=lambda i: xy(i)[1])['image']['imageProperties']['link']['url']
-    cells = ''.join(f'<td width="33%" style="padding:0 {6 if i < 2 else 0}px 0 0"><a href="{u}" style="text-decoration:none;display:block;background:{CANVAS};border-radius:14px;padding:12px 14px">'
-                    f'<div style="font:700 12px {F};color:{RED if i == 0 else BLUE}">{rk}</div><div style="font:700 16px {F};color:#1d1d1f;margin:4px 0 2px">{esc(m)}</div>'
-                    f'<div style="font:400 11px {F};color:{GRAY}">{esc(en)} &rsaquo;</div></a></td>' for i, (rk, m, en, u) in enumerate(tiles))
+    cells = ''.join(f'<td width="33%" valign="top" style="padding:0 {6 if i < 2 else 0}px 0 0"><a href="{u}" style="text-decoration:none;display:block;background:{CANVAS};border-radius:14px;padding:12px 14px">'
+                    f'<div style="font:700 12px {F};color:{RED if i == 0 else BLUE}">{rk}</div><div style="font:700 15px {F};color:#1d1d1f;margin:4px 0 2px;{NW}">{esc(m)}</div>'
+                    f'<div style="font:400 11px {F};color:{GRAY};{NW}">{esc(en)} &rsaquo;</div></a></td>' for i, (rk, m, en, u) in enumerate(tiles))
     # weekly bar chart as HTML (table cells), same data/window as chart.py
     wk = json.load(open(os.path.join(HERE, 'weekly.json')))['weeks']
     key = lambda l: tuple(int(x) for x in re.match(r'(\d+)월 (\d+)주 (\d+)년', l).groups()[::-1][:1] + re.match(r'(\d+)월 (\d+)주', l).groups())
@@ -97,12 +103,19 @@ def gauges(sl):
             name = next((txt(e) for e in els if abs(xy(e)[0] - cx) < 3 and 10 < xy(e)[1] - cy < 25), '')
             L = next((txt(e).split('\n') for e in els if abs(xy(e)[0] - cx - 7) < 3 and 25 < xy(e)[1] - cy < 45), [])
             V = next((txt(e).split('\n') for e in els if 60 < xy(e)[0] - cx < 100 and 25 < xy(e)[1] - cy < 45), [])
+            L = [pname(l) for l in L]; name = pname(name)
+            pairs = list(zip(L, V)); unk = sum(int(v) for l, v in pairs if UNKNOWN.match(l) and v.strip().isdigit())
+            pairs = [(l, v) for l, v in pairs if not UNKNOWN.match(l)]
+            if unk:
+                pairs = [(l, str(int(v) + unk) if l == '그 외' else v) for l, v in pairs]
+                if not any(l == '그 외' for l, _ in pairs): pairs.append(('그 외', str(unk)))
+            L, V = [l for l, _ in pairs], [v for _, v in pairs]
             vals = [int(v) for v in V if v.strip().isdigit()]; tot = sum(vals) or 1
             bar = ''.join(f'<td style="background:{RING[j % 4]};height:6px;width:{max(1, round(v / tot * 100))}%"></td>' for j, v in enumerate(vals) if v)
-            rows = ''.join(f'<tr><td style="font:400 11px {F};color:{INK};padding:2px 0"><span style="display:inline-block;width:7px;height:7px;border-radius:4px;background:{RING[j % 4]};margin-right:5px"></span>{esc(l)}</td>'
-                           f'<td align="right" style="font:400 11px {F};color:{GRAY};padding:2px 0">{v}</td></tr>' for j, (l, v) in enumerate(zip(L, V)))
+            rows = ''.join(f'<tr><td style="font:400 11px {F};color:{INK};padding:2px 0;{NW}max-width:132px;overflow:hidden;text-overflow:ellipsis"><span style="display:inline-block;width:7px;height:7px;border-radius:4px;background:{RING[j % 4]};margin-right:5px"></span>{esc(l)}</td>'
+                           f'<td align="right" style="font:400 11px {F};color:{GRAY};padding:2px 0 2px 6px;{NW}">{v}</td></tr>' for j, (l, v) in enumerate(zip(L, V)))
             cells += (f'<td width="33%" valign="top" style="padding:0 {8 if i < 2 else 0}px 0 0"><div style="background:{CANVAS};border-radius:14px;padding:14px 14px 10px">'
-                      f'<div style="font:600 10px {F};color:{GRAY2}">{i + 1}</div><div style="font:700 20px {F};color:{INK};line-height:1.2">{esc(txt(c))}</div>'
+                      f'<div style="font:600 10px {F};color:{GRAY2}">{i + 1}</div><div style="font:700 20px {F};color:{INK};line-height:1.2;{NW}">{esc(txt(c))}</div>'
                       f'<div style="font:400 11px {F};color:{GRAY};margin:2px 0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{esc(name)}</div>'
                       f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-radius:3px;overflow:hidden;margin-bottom:8px"><tr>{bar}</tr></table>'
                       f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0">{rows}</table></div></td>')
@@ -115,7 +128,8 @@ def top7(sl):
     tb = next(e for e in walk(sl['pageElements']) if 'table' in e)['table']
     cell = lambda r, c: ''.join(x.get('textRun', {}).get('content', '') for x in tb['tableRows'][r]['tableCells'][c].get('text', {}).get('textElements', [])).strip()
     foot = next((txt(e) for e in walk(sl['pageElements']) if txt(e).startswith('출처')), '')
-    hdr = ''.join(f'<td style="font:600 10px {F};color:{GRAY2};padding:6px 4px;border-bottom:1px solid {HAIR}" align="{"left" if c == 1 else "center"}">{esc(cell(0, c))}</td>' for c in range(tb['columns']) if c != 0)
+    HL = {1: '제품 (기종 / 모델 / 색상)', 2: 'SKU', 3: 'ASIN', 4: '판매량(EU)', 5: '클레임', 6: '배드리뷰', 7: '비율'}
+    hdr = ''.join(f'<td style="font:600 10px {F};color:{GRAY2};padding:6px 4px;border-bottom:1px solid {HAIR};{NW}" align="{"left" if c == 1 else "center"}">{HL.get(c, esc(cell(0, c)))}</td>' for c in range(tb['columns']) if c != 0)
     rows = ''
     for r in range(1, tb['rows']):
         name = cell(r, 1).split('\n'); sku, asin = cell(r, 2), cell(r, 3); rate = cell(r, 7)
@@ -124,8 +138,8 @@ def top7(sl):
         red = float(rate.rstrip('%') or 0) >= 2
         rows += (f'<tr><td style="padding:7px 4px;border-bottom:1px solid {HAIR}"><table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="padding-right:8px">{pic}</td>'
                  f'<td style="font:600 11px {F};color:{INK}">{esc(name[0])}<div style="font:400 10px {F};color:{GRAY2}">{esc(" ".join(name[1:]))}</div></td></tr></table></td>'
-                 + ''.join(f'<td align="center" style="font:400 11px {F};color:{INK};padding:7px 4px;border-bottom:1px solid {HAIR}">{esc(v)}</td>' for v in (sku, asin, cell(r, 4), cell(r, 5), cell(r, 6)))
-                 + f'<td align="center" style="font:600 11px {F};color:{RED if red else INK};padding:7px 4px;border-bottom:1px solid {HAIR}">{esc(rate)}</td></tr>')
+                 + ''.join(f'<td align="center" style="font:400 11px {F};color:{INK};padding:7px 4px;border-bottom:1px solid {HAIR};{NW}">{esc(v)}</td>' for v in (sku, asin, cell(r, 4), cell(r, 5), cell(r, 6)))
+                 + f'<td align="center" style="font:600 11px {F};color:{RED if red else INK};padding:7px 4px;border-bottom:1px solid {HAIR};{NW}">{esc(rate)}</td></tr>')
     t = title_of(sl); m = re.match(r'^(Overview \([^)]*\))\s*(.*)$', t)
     return tile(h2(m.group(1), m.group(2), slide_link(sl['objectId'])) + f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>{hdr}</tr>{rows}</table>'
                 f'<div style="font:400 9px {F};color:{GRAY2};margin-top:8px;line-height:1.5">{esc(foot)}</div>')
@@ -147,14 +161,14 @@ def siren(slides):
             view = f'<a href="{link}" style="color:{LINK};text-decoration:none;font-weight:600">보기</a>' if link else ''
             new = ct(0) >= CFG['period']['start'].replace('-', '/')
             rows += (f'<tr><td style="font:400 11px {F};color:{RED if new else INK};padding:7px 4px;border-bottom:1px solid {HAIR};white-space:nowrap">{esc(ct(0))}</td>'
-                     f'<td align="center" style="font:400 11px {F};padding:7px 4px;border-bottom:1px solid {HAIR}">{view}</td>'
+                     f'<td align="center" style="font:400 11px {F};padding:7px 4px;border-bottom:1px solid {HAIR};{NW}">{view}</td>'
                      f'<td style="font:400 11px {F};color:{INK};padding:7px 4px;border-bottom:1px solid {HAIR}">{esc(ct(2))}</td>'
-                     f'<td style="font:400 11px {F};color:{INK};padding:7px 4px;border-bottom:1px solid {HAIR}">{esc(ct(3)).replace(chr(10), "<br>")}</td>'
+                     f'<td style="font:400 11px {F};color:{INK};padding:7px 4px;border-bottom:1px solid {HAIR};{NW}">{esc(ct(3)).replace(chr(10), "<br>")}</td>'
                      f'<td style="font:400 11px {F};color:{INK};padding:7px 4px;border-bottom:1px solid {HAIR}">{esc(ct(4))}</td>'
                      f'<td align="center" style="font:400 11px {F};color:{INK};padding:7px 4px;border-bottom:1px solid {HAIR}">{esc(ct(5))}</td></tr>')
-    hdr = ''.join(f'<td style="font:600 10px {F};color:{GRAY2};padding:6px 4px;border-bottom:1px solid {HAIR}">{h}</td>' for h in ('날짜', 'SIREN', '기종+제품', 'SKU', '이슈', '등록'))
+    hdr = ''.join(f'<td style="font:600 10px {F};color:{GRAY2};padding:6px 4px;border-bottom:1px solid {HAIR};{NW}" align="{a}">{h}</td>' for h, a in (('날짜', 'left'), ('SIREN', 'center'), ('기종+제품', 'left'), ('SKU', 'left'), ('이슈', 'left'), ('등록', 'center')))
     foot = (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:14px"><tr><td><a href="{sheet}" style="display:inline-block;border:1.5px solid {BLUE};color:{BLUE};font:600 12px {F};text-decoration:none;padding:8px 16px;border-radius:980px">26년 SIREN 시트 열기</a></td>'
-            f'<td align="right"><span style="font:400 12px {F};color:{GRAY}">2026 SIREN Registered by GCX</span> <span style="font:700 26px {F};color:{INK};vertical-align:middle">{esc(count)}</span></td></tr></table>')
+            f'<td align="right" style="{NW}"><span style="font:400 12px {F};color:{GRAY}">2026 SIREN Registered by GCX</span> <span style="font:700 26px {F};color:{INK};vertical-align:middle">{esc(count)}</span></td></tr></table>')
     return tile(h2(title_of(slides[0]), href=slide_link(slides[0]['objectId'])) + f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>{hdr}</tr>{rows}</table>' + foot)
 
 # ---------- assemble ----------

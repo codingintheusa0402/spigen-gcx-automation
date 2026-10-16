@@ -18,6 +18,13 @@ SRV_P=-Users-kevin
 MAC_UD="$HOME/Library/Application Support/Claude Mesh"
 LOG="$HOME/.gcx-mesh-sync.log"
 log(){ echo "[$(date '+%F %T')] $*" >> "$LOG"; }
+# one run at a time: two overlapping merges would both append the same missing lines
+LOCK="$HOME/.gcx-mesh-sync.lock"
+if ! mkdir "$LOCK" 2>/dev/null; then
+  if [ -n "$(find "$LOCK" -maxdepth 0 -mmin +30 2>/dev/null)" ]; then rmdir "$LOCK" 2>/dev/null; mkdir "$LOCK" 2>/dev/null || exit 0; log "stale lock removed"
+  else log "previous run still going, skipped"; exit 0; fi
+fi
+trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 ssh -o ConnectTimeout=8 -o BatchMode=yes $H true 2>/dev/null || { log "server unreachable"; exit 0; }
 
 # ---- 1. peer links (only rewritten when something changed) ----

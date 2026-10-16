@@ -9,6 +9,16 @@ const BW_RUN = {
   appleDeck: '1sJ49LsEqMFrFyykAsgpWIREO9SCnWa5GW-ILEBLbG8Q',
   // Overview TOP3 slides: claims = Zendesk 4. Product Issue (cumulative, device filter per series);
   // bad reviews = series 1-3점 minus '긍정 리뷰'; 전제품 = 2026-01-01 ~ latest.
+  // Same jobs for the FINAL (golden-base) deck, whose transplanted slides have their own ids.
+  appleOverview: [
+    { id: 'SLIDES_API1905798936_0',     dataSource: 'zendesk', category: '4. Product Issue', startDate: '2026-01-01' },
+    { id: 'SLIDES_API1905798936_88',    dataSource: 'zendesk', category: '4. Product Issue', devices: ['iPhone 18'] },
+    { id: 'SLIDES_API1905798936_176',   dataSource: 'zendesk', category: '4. Product Issue', devices: ['Google Pixel 11'] },
+    { id: 'SLIDES_API1905798936_264',   dataSource: 'zendesk', category: '4. Product Issue', devices: ['Galaxy Z Fold 8', 'Galaxy Z Flip 8'] },
+    { id: 'SLIDES_API1905798936_16586', dataSource: 'badReview:iphone18', excludeReasons: ['긍정 리뷰'] },
+    { id: 'SLIDES_API1905798936_16674', dataSource: 'badReview:glxZ8',    excludeReasons: ['긍정 리뷰'] },
+    { id: 'SLIDES_API1905798936_16762', dataSource: 'badReview:pixel11',  excludeReasons: ['긍정 리뷰'] }
+  ],
   overview: [
     { id: 'g3fa83ee22f0_1_27',  dataSource: 'zendesk', category: '4. Product Issue', startDate: '2026-01-01' },
     { id: 'g3fa83ee22f0_1_76',  dataSource: 'badReview:glxZ8',    excludeReasons: ['긍정 리뷰'] },
@@ -21,10 +31,10 @@ const BW_RUN = {
 };
 
 // Same grids on the Apple copy (BW_RUN.appleDeck), apple theme, #F5F5F7 canvas.
-function bwRunOverviewApple() { _bwOverview(SlidesApp.openById(BW_RUN.appleDeck), CHART_THEMES.apple, 'bw_overview_apple_done_' + BW_RUN.end); }
+function bwRunOverviewApple() { _bwOverview(SlidesApp.openById(BW_RUN.appleDeck), CHART_THEMES.apple, 'bw_overview_apple_v2_done_' + BW_RUN.end, BW_RUN.appleOverview); }
 
 // Overview TOP3 grids on the ACTIVE deck, classic theme. Resumable across the 6-min cap.
-function bwRunOverview() { _bwOverview(_bwDeck(), CHART_THEMES.classic, 'bw_overview_done_' + BW_RUN.end); }
+function bwRunOverview() { _bwOverview(_bwDeck(), CHART_THEMES.classic, 'bw_overview_v2_done_' + BW_RUN.end); }
 
 // Claim/review cards for BW_RUN.start..end into the ACTIVE (bound) deck. Re-runs only add missing cards.
 function bwRunCards() {
@@ -37,12 +47,13 @@ function bwRunCards() {
 function _bwDeck() { return BW_RUN.deck ? SlidesApp.openById(BW_RUN.deck) : SlidesApp.getActivePresentation(); }
 
 
-function _bwOverview(pres, theme, doneKey) {
+function _bwOverview(pres, theme, doneKey, jobs) {
+  jobs = jobs || BW_RUN.overview;
   CHART_THEME = theme;
   const props = PropertiesService.getScriptProperties();
   const done = JSON.parse(props.getProperty(doneKey) || '{}');
   const started = Date.now();
-  BW_RUN.overview.forEach(function(job) {
+  jobs.forEach(function(job) {
     if (done[job.id] || Date.now() - started > 240 * 1000) return;
     const slide = pres.getSlideById(job.id);
     if (!slide) { Logger.log('missing slide ' + job.id); return; }
@@ -51,7 +62,7 @@ function _bwOverview(pres, theme, doneKey) {
     props.setProperty(doneKey, JSON.stringify(done));
   });
   pres.saveAndClose();
-  Logger.log('DONE ' + Object.keys(done).length + '/' + BW_RUN.overview.length + ' ' + JSON.stringify(done));
+  Logger.log('DONE ' + Object.keys(done).length + '/' + jobs.length + ' ' + JSON.stringify(done));
 }
 
 // TEMP debug — read-only structure dump for the Claim/Review card template
@@ -1165,8 +1176,22 @@ function _fitLegendLine(line) {
 
 // Display name for a product: the Zendesk sheet prefixes some glass lines
 // with "SP_" (e.g. SP_Glas.tR EZ Fit Pro); the deck shows them without it.
+// Display/aggregation name: drop the SP_ prefix; internal codes like "_new_biz__ev25mfaq" → their last token in caps
+// ("EV25MFAQ") — user rule 2026-10-16, applies to every report.
 function _chartProductName(name) {
-  return String(name).replace(/^SP_/, '');
+  const s = String(name).trim().replace(/^SP_/, '');
+  if (s.indexOf('_') === -1) return s;
+  const parts = s.split('_').filter(function(t) { return t; });
+  return parts.length ? parts[parts.length - 1].toUpperCase() : s;
+}
+
+// "알 수 없음"-type labels are never ranked on their own — their count stays in 그 외 (user rule 2026-10-16).
+function _isUnknownLabel(s) {
+  return /^(알\s*수\s*없음|unknown|n\/?a|없음|-)$/i.test(String(s).trim());
+}
+function _rankKnown(obj, n) {
+  return Object.entries(obj).filter(function(e) { return !_isUnknownLabel(e[0]); })
+    .sort(function(a, b) { return (b[1].total !== undefined ? b[1].total - a[1].total : b[1] - a[1]); }).slice(0, n);
 }
 
 // Draws the 모델별 TOP3 / 인입사유별 TOP3 grid onto `slide`.
@@ -2022,7 +2047,7 @@ function buildTopProductsDataV2(sheet, rowCount, filters, topN, columns) {
   const productMap = {};
   for (let i = 0; i < rowCount; i++) {
     const category = String(categories[i]).trim();
-    const product  = String(products[i]).trim();
+    const product  = _chartProductName(String(products[i]).trim());
     const reason   = String(reasons[i]).trim();
     const device   = String(devices[i]).trim();
     if (!product || !reason) continue;
@@ -2035,15 +2060,11 @@ function buildTopProductsDataV2(sheet, rowCount, filters, topN, columns) {
     productMap[product].reasons[reason] = (productMap[product].reasons[reason] || 0) + 1;
   }
 
-  return Object.entries(productMap)
-    .sort(function(a, b) { return b[1].total - a[1].total; })
-    .slice(0, topN)
+  return _rankKnown(productMap, topN)
     .map(function(entry) {
       const productName = entry[0];
       const total       = entry[1].total;
-      const topReasons  = Object.entries(entry[1].reasons)
-        .sort(function(a, b) { return b[1] - a[1]; })
-        .slice(0, 3);
+      const topReasons  = _rankKnown(entry[1].reasons, 3);
       const topTotal = topReasons.reduce(function(s, r) { return s + r[1]; }, 0);
       return { productName: productName, total: total, reasons: topReasons, other: total - topTotal };
     });
@@ -2064,7 +2085,7 @@ function buildTopReasonsDataV2(sheet, rowCount, filters, topN, columns) {
   const reasonMap = {};
   for (let i = 0; i < rowCount; i++) {
     const category = String(categories[i]).trim();
-    const product  = String(products[i]).trim();
+    const product  = _chartProductName(String(products[i]).trim());
     const reason   = String(reasons[i]).trim();
     const device   = String(devices[i]).trim();
     if (!product || !reason) continue;
@@ -2077,15 +2098,11 @@ function buildTopReasonsDataV2(sheet, rowCount, filters, topN, columns) {
     reasonMap[reason].models[product] = (reasonMap[reason].models[product] || 0) + 1;
   }
 
-  return Object.entries(reasonMap)
-    .sort(function(a, b) { return b[1].total - a[1].total; })
-    .slice(0, topN)
+  return _rankKnown(reasonMap, topN)
     .map(function(entry) {
       const reasonName = entry[0];
       const total      = entry[1].total;
-      const topModels  = Object.entries(entry[1].models)
-        .sort(function(a, b) { return b[1] - a[1]; })
-        .slice(0, 3);
+      const topModels  = _rankKnown(entry[1].models, 3);
       const topTotal = topModels.reduce(function(s, m) { return s + m[1]; }, 0);
       return { reasonName: reasonName, total: total, models: topModels, other: total - topTotal };
     });
