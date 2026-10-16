@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # gcx-autosync: keep the GCX repo identical on the Mac and the GCX server.
-# Runs every 3 min on both (Mac: launchd com.spigen.gcx.git-autosync, server: cron).
+# Runs every 3 min on each host (MacBook + Mac mini: launchd com.spigen.gcx.git-autosync, server: cron).
 #   1. commit whatever changed here (git add -A — .gitignore keeps state/logs/data out)
 #   2. pull --rebase the other machine's commits from origin
 #   3. push (origin pushes to codingintheusa0402 + spigenHQ)
 # Never touches a repo mid-merge/rebase. On a conflict it aborts, leaves the local commit
 # unpushed and alerts the private Chat room once.
 REPO="$HOME/Desktop/GCX"; LOG="$HOME/.gcx-autosync.log"; LOCK="/tmp/gcx-autosync.lock"
-HOST=$( [ "$(uname)" = Darwin ] && echo mac || echo server )
+HOST=$( [ "$(uname)" != Darwin ] && echo server || { [ -f "$HOME/.gcx-host-mini" ] && echo mini || echo mac; } )
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 log(){ echo "[$(date '+%F %T')] $*" >> "$LOG"; }
 alert(){ local u
