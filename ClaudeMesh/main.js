@@ -368,6 +368,22 @@ ipcMain.handle('restore:get', () => { if (restorePending === null) restorePendin
 ipcMain.handle('restore:done', () => { restoreAnswered = true; return true; });
 app.on('before-quit', () => { quitting = true; });
 
+// ---------------- this machine's memory (what Activity Monitor calls "Memory Used") ----------------
+// app memory (anonymous − purgeable) + wired + compressed, from vm_stat; pressure 1 normal / 2 warning / 4 critical
+let hostMem = null;
+function readMem() {
+  require('child_process').execFile('/usr/bin/vm_stat', (err, out) => {
+    if (err) return;
+    const ps = +(out.match(/page size of (\d+)/) || [, 16384])[1];
+    const pg = k => +((out.match(new RegExp(k + ':\\s+(\\d+)')) || [, 0])[1]);
+    const used = (pg('Anonymous pages') - pg('Pages purgeable') + pg('Pages wired down') + pg('Pages occupied by compressor')) * ps;
+    require('child_process').execFile('/usr/sbin/sysctl', ['-n', 'kern.memorystatus_vm_pressure_level'], (e2, lv) => {
+      hostMem = { used, total: os.totalmem(), pressure: +String(lv || '1').trim() || 1 };
+    });
+  });
+}
+readMem(); setInterval(readMem, 5000);
+
 // ---------------- telemetry loop ----------------
 async function loop() {
   try {
@@ -377,6 +393,7 @@ async function loop() {
       const snap = collector.snapshot(ptyMap);
       snap.agents = core.agents(); refreshAgents();
       snap.usage = core.usage(); refreshUsage();
+      snap.mem = hostMem;
       snap.ptys = [...ptys].map(([id, p]) => ({ id, pid: p.proc.pid, title: p.title, kind: p.kind, cwd: p.cwd }));
       // the window shows BOTH machines (the peer's sessions and terminals merged in); phone + peer keep the local snap
       const shown = peerLink ? peerLink.merge(snap) : snap;   // includes the peer's terminals (peer:… ids, onPeer)

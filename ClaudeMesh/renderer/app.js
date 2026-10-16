@@ -47,6 +47,13 @@ window.api.onTelemetry(s => {
   renderHeader(); renderList(); renderToday(); renderPanel(); syncPeerTerms(); syncTermTitles(); notifyTransitions(); renderRail(); renderBoard();
 });
 
+// memory of each machine, as Activity Monitor's "Memory Used"; the bar turns amber/red with macOS memory pressure
+function memPill(label, m) {
+  if (!m || !m.total) return '';
+  const gb = b => (b / 2 ** 30).toFixed(1), pct = Math.min(100, Math.round(m.used / m.total * 100));
+  const lvl = m.pressure >= 4 ? 'crit' : m.pressure >= 2 ? 'warn' : 'ok';
+  return `<span class="hpill mem ${lvl}" title="${esc(label)}: ${gb(m.used)} of ${gb(m.total)} GB memory used${lvl === 'ok' ? '' : ' · memory pressure ' + (lvl === 'crit' ? 'critical' : 'high')}">${esc(label)} <i>${gb(m.used)}/${Math.round(m.total / 2 ** 30)} GB</i><span class="membar"><span style="width:${pct}%"></span></span></span>`;
+}
 function renderHeader() {
   const order = ['fable', 'mythos', 'opus', 'sonnet', 'haiku', 'other'];
   const ms = [...snap.models].sort((a, b) => order.indexOf(a.family) - order.indexOf(b.family));
@@ -59,7 +66,8 @@ function renderHeader() {
   $('#health').innerHTML = `<span class="hpill">working <i>${c('working')}</i></span>
     <span class="hpill">idle <i>${c('idle')}</i></span>
     ${c('waiting') + c('quiet') ? `<span class="hpill" style="border-color:#6b5a1a">attention <i>${c('waiting') + c('quiet')}</i></span>` : ''}
-    <span class="hpill" ${errs ? 'style="border-color:#6b2a2a"' : ''}>API errors 1h <i>${errs}</i></span>`;
+    <span class="hpill" ${errs ? 'style="border-color:#6b2a2a"' : ''}>API errors 1h <i>${errs}</i></span>
+    ${memPill(snap.peer ? 'This Mac' : 'RAM', snap.mem)}${snap.peer && snap.peer.mem ? memPill(snap.peer.label, snap.peer.mem) : ''}`;
 }
 
 function renderList() {
