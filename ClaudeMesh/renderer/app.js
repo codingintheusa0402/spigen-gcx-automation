@@ -285,9 +285,12 @@ $('#modal').onclick = e => { if (e.target.id === 'modal') closeModal(); };
 // turns image paths into [Image #n] attachments and other files into @-mentionable paths.
 const shq = p => p.replace(/([\s\\'"()&;|<>$`!*?#~{}\[\]])/g, '\\$1');
 const droppedPaths = e => [...(e.dataTransfer?.files || [])].map(f => window.api.pathForFile(f)).filter(Boolean);
-async function clipboardInsert() {
+async function clipboardInsert(peer) {
   const c = await window.api.clipRead();
-  if (c.kind === 'files') { if (c.image) toast('Image pasted as ' + c.paths[0].split('/').pop()); return { text: c.paths.map(shq).join(' ') + ' ', files: true }; }
+  if (c.kind === 'files') {
+    if (peer) c.paths = await window.api.peer.upload(c.paths);   // the session runs on the other machine: send the files there
+    if (c.image) toast('Image pasted as ' + c.paths[0].split('/').pop()); return { text: c.paths.map(shq).join(' ') + ' ', files: true };
+  }
   return { text: c.text || '', files: false };
 }
 function wireDrop(el, insert) {
@@ -332,7 +335,13 @@ function mirrorTerm(p) {
   // position, focus, colour reports) are already answered by the host's own terminal, and would land as typed text
   const isReport = d => /^\x1b\[[?>=]?[\d;]*[cnRtIOy]$/.test(d) || /^\x1b\[[IO]$/.test(d) || d.startsWith('\x1b]') || d.startsWith('\x1bP');
   term.onData(d => { if (!isReport(d)) window.api.pty.write(p.id, d); });
-  el.addEventListener('paste', async e => { e.preventDefault(); e.stopPropagation(); const r = await clipboardInsert(); if (r.text) term.paste(r.text); }, true);
+  el.addEventListener('paste', async e => { e.preventDefault(); e.stopPropagation(); const r = await clipboardInsert(true); if (r.text) term.paste(r.text); }, true);
+  el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('dropping'); });
+  el.addEventListener('dragleave', () => el.classList.remove('dropping'));
+  el.addEventListener('drop', async e => {
+    e.preventDefault(); el.classList.remove('dropping');
+    const ps = droppedPaths(e); if (ps.length) { term.paste((await window.api.peer.upload(ps)).map(shq).join(' ') + ' '); term.focus(); }
+  });
   term.textarea && term.textarea.addEventListener('focus', () => { activeTerm = p.id; markFocus(); });
   const t = { term, fit: null, el, title: p.title, kind: p.kind, peer: true, cols: 120, rows: 30 };
   terms.set(p.id, t);

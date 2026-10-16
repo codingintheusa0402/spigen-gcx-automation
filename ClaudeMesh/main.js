@@ -199,6 +199,20 @@ ipcMain.handle('hist:rename', (_e, sid, name) => renameTranscript(sid, name));
 ipcMain.handle('sess:details', (_e, sid) => !liveSession(sid) && peerLink && peerLink.owns(sid)
   ? peerLink.forward('GET', '/api/details', undefined, { sid }).catch(e => ({ ok: false, err: String(e.message || e) })) : sessionDetails(sid));
 // a session running on the peer machine: send / interrupt go through its phone server
+// files pasted or dropped into a mirror of the peer's terminal: copy them over, hand back the peer's paths
+// (a path on this machine means nothing to a session running on the other one). Folders/huge files keep their path.
+ipcMain.handle('peer:upload', async (_e, paths) => {
+  const out = [];
+  for (const f of paths || []) {
+    try {
+      const st = fs.statSync(f);
+      if (!peerLink || !st.isFile() || st.size > 25e6) { out.push(f); continue; }
+      const r = await peerLink.upload(path.basename(f), fs.readFileSync(f).toString('base64'));
+      out.push(r && r.path ? r.path : f);
+    } catch { out.push(f); }
+  }
+  return out;
+});
 ipcMain.handle('peer:send', (_e, sid, text) => peerLink ? peerLink.forward('POST', '/api/send', { sid, text }).catch(e => ({ ok: false, err: String(e.message || e) })) : { ok: false, err: 'no peer' });
 ipcMain.handle('peer:interrupt', (_e, sid) => peerLink ? peerLink.forward('POST', '/api/interrupt', { sid }).catch(e => ({ ok: false, err: String(e.message || e) })) : { ok: false, err: 'no peer' });
 // stop a running session (one outside the app — in-app terminals are closed by the renderer)

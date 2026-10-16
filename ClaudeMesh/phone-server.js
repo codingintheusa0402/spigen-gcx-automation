@@ -42,7 +42,7 @@ function createPhoneServer(ctx) {
   const view = s => peer && s ? peer.merge(s) : s;              // what the phone sees: local + the other machine
   const remote = sid => !!(peer && sid && peer.owns(sid));
   const termId = p => { try { return decodeURIComponent(p.slice(10)); } catch { return p.slice(10); } };   // tmux pane ids (%0) arrive encoded
-  const body = req => new Promise(res => { let b = ''; req.on('data', c => { b += c; if (b.length > 2e6) req.destroy(); }); req.on('end', () => { try { res(JSON.parse(b || '{}')); } catch { res({}); } }); });
+  const body = (req, max = 2e6) => new Promise(res => { let b = ''; req.on('data', c => { b += c; if (b.length > max) req.destroy(); }); req.on('end', () => { try { res(JSON.parse(b || '{}')); } catch { res({}); } }); });
   const json = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
   const sse = res => { res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' }); res.write('retry: 2000\n\n'); };
   const send = (res, ev, data) => res.write(`event: ${ev}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -98,7 +98,14 @@ function createPhoneServer(ctx) {
       req.on('close', () => { ctx.ptyBus.off('data', on); ctx.ptyBus.off('exit', off); ctx.ptyBus.off('resize', sz); if (ctx.termClose) ctx.termClose(id); }); return;
     }
     if (req.method !== 'POST') return json(res, 405, {});
-    const b = await body(req);
+    const b = await body(req, p === '/api/upload' ? 40e6 : 2e6);
+    if (p === '/api/upload') {                                           // a file pasted/dropped into the peer's mirror of our terminal
+      const name = path.basename(String(b.name || 'file')).replace(/[^\w.\- ]+/g, '_').slice(-80) || 'file';
+      const dir = path.join(os.tmpdir(), 'claude-mesh-paste'); fs.mkdirSync(dir, { recursive: true });
+      const f = path.join(dir, `${Date.now().toString(36)}-${name}`);
+      fs.writeFileSync(f, Buffer.from(String(b.b64 || ''), 'base64'));
+      return json(res, 200, { ok: true, path: f });
+    }
     if (['/api/send', '/api/interrupt', '/api/rename'].includes(p) && remote(b.sid))
       return json(res, 200, await peer.forward('POST', p, b).catch(e => ({ ok: false, err: `${peer.label()}: ${e.message}` })));
     if (p.startsWith('/api/term/') && peer && peer.ownsTerm(termId(p)))
