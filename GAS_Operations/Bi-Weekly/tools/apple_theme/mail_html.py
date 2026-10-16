@@ -27,7 +27,7 @@ def pname(n):   # same rule as Code.js _chartProductName: drop SP_, "_new_biz__e
     n = n.strip(); n = n[3:] if n.startswith('SP_') else n
     if '_' not in n: return n
     parts = [t for t in n.split('_') if t]; return parts[-1].upper() if parts else n
-UNKNOWN = re.compile(r'^(알\s*수\s*없음|unknown|n/?a|없음|-)$', re.I)
+UNKNOWN = re.compile(r'^(알\s*수\s*없음|해당\s*없음|unknown|n/?a|없음|-)(\s*\(.*\))?$', re.I)
 NW = 'white-space:nowrap;'
 def title_of(sl): return next((txt(e) for e in walk(sl['pageElements']) if xy(e)[1] < 30 and txt(e)), '')
 def slide_link(sid): return f'https://docs.google.com/presentation/d/{DECK}/edit#slide=id.{sid}'

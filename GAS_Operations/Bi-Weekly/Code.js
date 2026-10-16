@@ -31,10 +31,10 @@ const BW_RUN = {
 };
 
 // Same grids on the Apple copy (BW_RUN.appleDeck), apple theme, #F5F5F7 canvas.
-function bwRunOverviewApple() { _bwOverview(SlidesApp.openById(BW_RUN.appleDeck), CHART_THEMES.apple, 'bw_overview_apple_v2_done_' + BW_RUN.end, BW_RUN.appleOverview); }
+function bwRunOverviewApple() { _bwOverview(SlidesApp.openById(BW_RUN.appleDeck), CHART_THEMES.apple, 'bw_overview_apple_v3_done_' + BW_RUN.end, BW_RUN.appleOverview); }
 
 // Overview TOP3 grids on the ACTIVE deck, classic theme. Resumable across the 6-min cap.
-function bwRunOverview() { _bwOverview(_bwDeck(), CHART_THEMES.classic, 'bw_overview_v2_done_' + BW_RUN.end); }
+function bwRunOverview() { _bwOverview(_bwDeck(), CHART_THEMES.classic, 'bw_overview_v3_done_' + BW_RUN.end); }
 
 // Claim/review cards for BW_RUN.start..end into the ACTIVE (bound) deck. Re-runs only add missing cards.
 function bwRunCards() {
@@ -1187,7 +1187,7 @@ function _chartProductName(name) {
 
 // "알 수 없음"-type labels are never ranked on their own — their count stays in 그 외 (user rule 2026-10-16).
 function _isUnknownLabel(s) {
-  return /^(알\s*수\s*없음|unknown|n\/?a|없음|-)$/i.test(String(s).trim());
+  return /^(알\s*수\s*없음|해당\s*없음|unknown|n\/?a|없음|-)(\s*\(.*\))?$/i.test(String(s).trim());
 }
 function _rankKnown(obj, n) {
   return Object.entries(obj).filter(function(e) { return !_isUnknownLabel(e[0]); })
