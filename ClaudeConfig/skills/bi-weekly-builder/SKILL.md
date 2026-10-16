@@ -221,21 +221,29 @@ Index 05 list gets `2026 GCX 신규 SIREN 이슈 사례`. 261016 example: Z Fold
 - Every deck's **bound Apps Script project is renamed to exactly the deck's name** (Slides → Extensions → Apps Script →
   click the project title → rename). Redo it whenever a deck is renamed.
 
-## 8d. FINAL STEP — Gmail draft (always; approved 261016, Apple-themed HTML)
+## 8d. FINAL STEP — Gmail draft as LIVE HTML (always; approved 261016)
 The skill is not done until this draft exists. Order of the whole run: classic deck → Apple working copy →
 golden-base transplant (§7b) → SIREN issue cards (§7c) → share/rename (§8b) → **mail draft (this section)** → report back.
-Template: `tools/apple_theme/mail_draft_template.gs.txt` (copy to a temp `AaMailDraft.js` in the 15U2 project, edit
-DECK/PAGES/SUBJECT/text, push, run `aaMailDraft`, then delete + touch Code.js + push). It builds the Gmail draft via
-`GmailApp.createDraft` with inline slide thumbnails (Slides advanced service getThumbnail LARGE):
-- To `wbd@spigen.com`, CC = same 43 as the previous bi-weekly mail (search `in:sent subject:Bi-Weekly`), subject
-  `Bi-Weekly 제품 이슈 Report, <yy.mm.dd start> ~ <yy.mm.dd end>` — **no "n of 41" prefix** (user 2026-10-16).
-- 박기세님 feedback (10/2): the **slide link goes at the TOP** — title "Bi-Weekly Report <yy. mm. dd>" is itself the link +
-  blue capsule "리포트 슬라이드 열기" right under it; closing line refers to the 상단 link.
-- Body tiles (#F5F5F7 canvas, white 18px-radius tiles, SF/Apple SD Gothic/Noto Sans KR stack, blue #0071E3, red #FF3B30):
-  greeting → VOC highlights (top Zendesk 4. Product Issue product×인입사유 in the period, issue in red) → 금주 신규 SIREN →
-  stat tiles (누적 클레임, YoY, SIREN count) → Overview images (dashboard, 전제품, claim TOP3 ×3, TOP-7 ×3) → SIREN table
-  images → closing → usual signature. Images = Overview slides + SIREN list slides only.
-- Draft only — never send. First run in a project needs the user to grant the Gmail scope (Review permissions → Allow).
+**No slide screenshots** (user 2026-10-16): every Overview/SIREN element is real HTML with working links, Apple theme.
+```
+cd tools/apple_theme
+# 1) edit mail.json: subject "Bi-Weekly 제품 이슈 Report, <start> ~ <end>" (NO "n of 41"), title "Bi-Weekly Report <yy. mm. dd>",
+#    subtitle, intro, voc [[product, issue]...] (top Zendesk 4. Product Issue product×인입사유 in the period), siren (new
+#    registrations), replace_draft (id of a previous draft to delete, or "")
+python3 weekly_fetch.py            # weekly bars data (same as the deck chart)
+python3 mail_html.py               # reads the FINAL deck (report.json apple_deck) → mail_sections.html
+python3 mail_build.py              # → mail.html (+ mail_preview.html; render it with headless Chrome and LOOK)
+python3 mail_gas.py                # → ../../AaMailDraft.js ; clasp push, run aaMailDraft in the editor (first function), then
+                                   #   delete AaMailDraft.js, touch Code.js, clasp push (.claspignore excludes tools/**)
+```
+What mail_html renders from the deck: dashboard (집중 모니터링 list incl. red line, top-3 인입사유 tiles each linked to its
+Looker page + "상세 대시보드" link, 누적 클레임 + YoY, weekly bar chart as table cells, latest week blue), every TOP3 slide
+(count, name, 4-colour stacked bar, rows), TOP-7 tables (spigen.com thumbnails, ≥2% red), SIREN table (보기 links per row,
+this period's dates red, "26년 SIREN 시트 열기" outline capsule, count). Each section title links to its slide.
+Header: title = link to the deck + blue capsule "리포트 슬라이드 열기" (박기세님 feedback: link on top). To wbd@ + the
+43 CC (mail_gas.py CC list; refresh from the last sent mail if it changed).
+**Size:** keep mail.html < ~100 KB (Gmail clips at 102 KB) — mail_html compacts styles (font stack declared once,
+colour/weight inherited); check the printed byte count. Draft only — never send. Gmail scope already granted on 15U2.
 
 ## 9. Report back
 Include the Gmail draft link/subject alongside the deck links.
