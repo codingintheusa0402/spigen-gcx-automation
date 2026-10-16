@@ -288,7 +288,11 @@ const droppedPaths = e => [...(e.dataTransfer?.files || [])].map(f => window.api
 async function clipboardInsert(peer) {
   const c = await window.api.clipRead();
   if (c.kind === 'files') {
-    if (peer) c.paths = await window.api.peer.upload(c.paths);   // the session runs on the other machine: send the files there
+    if (peer) {                                                  // the session runs on the other machine: send the files there
+      const u = await window.api.peer.upload(c.paths);
+      if (u.err) { toast("Couldn't send the file: " + u.err); return { text: '', files: true }; }
+      c.paths = u.paths;
+    }
     if (c.image) toast('Image pasted as ' + c.paths[0].split('/').pop()); return { text: c.paths.map(shq).join(' ') + ' ', files: true };
   }
   return { text: c.text || '', files: false };
@@ -340,7 +344,10 @@ function mirrorTerm(p) {
   el.addEventListener('dragleave', () => el.classList.remove('dropping'));
   el.addEventListener('drop', async e => {
     e.preventDefault(); el.classList.remove('dropping');
-    const ps = droppedPaths(e); if (ps.length) { term.paste((await window.api.peer.upload(ps)).map(shq).join(' ') + ' '); term.focus(); }
+    const ps = droppedPaths(e); if (!ps.length) return;
+    const u = await window.api.peer.upload(ps);
+    if (u.err) return toast("Couldn't send the file: " + u.err);
+    term.paste(u.paths.map(shq).join(' ') + ' '); term.focus();
   });
   term.textarea && term.textarea.addEventListener('focus', () => { activeTerm = p.id; markFocus(); });
   const t = { term, fit: null, el, title: p.title, kind: p.kind, peer: true, cols: 120, rows: 30 };

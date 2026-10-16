@@ -202,16 +202,16 @@ ipcMain.handle('sess:details', (_e, sid) => !liveSession(sid) && peerLink && pee
 // files pasted or dropped into a mirror of the peer's terminal: copy them over, hand back the peer's paths
 // (a path on this machine means nothing to a session running on the other one). Folders/huge files keep their path.
 ipcMain.handle('peer:upload', async (_e, paths) => {
-  const out = [];
+  const out = []; let err = null;
   for (const f of paths || []) {
     try {
       const st = fs.statSync(f);
       if (!peerLink || !st.isFile() || st.size > 25e6) { out.push(f); continue; }
       const r = await peerLink.upload(path.basename(f), fs.readFileSync(f).toString('base64'));
-      out.push(r && r.path ? r.path : f);
-    } catch { out.push(f); }
+      if (r && r.path) out.push(r.path); else { err = 'not supported there — update/restart GCX Mesh on ' + peerLink.label(); break; }
+    } catch (e) { err = String(e.message || e); break; }
   }
-  return out;
+  return err ? { err } : { paths: out };
 });
 ipcMain.handle('peer:send', (_e, sid, text) => peerLink ? peerLink.forward('POST', '/api/send', { sid, text }).catch(e => ({ ok: false, err: String(e.message || e) })) : { ok: false, err: 'no peer' });
 ipcMain.handle('peer:interrupt', (_e, sid) => peerLink ? peerLink.forward('POST', '/api/interrupt', { sid }).catch(e => ({ ok: false, err: String(e.message || e) })) : { ok: false, err: 'no peer' });
