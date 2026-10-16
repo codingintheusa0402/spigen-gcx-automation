@@ -207,7 +207,7 @@ class Scraper:
     def __init__(self, inp: dict, ctx):
         self.inp, self.ctx = inp, ctx
         self.prof = PROFILES.get(str(inp.get('detectionAvoidance', 'MEDIUM')).upper(), PROFILES['MEDIUM'])
-        self.page_size = int(inp.get('pageSize', 50))
+        self.page_size = min((25, 50, 100), key=lambda v: abs(v - int(inp.get('pageSize', 50))))
         self.max_pages = int(inp.get('maxPagesPerMarketplace', 30))
         self.stars = ','.join(str(s) for s in (inp.get('stars') or [1, 2, 3, 4, 5]))
         self.min_date = (inp.get('minReviewDate') or '').strip() or None

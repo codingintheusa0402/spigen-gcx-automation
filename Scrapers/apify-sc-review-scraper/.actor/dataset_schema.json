@@ -1,0 +1,95 @@
+{
+  "actorSpecification": 1,
+  "fields": {
+    "type": "object",
+    "properties": {
+      "ASIN": {
+        "type": "string",
+        "description": "Child ASIN"
+      },
+      "Created 날짜": {
+        "type": "string",
+        "description": "Review date yyyy-mm-dd"
+      },
+      "사진 유무": {
+        "type": "string",
+        "description": "Y if the review has photos (when photo fetch is on)"
+      },
+      "Reviewer": {
+        "type": "string",
+        "description": "Reviewer public name"
+      },
+      "Review Ratings": {
+        "type": "string",
+        "description": "Stars given (1–5)"
+      },
+      "Review Title": {
+        "type": "string",
+        "description": "Review title"
+      },
+      "본문": {
+        "type": "string",
+        "description": "Review text"
+      },
+      "국가": {
+        "type": "string",
+        "description": "Marketplace: US, DE, IT, FR, ES, UK, JP, IN"
+      },
+      "Review Link": {
+        "type": "string",
+        "description": "Public review URL"
+      },
+      "Image URL": {
+        "type": "string",
+        "description": "Photo URLs separated by |"
+      },
+      "Review ID": {
+        "type": "string",
+        "description": "Amazon review ID"
+      },
+      "Order ID": {
+        "type": "string",
+        "description": "Order ID of verified purchases"
+      },
+      "Product Rating": {
+        "type": "string",
+        "description": "Product average rating"
+      },
+      "Ratings Count": {
+        "type": "string",
+        "description": "Product total ratings"
+      }
+    }
+  },
+  "views": {
+    "overview": {
+      "title": "Reviews",
+      "transformation": {
+        "fields": [
+          "ASIN",
+          "Created 날짜",
+          "사진 유무",
+          "Reviewer",
+          "Review Ratings",
+          "Review Title",
+          "본문",
+          "국가",
+          "Review Link",
+          "Image URL",
+          "Review ID",
+          "Order ID",
+          "Product Rating",
+          "Ratings Count"
+        ]
+      },
+      "display": {
+        "component": "table",
+        "properties": {
+          "Review Link": {
+            "format": "link"
+          }
+        }
+      }
+    }
+  }
+}
