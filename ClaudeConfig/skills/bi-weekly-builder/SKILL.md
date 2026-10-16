@@ -190,9 +190,24 @@ python3 rate_pipeline.py slides --deck <classicDeckId>
   scripts must not overwrite user text; if a slide was replaced, ask before rebuilding it.
 - CaspiSalesBackfill (sheet Z col 판매량) is a separate job — cumulative EU+UK orders since launch.
 
-## 8b. Sharing (user rule 2026-10-16 — always)
-Every deck this skill creates (classic copy AND Apple copy) → Drive permission `anyone` / `writer`
-(link-only, `allowFileDiscovery: false`, `supportsAllDrives=True`) right after it is created. Verify with permissions.list.
+## 7b. BASE = the previous period's SENT Apple deck (user correction 2026-10-16 — always)
+The Apple deliverable is NOT rebuilt from the classic copy each period. Drive-copy the **previous period's sent deck**
+(261002 → `1quCr9Xj…`, its bound GAS `1KcekPNH…`; 261016 → the new golden-base copy) and keep its cover, index,
+dashboard, Appendix and closing exactly (hand-made design). Then:
+1. Build the classic deck (§1–6) and an Apple working copy of it with the §7 pipeline (gives this period's restyled
+   gauges, TOP-7, cards, SIREN, bad-review TOP3 backups).
+2. Temp GAS `aaTransplant` (in the authorized 15U2 project): open the golden-base copy, remove every slide except
+   cover/index/dashboard/Appendix/closing, `insertSlide(i, srcSlide)` the working copy's slides in golden order —
+   전제품 → claim TOP3 (iPhone, Pixel, Z8) → TOP-7 → cards (iPhone, Pixel, Z8) → SIREN → [Appendix] → bad-review TOP3
+   backups (iPhone, Z8, Pixel) → [closing]; replace the dashboard `apl_chart` image with the working copy's blob.
+3. replaceAllText on cover date + dashboard numbers; Appendix "원본 보고서 (<code>)" text + link → this period's classic deck.
+4. Delete the temp GAS file; `clasp push` (touch Code.js first — clasp says "already up to date" after a pure delete
+   and leaves the remote file). Render and compare with the golden deck slide by slide.
+
+## 8b. Sharing + naming (user rules 2026-10-16 — always)
+- Every deck created → Drive permission `anyone`/`writer` (link-only).
+- Every deck's **bound Apps Script project is renamed to exactly the deck's name** (Slides → Extensions → Apps Script →
+  click the project title → rename). Redo it whenever a deck is renamed.
 
 ## 9. Report back
 Links to both decks; slide ranges per series; maker notes (missing ASIN/rating, extra photos,
