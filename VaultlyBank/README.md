@@ -29,6 +29,19 @@
 - **앱 잠금**: Face ID / 기기 암호 (설정 > 보안·알림)
 - **서체**: Pretendard (국내 금융앱 표준 서체, OFL) 번들
 - **화면 모드**: 시스템 / 라이트 / 다크 선택
+- **무지출 챌린지 (가짜 소비)**: 사고 싶었지만 참은 것(배달·커피·택시·쇼핑…)을 기록하면 그 금액이
+  '참은 돈' 가상 계좌에 입금. 연속 일수·이번 달 참은 돈·누적, 공유 카드(ImageRenderer), 업적
+- **소비 리포트**: 월별 지출/수입, 카테고리 도넛(Swift Charts), 많이 쓴 곳 TOP 5, 일별 막대, 지난달 대비.
+  자동 생성 거래는 `EventLibrary` 스펙 → `SpendingCategory` 태그, 나머지는 키워드 분류
+- **저축 목표**: 목표별 전용 계좌 + 매월 자동이체(`ScheduledEvent.toAccountID` 내부 이체), 진행률, 채우기, 달성 업적
+- **시나리오 온보딩**: 월급날 · 로또 당첨 · 재벌 2세 · 퇴사 후 1년 — 재력·잔액·예약 입금을 한 번에 설정 (설정에서도 가능)
+- **실제 은행 푸시 형식**: `[은행명] 03/09 15:40 입금 31,440,000원 엄마 잔액 1,281,440원`
+- **위젯 (`VaultlyWidget`)**: 홈 small/medium(잔액·총자산·다음 입금), 잠금화면 rectangular/circular/inline, 챌린지 위젯.
+  App Group `group.com.kevinkim.vaultly`의 스냅샷 JSON으로 그림
+- **Live Activity**: 4시간 이내 예약 입금을 잠금화면·Dynamic Island에 "입금 예정 16:00" 카운트다운으로 표시
+- **스토어 변형 (`Vaultly-Store` 스킴, `-D STORE`)**: 가상 브랜드만 사용(TOSS 테마 → 미니멀 다크/미니멀뱅크),
+  앱 이름 "Vaultly 시뮬레이터", StoreKit 2 Pro(평생 9,900원 / 월 1,900원, `Vaultly.storekit` 로컬 테스트)로
+  테마·시나리오·24x 이상 가속·공유 카드 잠금. 개인 빌드(`Vaultly` 스킴)는 모든 기능 무료
 
 ## 빌드
 ```bash
@@ -50,7 +63,9 @@ Vaultly/
   App/        앱 진입점, BankStore(상태·저장·정산 오케스트레이션)
   Models/     Account, Transaction, ScheduledEvent, ProductTerms, Settings
   Engine/     ScheduleEngine(예약 정산), InterestEngine(이자/상환 정산)
-  Services/   Persistence(JSON 저장), NotificationService(로컬 알림)
+  Services/   Persistence(JSON 저장), NotificationService(로컬 알림), WidgetBridge, LiveActivityService, StoreService(StoreKit 2)
+  Shared/     앱·위젯 공용 (WidgetSnapshot, DepositActivityAttributes)
   Theme/      테마 정의
   Views/      SwiftUI 화면
+VaultlyWidget/  WidgetKit 확장 (잔액·챌린지 위젯, Live Activity)
 ```

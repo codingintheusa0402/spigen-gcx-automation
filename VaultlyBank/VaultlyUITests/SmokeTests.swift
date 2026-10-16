@@ -46,13 +46,54 @@ final class SmokeTests: XCTestCase {
         }
     }
 
+    func testChallengeLogAndReport() {
+        let nameField = app.textFields["이름 (예: 홍길동)"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        app.buttons["시작하기"].tap()
+        allowNotificationsIfAsked()
+        XCTAssertTrue(app.staticTexts["내 계좌"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["무지출 챌린지"].exists, "challenge tile on home")
+        app.buttons["tile-challenge"].tap()
+        let resist = app.buttons["resist-button"]
+        XCTAssertTrue(resist.waitForExistence(timeout: 5))
+        snap("challenge-empty")
+        resist.tap()
+        XCTAssertTrue(app.navigationBars["참았다!"].waitForExistence(timeout: 5))
+        app.buttons["기록"].tap()
+        XCTAssertTrue(app.staticTexts["참은 돈 계좌에 입금됐어요"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["🔥 연속"].waitForExistence(timeout: 5))
+        snap("challenge-logged")
+        let trophy = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH '🏆'")).firstMatch
+        if trophy.exists { trophy.tap() }   // achievement banner overlays the back button
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.staticTexts["이번 달 소비"].waitForExistence(timeout: 5))
+        app.buttons["tile-report"].tap()
+        XCTAssertTrue(app.navigationBars["소비 리포트"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["이 달 지출"].exists)
+        snap("report")
+    }
+
+    func testScenarioOnboardingPayday() {
+        XCTAssertTrue(app.textFields["이름 (예: 홍길동)"].waitForExistence(timeout: 5))
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH '시나리오로 시작'")).firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["어떤 삶으로 시작할까요?"].waitForExistence(timeout: 5))
+        app.buttons.matching(NSPredicate(format: "label CONTAINS '월급날'")).firstMatch.tap()
+        snap("onboarding-scenario")
+        app.buttons["scenario-start"].tap()
+        allowNotificationsIfAsked()
+        XCTAssertTrue(app.staticTexts["내 계좌"].waitForExistence(timeout: 8))
+        app.tabBars.firstMatch.buttons["예약 알림"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS '급여'")).firstMatch.waitForExistence(timeout: 5), "payday scenario schedules the salary")
+        snap("scenario-events")
+    }
+
     func testAccountDetailOpens() {
         let nameField = app.textFields["이름 (예: 홍길동)"]
         XCTAssertTrue(nameField.waitForExistence(timeout: 5))
         app.buttons["시작하기"].tap()
         allowNotificationsIfAsked()
         XCTAssertTrue(app.staticTexts["내 계좌"].waitForExistence(timeout: 5))
-        let firstAccount = app.buttons.matching(NSPredicate(format: "label CONTAINS '₩'")).firstMatch
+        let firstAccount = app.buttons.matching(NSPredicate(format: "label CONTAINS '입출금통장' AND label CONTAINS '₩'")).firstMatch
         XCTAssertTrue(firstAccount.waitForExistence(timeout: 5), "an account tile with a ₩ balance should exist")
         firstAccount.tap()
         XCTAssertTrue(app.buttons["잔액 설정"].waitForExistence(timeout: 5))

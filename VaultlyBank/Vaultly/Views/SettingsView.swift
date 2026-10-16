@@ -4,9 +4,11 @@ import SwiftUI
 /// profile → 보안·알림 → 화면 → 금융사 이름 → 시뮬레이션 → 고객센터·앱 정보.
 struct SettingsView: View {
     @EnvironmentObject var store: BankStore
+    @EnvironmentObject var shop: StoreService
     @State private var confirmReset = false
     @State private var showWealth = false
     @State private var editCash = false
+    @State private var paywall = false
 
     var body: some View {
         NavigationStack {
@@ -56,6 +58,13 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    NavigationLink { ScenarioSettingsPage() } label: { Label("시나리오로 시작", systemImage: "sparkles") }
+                    NavigationLink { GoalsView() } label: {
+                        HStack { Label("저축 목표", systemImage: "target"); Spacer(); Text(store.goals.isEmpty ? "없음" : "\(store.goals.count)개").foregroundStyle(.secondary) }
+                    }
+                    NavigationLink { AchievementsView() } label: {
+                        HStack { Label("업적", systemImage: "trophy"); Spacer(); Text("\(store.data.achievements.count)/\(AchievementID.allCases.count)").foregroundStyle(.secondary) }
+                    }
                     Button { showWealth = true } label: {
                         HStack {
                             Label("재력 설정", systemImage: "person.crop.circle.badge.checkmark")
@@ -80,6 +89,14 @@ struct SettingsView: View {
                     Button(role: .destructive) { confirmReset = true } label: { Label("모든 데이터 초기화", systemImage: "trash") }
                 } header: { Text("시뮬레이션") }
 
+                if AppVariant.isStore {
+                    Section {
+                        Button { paywall = true } label: {
+                            HStack { Label("Vaultly Pro", systemImage: "crown.fill"); Spacer(); Text(shop.isPro ? "사용 중" : "잠금 해제").foregroundStyle(.secondary) }
+                        }
+                    } footer: { Text("이 앱은 뱅킹 시뮬레이터입니다. 실제 금융기관·결제와 연결되지 않으며 모든 금액은 가상입니다.") }
+                }
+
                 Section("고객센터 · 앱 정보") {
                     NavigationLink { InfoPage(title: "공지사항", items: InfoPage.notices) } label: { Label("공지사항", systemImage: "megaphone") }
                     NavigationLink { InfoPage(title: "자주 묻는 질문", items: InfoPage.faq) } label: { Label("자주 묻는 질문", systemImage: "questionmark.circle") }
@@ -94,6 +111,7 @@ struct SettingsView: View {
             .navigationTitle("설정")
             .sheet(isPresented: $showWealth) { WealthView() }
             .sheet(isPresented: $editCash) { CashEditorSheet() }
+            .sheet(isPresented: $paywall) { ProPaywall() }
             .confirmationDialog("모든 계좌·거래·예약을 삭제하고 처음 상태로 되돌릴까요?", isPresented: $confirmReset, titleVisibility: .visible) {
                 Button("초기화", role: .destructive) { store.resetAll() }
             }
@@ -135,11 +153,15 @@ struct SettingsView: View {
 
 struct ThemePicker: View {
     @EnvironmentObject var store: BankStore
+    @EnvironmentObject var shop: StoreService
+    @State private var paywall = false
     var body: some View {
         List {
             Section {
                 ForEach(Theme.all) { t in
-                    Button { store.update { $0.themeID = t.id } } label: {
+                    Button {
+                        if t.id != "nova", !shop.allows(.themes) { paywall = true } else { store.update { $0.themeID = t.id } }
+                    } label: {
                         HStack(spacing: 12) {
                             RoundedRectangle(cornerRadius: 8)
                                 .fill(LinearGradient(colors: t.cardGradient, startPoint: .topLeading, endPoint: .bottomTrailing))
@@ -149,6 +171,7 @@ struct ThemePicker: View {
                                 Text(t.style == .toss ? "\(t.bankName) · 다크 리스트 레이아웃" : t.tagline).font(.app(.caption)).foregroundStyle(.secondary)
                             }
                             Spacer()
+                            if t.id != "nova", !shop.allows(.themes) { Image(systemName: "lock.fill").foregroundStyle(.tertiary) }
                             if store.settings.themeID == t.id { Image(systemName: "checkmark").foregroundStyle(store.theme.accent) }
                         }
                     }.buttonStyle(.plain)
@@ -156,16 +179,19 @@ struct ThemePicker: View {
             } footer: { Text("모두 이 앱을 위해 만든 가상의 브랜드입니다. 은행 이름은 설정 > 금융사 이름에서 바꿀 수 있습니다.") }
         }
         .navigationTitle("테마")
+        .sheet(isPresented: $paywall) { ProPaywall() }
     }
 }
 
 struct TimeFlowSettings: View {
     @EnvironmentObject var store: BankStore
+    @EnvironmentObject var shop: StoreService
+    @State private var paywall = false
     var body: some View {
         Form {
             Section {
                 Picker("속도", selection: Binding(get: { TimeSpeed.allCases.first { $0.rawValue == store.clock.speed } ?? .realtime },
-                                               set: { store.setSpeed($0) })) {
+                                               set: { s in if s.rawValue >= 24, !shop.allows(.acceleration) { paywall = true } else { store.setSpeed(s) } })) {
                     ForEach(TimeSpeed.allCases) { Text($0.title).tag($0) }
                 }
                 HStack {
@@ -182,6 +208,7 @@ struct TimeFlowSettings: View {
             }
         }
         .navigationTitle("시간 흐름")
+        .sheet(isPresented: $paywall) { ProPaywall() }
     }
 }
 
@@ -206,6 +233,8 @@ struct InfoPage: View {
         ("[안내] 이 앱은 뱅킹 시뮬레이터입니다", "표시되는 모든 계좌·잔액·거래·이자·알림은 사용자가 설정한 가상의 데이터이며 실제 금융기관·결제 서비스와 연결되어 있지 않습니다."),
         ("[업데이트] 예약 입금 알림", "예약한 시각에 잠금화면 알림이 오고 잔액이 반영됩니다. 앱이 꺼져 있던 기간의 예약도 다음 실행 때 자동 정산됩니다."),
         ("[업데이트] 재력 설정", "설정 > 시뮬레이션 > 재력 설정에서 거지~재벌 중 하나를 고르면 그 생활에 맞는 입출금이 자동으로 생깁니다."),
+        ("[업데이트] 무지출 챌린지 · 소비 리포트", "홈에서 참은 소비를 기록하면 '참은 돈' 계좌에 가상 입금됩니다. 이번 달 소비는 카테고리별 리포트로 볼 수 있습니다."),
+        ("[업데이트] 저축 목표 · 위젯", "목표별 계좌와 매월 자동이체로 돈을 모으고, 홈·잠금화면 위젯에서 잔액과 챌린지를 바로 확인하세요."),
     ]
     static let faq: [(String, String)] = [
         ("잔액이 실제 돈인가요?", "아닙니다. 모든 금액은 기기 안에서만 계산되는 모의 데이터입니다."),

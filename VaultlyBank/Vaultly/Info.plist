@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Vaultly</string>
+	<string>$(VAULTLY_DISPLAY_NAME)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -24,6 +24,8 @@
 	<false/>
 	<key>NSFaceIDUsageDescription</key>
 	<string>앱 잠금을 해제하기 위해 Face ID를 사용합니다.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>NSUserNotificationsUsageDescription</key>
 	<string>예약한 가상 입금 알림을 보내기 위해 알림 권한이 필요합니다.</string>
 	<key>UIAppFonts</key>

@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct VaultlyApp: App {
     @StateObject private var store: BankStore
+    @StateObject private var shop = StoreService()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -20,6 +21,7 @@ struct VaultlyApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(store)
+                .environmentObject(shop)
                 .onAppear { store.catchUp() }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { store.catchUp() }

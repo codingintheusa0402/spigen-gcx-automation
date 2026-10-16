@@ -18,13 +18,14 @@ struct Theme: Identifiable {
     var style: ThemeStyle = .card
     var wonSuffix = false
     var onAccent: Color = .white   // text drawn on top of `accent`          // 219,320원 instead of ₩219,320
-    var displayName: String { style == .toss ? "TOSS" : bankName }
+    var displayName: String { style == .toss ? (AppVariant.isStore ? "미니멀 다크" : "TOSS") : bankName }
 
     static let tossBlue = Color(red: 0.192, green: 0.510, blue: 0.965)   // #3182F6
     static let tossRed = Color(red: 0.941, green: 0.267, blue: 0.322)    // #F04452
 
     static let all: [Theme] = [
-        Theme(id: "toss", bankName: "토스뱅크", brokerName: "토스증권", tagline: "금융을 쉽고 간편하게",
+        // Store variant ships fictional names only (App Store 4.1 / 5.2.1); the layout is the same.
+        Theme(id: "toss", bankName: AppVariant.isStore ? "미니멀뱅크" : "토스뱅크", brokerName: AppVariant.isStore ? "미니멀증권" : "토스증권", tagline: "금융을 쉽고 간편하게",
               accent: tossBlue, accentSecondary: tossRed,
               background: adaptive(light: (0.949, 0.957, 0.965), dark: (0.067, 0.067, 0.075)),
               card: adaptive(light: (1, 1, 1), dark: (0.110, 0.114, 0.129)),

@@ -79,8 +79,30 @@ struct LockScreen: View {
 struct OnboardingView: View {
     @EnvironmentObject var store: BankStore
     @State private var name = ""
+    @State private var pickingScenario = false
 
     var body: some View {
+        if pickingScenario { scenarioPage } else { welcomePage }
+    }
+
+    private var scenarioPage: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                Text("어떤 삶으로 시작할까요?").font(.app(.title2, .bold)).padding(.top, 20)
+                Text("잔액·재력·예약 입금이 시나리오에 맞게 설정됩니다. 나중에 설정에서 바꿀 수 있어요.").font(.app(.footnote)).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                ScenarioPicker { finish() }
+                Button("직접 설정할게요") { finish() }.font(.app(.subheadline)).padding(.top, 4)
+            }
+            .padding(24)
+        }
+    }
+
+    private func finish() {
+        store.update { $0.ownerName = name.isEmpty ? $0.ownerName : name; $0.hasOnboarded = true }
+        store.requestNotifications()
+    }
+
+    private var welcomePage: some View {
         VStack(spacing: 24) {
             Spacer()
             Image(systemName: "building.columns.circle.fill").font(.app(size: 72)).foregroundStyle(store.theme.accent)
@@ -90,20 +112,19 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Label("모든 계좌와 거래는 가상이며 기기에만 저장됩니다.", systemImage: "iphone")
                 Label("실제 은행·결제 서비스와 연결되지 않습니다.", systemImage: "wifi.slash")
-                Label("화면의 SIM 배지는 시뮬레이션 표시입니다.", systemImage: "checkmark.shield")
+                Label("사고 싶은 걸 참으면 '참은 돈'이 가상으로 쌓입니다.", systemImage: "flame")
             }
             .font(.app(.footnote)).foregroundStyle(.secondary)
             .padding().background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
             TextField("이름 (예: 홍길동)", text: $name)
                 .textFieldStyle(.roundedBorder)
             Spacer()
-            Button {
-                store.update { $0.ownerName = name.isEmpty ? $0.ownerName : name; $0.hasOnboarded = true }
-                store.requestNotifications()
-            } label: {
+            Button { finish() } label: {
                 Text("시작하기").frame(maxWidth: .infinity).padding(.vertical, 6)
             }
             .buttonStyle(.borderedProminent)
+            Button("시나리오로 시작 (월급날 · 로또 · 재벌 2세 · 퇴사)") { pickingScenario = true }
+                .font(.app(.subheadline))
         }
         .padding(28)
     }

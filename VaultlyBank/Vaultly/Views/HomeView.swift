@@ -34,6 +34,8 @@ struct HomeView: View {
                             }
                         }
                     }
+                    quickTiles
+                    goalsCard
                     Card {
                         VStack(spacing: 4) {
                             ForEach(store.checkingAccounts + store.productAccounts) { acc in
@@ -73,6 +75,8 @@ struct HomeView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     totalCard
+                    quickTiles
+                    goalsCard
                     section("내 계좌", trailing: {
                         HStack(spacing: 14) {
                             NavigationLink { TransferForm() } label: { Image(systemName: "paperplane.fill") }
@@ -146,6 +150,72 @@ struct HomeView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(store.theme.accent)
         .clipShape(RoundedRectangle(cornerRadius: store.theme.cornerRadius, style: .continuous))
+    }
+
+    /// 무지출 챌린지 + 이번 달 소비 — the two things people open a money app for every day.
+    private var quickTiles: some View {
+        let now = store.now
+        let streak = store.challenge.streak(now: now)
+        let saved = store.challenge.total(inMonthOf: now)
+        let report = store.report(for: now)
+        return HStack(spacing: 12) {
+            NavigationLink { ChallengeView() } label: {
+                quickTile(title: "무지출 챌린지", symbol: "flame.fill", tint: .orange,
+                          value: Money.format(saved, code: store.currency),
+                          sub: streak > 0 ? "🔥 \(streak)일 연속" : "참은 돈 쌓기")
+            }.buttonStyle(.plain).accessibilityIdentifier("tile-challenge")
+            NavigationLink { ReportView() } label: {
+                quickTile(title: "이번 달 소비", symbol: "chart.pie.fill", tint: store.theme.accent,
+                          value: Money.format(report.spent, code: store.currency),
+                          sub: report.changeRatio.map { String(format: "지난달 대비 %@%.0f%%", $0 >= 0 ? "+" : "", $0 * 100) } ?? "리포트 보기")
+            }.buttonStyle(.plain).accessibilityIdentifier("tile-report")
+        }
+    }
+
+    private func quickTile(title: String, symbol: String, tint: Color, value: String, sub: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: symbol).font(.app(.caption, .semibold)).foregroundStyle(tint)
+                Text(title).font(.app(.caption, .medium)).foregroundStyle(.secondary)
+                Spacer()
+                Image(systemName: "chevron.right").font(.app(.caption2)).foregroundStyle(.tertiary)
+            }
+            Text(store.settings.hideBalances ? "••••••" : value).font(.app(.headline, .semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
+            Text(sub).font(.app(.caption2)).foregroundStyle(.secondary).lineLimit(1)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(store.theme.card, in: RoundedRectangle(cornerRadius: store.theme.cornerRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: store.theme.cornerRadius, style: .continuous).stroke(Color.primary.opacity(0.06)))
+    }
+
+    @ViewBuilder private var goalsCard: some View {
+        if !store.goals.isEmpty {
+            Card {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("저축 목표").font(.app(.headline, .semibold))
+                        Spacer()
+                        NavigationLink { GoalsView() } label: { Text("전체").font(.app(.subheadline)).foregroundStyle(.secondary) }
+                    }
+                    ForEach(store.goals.prefix(3)) { g in
+                        let bal = store.account(g.accountID)?.balance ?? 0
+                        let p = g.progress(balance: bal)
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack {
+                                Text("\(g.emoji) \(g.title)").font(.app(.subheadline, .semibold))
+                                Spacer()
+                                Text("\(Int(p * 100))%").font(.app(.caption, .semibold)).foregroundStyle(store.theme.accent)
+                            }
+                            GeometryReader { geo in
+                                Capsule().fill(Color.primary.opacity(0.07))
+                                    .overlay(alignment: .leading) { Capsule().fill(store.theme.accent).frame(width: geo.size.width * p) }
+                            }.frame(height: 6)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     @ViewBuilder private var upcoming: some View {

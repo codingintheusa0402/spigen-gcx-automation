@@ -159,6 +159,103 @@ final class EngineTests: XCTestCase {
         XCTAssertFalse(data.transactions.contains { $0.counterparty == "모범택시" || $0.counterparty == "편의점" || $0.counterparty == "맥도날드" })
     }
 
+    // MARK: 챌린지 · 목표 · 리포트 · 호환성
+
+    func testOldDocumentWithoutNewKeysStillDecodes() throws {
+        // A bank.json written before challenge/goals/achievements existed must load, not wipe the user's data.
+        var old = BankData.starter()
+        old.accounts[0].balance = 777
+        let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601
+        var json = try JSONSerialization.jsonObject(with: enc.encode(old)) as! [String: Any]
+        json.removeValue(forKey: "challenge"); json.removeValue(forKey: "goals"); json.removeValue(forKey: "achievements")
+        let raw = try JSONSerialization.data(withJSONObject: json)
+        let dec = JSONDecoder(); dec.dateDecodingStrategy = .iso8601
+        let back = try dec.decode(BankData.self, from: raw)
+        XCTAssertEqual(back.accounts[0].balance, 777)
+        XCTAssertTrue(back.goals.isEmpty)
+        XCTAssertNil(back.challenge.accountID)
+    }
+
+    func testChallengeStreakCountsConsecutiveDays() {
+        var c = ChallengeState()
+        let today = date(2026, 5, 10)
+        for d in [8, 9, 10] { c.items.append(ResistedPurchase(date: date(2026, 5, d), title: "x", amount: 5_000, kind: .coffee)) }
+        c.items.append(ResistedPurchase(date: date(2026, 5, 3), title: "y", amount: 20_000, kind: .delivery))
+        XCTAssertEqual(c.streak(now: today), 3)
+        XCTAssertEqual(c.streak(now: date(2026, 5, 11)), 3, "yesterday still counts")
+        XCTAssertEqual(c.streak(now: date(2026, 5, 13)), 0)
+        XCTAssertEqual(c.bestStreak(), 3)
+        XCTAssertEqual(c.total(inMonthOf: today), 35_000)
+    }
+
+    @MainActor func testLogResistDepositsIntoChallengeAccount() {
+        let store = BankStore()
+        store.resetAll()
+        let before = store.data.accounts.count
+        let item = store.logResist(kind: .delivery, title: "", amount: 24_000)
+        XCTAssertEqual(item?.title, ResistKind.delivery.placeholder)
+        XCTAssertEqual(store.data.accounts.count, before + 1)
+        XCTAssertEqual(store.challengeAccount?.balance, 24_000)
+        XCTAssertNotNil(store.data.achievements[AchievementID.firstResist.rawValue])
+        store.deleteResist(item!.id)
+        XCTAssertEqual(store.challengeAccount?.balance, 0)
+        store.resetAll()
+    }
+
+    func testGoalAutoTransferMovesMoneyBetweenOwnAccounts() {
+        var data = BankData.starter()
+        let from = data.accounts[0].id
+        let goalAcc = Account(name: "✈️ 제주", kind: .deposit, number: "1", balance: 0)
+        data.accounts.append(goalAcc)
+        data.events = [ScheduledEvent(accountID: from, counterparty: goalAcc.name, amount: -300_000, memo: "목표 자동이체",
+                                      nextFireDate: date(2026, 1, 25), repeatRule: .monthly, toAccountID: goalAcc.id)]
+        ScheduleEngine.processDue(now: date(2026, 3, 1), data: &data)
+        XCTAssertEqual(data.accounts[0].balance, 1_250_000 - 600_000)
+        XCTAssertEqual(data.accounts[1].balance, 600_000)
+        XCTAssertTrue(data.transactions.filter { $0.tag == SpendingCategory.transfer.rawValue }.count == 4)
+        // the report must not count internal transfers as spending
+        let r = SpendingReport.build(transactions: data.transactions, month: date(2026, 2, 1))
+        XCTAssertEqual(r.spent, 0)
+    }
+
+    func testSpendingReportGroupsByCategoryAndComparesMonths() {
+        var data = BankData.starter()
+        let acc = data.accounts[0].id
+        Ledger.apply(amount: -12_000, to: acc, date: date(2026, 4, 3), counterparty: "(주)맥도날드 삼성중앙역점", memo: "점심", category: .transfer, tag: "food", data: &data)
+        Ledger.apply(amount: -5_500, to: acc, date: date(2026, 4, 4), counterparty: "스타벅스 강남R점", memo: "커피", category: .transfer, data: &data)   // keyword fallback
+        Ledger.apply(amount: -36_000, to: acc, date: date(2026, 4, 5), counterparty: "KT", memo: "인터넷 요금", category: .autoTransfer, data: &data)
+        Ledger.apply(amount: 2_800_000, to: acc, date: date(2026, 4, 25), counterparty: "(주)대성물류", memo: "급여", category: .transfer, data: &data)
+        Ledger.apply(amount: -100_000, to: acc, date: date(2026, 3, 9), counterparty: "GS25 서초점", memo: "편의점", category: .transfer, tag: "mart", data: &data)
+        let r = SpendingReport.build(transactions: data.transactions, month: date(2026, 4, 1))
+        XCTAssertEqual(r.spent, 53_500)
+        XCTAssertEqual(r.income, 2_800_000)
+        XCTAssertEqual(r.slices.map(\.category), [.housing, .food, .cafe])
+        XCTAssertEqual(r.merchants.first?.name, "KT")
+        XCTAssertEqual(r.previousSpent, 100_000)
+        XCTAssertEqual(r.changeRatio!, -0.465, accuracy: 0.001)
+        XCTAssertEqual(SpendingCategory.forSpec("taxi_premium"), .transport)
+        XCTAssertEqual(SpendingCategory.forSpec("ins_car"), .insurance)
+    }
+
+    @MainActor func testScenarioAppliesTierAndSchedulesEvents() {
+        let store = BankStore()
+        store.resetAll()
+        store.applyScenario(.payday)
+        XCTAssertEqual(store.lifestyle.tier, .working)
+        XCTAssertEqual(store.data.events.count, 3)
+        XCTAssertEqual(store.data.events.first?.counterparty, "(주)대성물류")
+        XCTAssertFalse(store.data.events.contains { $0.counterparty.contains("{card}") }, "placeholders resolved")
+        store.resetAll()
+    }
+
+    func testBankLineMatchesRealPushFormat() {
+        let saved = Money.wonSuffix; Money.wonSuffix = true; defer { Money.wonSuffix = saved }
+        let at = Calendar.current.date(bySettingHour: 15, minute: 40, second: 0, of: date(2028, 3, 9))!
+        let line = NotificationService.bankLine(bank: "우리은행", date: at, incoming: true, amount: 31_440_000,
+                                                counterparty: "토스증권", balance: 123_760_684_504, currency: "KRW")
+        XCTAssertEqual(line, "[우리은행] 03/09 15:40 입금 31,440,000원 토스증권 잔액 123,760,684,504원")
+    }
+
     func testSalaryRisesWithYears() {
         var data = BankData.starter()
         data.accounts[0].balance = 0

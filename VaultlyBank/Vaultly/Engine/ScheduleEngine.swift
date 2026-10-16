@@ -14,9 +14,20 @@ enum ScheduleEngine {
             var guardCount = 0
             while ev.nextFireDate <= now, guardCount < 5000 {
                 guardCount += 1
-                if let tx = Ledger.apply(amount: ev.amount, to: ev.accountID, date: ev.nextFireDate,
-                                         counterparty: ev.counterparty, memo: ev.memo,
-                                         category: .scheduled, data: &data) {
+                if let to = ev.toAccountID {
+                    // internal transfer (savings goal auto-transfer): out of accountID, into toAccountID
+                    let amount = abs(ev.amount)
+                    let toName = data.accounts.first { $0.id == to }?.name ?? ev.counterparty
+                    let fromName = data.accounts.first { $0.id == ev.accountID }?.name ?? "내 계좌"
+                    if let tx = Ledger.apply(amount: -amount, to: ev.accountID, date: ev.nextFireDate, counterparty: toName,
+                                             memo: ev.memo, category: .autoTransfer, tag: SpendingCategory.transfer.rawValue, data: &data) {
+                        Ledger.apply(amount: amount, to: to, date: ev.nextFireDate, counterparty: fromName,
+                                     memo: ev.memo, category: .autoTransfer, tag: SpendingCategory.transfer.rawValue, data: &data)
+                        fired.append(Fired(event: ev, transaction: tx))
+                    }
+                } else if let tx = Ledger.apply(amount: ev.amount, to: ev.accountID, date: ev.nextFireDate,
+                                                counterparty: ev.counterparty, memo: ev.memo,
+                                                category: .scheduled, data: &data) {
                     fired.append(Fired(event: ev, transaction: tx))
                 }
                 ev.lastFiredAt = ev.nextFireDate
@@ -37,11 +48,11 @@ enum ScheduleEngine {
 enum Ledger {
     @discardableResult
     static func apply(amount: Decimal, to accountID: UUID, date: Date, counterparty: String,
-                      memo: String, category: TransactionCategory, data: inout BankData) -> Transaction? {
+                      memo: String, category: TransactionCategory, tag: String? = nil, data: inout BankData) -> Transaction? {
         guard let idx = data.accounts.firstIndex(where: { $0.id == accountID }) else { return nil }
         data.accounts[idx].balance += amount
         let tx = Transaction(accountID: accountID, date: date, amount: amount, counterparty: counterparty,
-                             memo: memo, category: category, balanceAfter: data.accounts[idx].balance)
+                             memo: memo, category: category, balanceAfter: data.accounts[idx].balance, tag: tag)
         data.transactions.append(tx)
         return tx
     }

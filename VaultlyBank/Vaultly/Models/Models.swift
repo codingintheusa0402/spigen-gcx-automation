@@ -130,6 +130,7 @@ struct Transaction: Identifiable, Codable, Equatable {
     var memo: String
     var category: TransactionCategory
     var balanceAfter: Decimal
+    var tag: String? = nil          // SpendingCategory raw value when the generator knows it
 }
 
 // MARK: - Scheduled events ("Mom sends ₩5,000,000 at 4pm")
@@ -167,8 +168,10 @@ struct ScheduledEvent: Identifiable, Codable, Equatable {
     var repeatRule: RepeatRule
     var isEnabled = true
     var lastFiredAt: Date?
+    var toAccountID: UUID? = nil  // set = internal transfer: amount leaves accountID and lands here
 
     var isIncoming: Bool { amount >= 0 }
+    var isInternal: Bool { toAccountID != nil }
 }
 
 // MARK: - Settings / root document
@@ -257,6 +260,26 @@ struct BankData: Codable, Equatable {
     var portfolio = Portfolio.starter()
     var lifestyle = LifestyleState()
     var clock = SimClock()
+    var challenge = ChallengeState()
+    var goals: [SavingsGoal] = []
+    var achievements: [String: Date] = [:]
+
+    init() {}
+
+    // Tolerant decoding: a new top-level field must never throw away the user's saved bank.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        accounts = try c.decodeIfPresent([Account].self, forKey: .accounts) ?? []
+        transactions = try c.decodeIfPresent([Transaction].self, forKey: .transactions) ?? []
+        events = try c.decodeIfPresent([ScheduledEvent].self, forKey: .events) ?? []
+        settings = try c.decodeIfPresent(BankSettings.self, forKey: .settings) ?? BankSettings()
+        portfolio = try c.decodeIfPresent(Portfolio.self, forKey: .portfolio) ?? Portfolio.starter()
+        lifestyle = try c.decodeIfPresent(LifestyleState.self, forKey: .lifestyle) ?? LifestyleState()
+        clock = try c.decodeIfPresent(SimClock.self, forKey: .clock) ?? SimClock()
+        challenge = try c.decodeIfPresent(ChallengeState.self, forKey: .challenge) ?? ChallengeState()
+        goals = try c.decodeIfPresent([SavingsGoal].self, forKey: .goals) ?? []
+        achievements = try c.decodeIfPresent([String: Date].self, forKey: .achievements) ?? [:]
+    }
 
     static func starter() -> BankData {
         var d = BankData()

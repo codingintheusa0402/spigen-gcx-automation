@@ -75,19 +75,47 @@ final class BankStore: ObservableObject {
             d.transactions.sort { $0.date < $1.date }
             d.transactions.removeFirst(d.transactions.count - 2500)
         }
+        settleGoals(now: now, data: &d)
         if d != data { data = d }
         if let last = fired.last {
-            let amount = Money.format(abs(last.event.amount), code: currency)
-            banner = BannerMessage(title: last.event.isIncoming ? "입금 \(amount)" : "출금 \(amount)",
-                                   body: "\(last.event.counterparty) · \(last.event.memo)",
-                                   positive: last.event.isIncoming)
+            banner = BannerMessage(title: last.event.isInternal ? "자동이체" : (last.event.isIncoming ? "입금" : "출금"),
+                                   body: NotificationService.bankLine(bank: brand.bank, date: last.transaction.date, incoming: last.event.isIncoming && !last.event.isInternal,
+                                                                      amount: abs(last.event.amount), counterparty: last.event.counterparty,
+                                                                      balance: last.transaction.balanceAfter, currency: currency),
+                                   positive: last.event.isIncoming && !last.event.isInternal)
         }
+        unlockAchievements(now: now)
         syncNotifications()
+        WidgetBridge.publish(store: self)
+    }
+
+    private func settleGoals(now: Date, data d: inout BankData) {
+        for i in d.goals.indices where d.goals[i].reachedAt == nil {
+            if let acc = d.accounts.first(where: { $0.id == d.goals[i].accountID }), acc.balance >= d.goals[i].target {
+                d.goals[i].reachedAt = now
+            }
+        }
+    }
+
+    private func unlockAchievements(now: Date) {
+        var d = data
+        let hits = AchievementEngine.evaluate(now: now, data: &d, totalAssets: totalAssets)
+        guard !hits.isEmpty else { return }
+        data = d
+        if banner == nil, let a = hits.first {
+            banner = BannerMessage(title: "🏆 \(a.title)", body: a.detail, positive: true)
+        }
     }
 
     func syncNotifications() {
         // Lock-screen notifications only make sense when simulated time == real time.
-        NotificationService.sync(events: data.clock.isRealTime ? data.events : [], accounts: data.accounts, currency: currency)
+        NotificationService.sync(events: data.clock.isRealTime ? data.events : [], accounts: data.accounts, bank: brand.bank, currency: currency)
+        LiveActivityService.sync(events: data.clock.isRealTime ? data.events : [], accounts: data.accounts, bank: brand.bank, currency: currency)
+    }
+
+    /// Next enabled incoming event (widgets / live activity).
+    var nextIncomingEvent: ScheduledEvent? {
+        data.events.filter { $0.isEnabled && $0.isIncoming && !$0.isInternal }.min { $0.nextFireDate < $1.nextFireDate }
     }
 
     // MARK: Time control
@@ -123,6 +151,12 @@ final class BankStore: ObservableObject {
         Persistence.reset()
         data = BankData.starter()
         syncNotifications()
+        WidgetBridge.publish(store: self)
+    }
+
+    /// Monthly spending report for the month containing `month` (simulated time).
+    func report(for month: Date) -> SpendingReport {
+        SpendingReport.build(transactions: data.transactions, month: month)
     }
 
     // MARK: Accounts
@@ -154,6 +188,9 @@ final class BankStore: ObservableObject {
         d.events.removeAll { $0.accountID == id }
         if d.lifestyle.accountID == id { d.lifestyle.accountID = nil; d.lifestyle.tier = nil }
         if d.lifestyle.debtAccountID == id { d.lifestyle.debtAccountID = nil }
+        if d.challenge.accountID == id { d.challenge.accountID = nil }
+        d.goals.removeAll { $0.accountID == id }
+        d.events.removeAll { $0.toAccountID == id }
         for i in d.accounts.indices where d.accounts[i].terms?.linkedAccountID == id {
             d.accounts[i].terms?.linkedAccountID = nil
         }
@@ -172,9 +209,9 @@ final class BankStore: ObservableObject {
         case .own(let dst):
             guard let dstAcc = account(dst), dst != from else { return false }
             Ledger.apply(amount: -amount, to: from, date: now, counterparty: dstAcc.name,
-                         memo: memo.isEmpty ? "내 계좌 이체" : memo, category: .transfer, data: &d)
+                         memo: memo.isEmpty ? "내 계좌 이체" : memo, category: .transfer, tag: SpendingCategory.transfer.rawValue, data: &d)
             Ledger.apply(amount: amount, to: dst, date: now, counterparty: src.name,
-                         memo: memo.isEmpty ? "내 계좌 이체" : memo, category: .transfer, data: &d)
+                         memo: memo.isEmpty ? "내 계좌 이체" : memo, category: .transfer, tag: SpendingCategory.transfer.rawValue, data: &d)
         case .external(let name, let bank):
             Ledger.apply(amount: -amount, to: from, date: now, counterparty: name,
                          memo: memo.isEmpty ? bank : "\(bank) · \(memo)", category: .transfer, data: &d)
@@ -243,6 +280,113 @@ final class BankStore: ObservableObject {
             d.lifestyle.lastProcessed = d.clock.now()
         }
         data = d
+    }
+
+    // MARK: 무지출 챌린지
+
+    var challenge: ChallengeState { data.challenge }
+    var challengeAccount: Account? { data.challenge.accountID.flatMap(account) }
+
+    func startChallenge() {
+        guard data.challenge.accountID == nil else { return }
+        var d = data
+        let acc = Account(name: "참은 돈 (무지출 챌린지)", kind: .installmentSavings, number: Account.generateNumber(), balance: 0, colorIndex: 3)
+        d.accounts.append(acc)
+        d.challenge.accountID = acc.id
+        d.challenge.startedAt = d.clock.now()
+        data = d
+    }
+
+    @discardableResult
+    func logResist(kind: ResistKind, title: String, amount: Decimal) -> ResistedPurchase? {
+        guard amount > 0 else { return nil }
+        if data.challenge.accountID == nil { startChallenge() }
+        guard let accID = data.challenge.accountID else { return nil }
+        var d = data
+        let item = ResistedPurchase(date: now, title: title.isEmpty ? kind.placeholder : title, amount: amount, kind: kind)
+        d.challenge.items.append(item)
+        Ledger.apply(amount: amount, to: accID, date: item.date, counterparty: "\(kind.emoji) \(item.title)", memo: "참은 돈",
+                     category: .transfer, tag: SpendingCategory.transfer.rawValue, data: &d)
+        data = d
+        unlockAchievements(now: now)
+        WidgetBridge.publish(store: self)
+        return item
+    }
+
+    func deleteResist(_ id: UUID) {
+        guard let item = data.challenge.items.first(where: { $0.id == id }), let accID = data.challenge.accountID else { return }
+        var d = data
+        d.challenge.items.removeAll { $0.id == id }
+        Ledger.apply(amount: -item.amount, to: accID, date: now, counterparty: "\(item.kind.emoji) \(item.title)", memo: "기록 삭제",
+                     category: .transfer, tag: SpendingCategory.transfer.rawValue, data: &d)
+        data = d
+    }
+
+    // MARK: Savings goals
+
+    var goals: [SavingsGoal] { data.goals }
+
+    func addGoal(title: String, emoji: String, target: Decimal, deadline: Date?, autoAmount: Decimal, fromAccountID: UUID?, dayOfMonth: Int) {
+        var d = data
+        let acc = Account(name: "\(emoji) \(title)", kind: .deposit, number: Account.generateNumber(), balance: 0, colorIndex: 2)
+        d.accounts.append(acc)
+        var goal = SavingsGoal(title: title, emoji: emoji, target: target, accountID: acc.id, deadline: deadline, createdAt: now)
+        if autoAmount > 0, let from = fromAccountID {
+            let cal = Calendar.current
+            var comps = cal.dateComponents([.year, .month], from: now)
+            comps.day = min(dayOfMonth, 28); comps.hour = 9
+            var fire = cal.date(from: comps) ?? now
+            if fire <= now { fire = cal.date(byAdding: .month, value: 1, to: fire) ?? fire }
+            let ev = ScheduledEvent(accountID: from, counterparty: acc.name, amount: -autoAmount, memo: "목표 자동이체",
+                                    nextFireDate: fire, repeatRule: .monthly, toAccountID: acc.id)
+            d.events.append(ev)
+            goal.autoEventID = ev.id
+        }
+        d.goals.append(goal)
+        data = d
+        syncNotifications()
+    }
+
+    func addToGoal(_ goalID: UUID, amount: Decimal, from: UUID) {
+        guard let g = data.goals.first(where: { $0.id == goalID }), amount > 0 else { return }
+        _ = transfer(from: from, to: .own(g.accountID), amount: amount, memo: "목표 저축")
+        var d = data; settleGoals(now: now, data: &d); data = d
+        unlockAchievements(now: now)
+    }
+
+    func deleteGoal(_ id: UUID, refundTo: UUID?) {
+        guard let g = data.goals.first(where: { $0.id == id }) else { return }
+        var d = data
+        if let ev = g.autoEventID { d.events.removeAll { $0.id == ev } }
+        if let acc = d.accounts.first(where: { $0.id == g.accountID }) {
+            if let to = refundTo, acc.balance > 0 {
+                Ledger.apply(amount: acc.balance, to: to, date: now, counterparty: acc.name, memo: "목표 해지 환급",
+                             category: .transfer, tag: SpendingCategory.transfer.rawValue, data: &d)
+            }
+            d.accounts.removeAll { $0.id == acc.id }
+            d.transactions.removeAll { $0.accountID == acc.id }
+        }
+        d.goals.removeAll { $0.id == id }
+        data = d
+        syncNotifications()
+    }
+
+    // MARK: Scenarios
+
+    func applyScenario(_ scenario: Scenario) {
+        if checkingAccounts.isEmpty { addChecking(name: "입출금통장", balance: 0, colorIndex: 0) }
+        guard let accID = checkingAccounts.first?.id else { return }
+        applyTier(scenario.tier, accountID: accID, resetBalance: true, backfillDays: 30)
+        var d = data
+        if let bal = scenario.startingBalance { Ledger.setBalance(bal, of: accID, date: d.clock.now(), data: &d) }
+        let simNow = d.clock.now()
+        for e in scenario.events {
+            let fire = simNow.addingTimeInterval(TimeInterval(e.minutesFromNow * 60))
+            d.events.append(ScheduledEvent(accountID: accID, counterparty: d.settings.brand.resolve(e.counterparty), amount: e.amount,
+                                           memo: e.memo, nextFireDate: fire, repeatRule: e.repeatRule))
+        }
+        data = d
+        syncNotifications()
     }
 
     // MARK: Mock trading

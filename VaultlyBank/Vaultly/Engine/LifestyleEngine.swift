@@ -48,11 +48,12 @@ enum LifestyleEngine {
             let inflation = pow(1 + WealthTier.inflation, Double(years))
             let salaryFactor = pow(1 + tier.annualRaise, Double(years)) * pow(tier.promotionBump, Double(years / tier.promotionEveryYears))
 
-            func emit(_ amount: Decimal, hour: Int, second: Int, counterparty: String, memo: String, category: TransactionCategory) {
+            func emit(_ amount: Decimal, hour: Int, second: Int, counterparty: String, memo: String, category: TransactionCategory, tag: SpendingCategory? = nil) {
                 let minute = Int.random(in: 0..<60, using: &rng)
                 guard let at = cal.date(bySettingHour: min(23, max(0, hour)), minute: minute, second: second % 60, of: day),
                       at > data.lifestyle.lastProcessed, at <= now else { return }
-                Ledger.apply(amount: amount, to: accountID, date: at, counterparty: brand.resolve(counterparty), memo: memo, category: category, data: &data)
+                Ledger.apply(amount: amount, to: accountID, date: at, counterparty: brand.resolve(counterparty), memo: memo, category: category,
+                             tag: tag?.rawValue, data: &data)
                 processed = max(processed, at)
             }
 
@@ -83,7 +84,8 @@ enum LifestyleEngine {
                 let cp = spec.counterparties[Int.random(in: 0..<spec.counterparties.count, using: &rng)]
                 let memo = spec.memos[Int.random(in: 0..<spec.memos.count, using: &rng)]
                 let amount = randomAmount(Decimal(spec.baseMin), Decimal(spec.baseMax), factor: spec.scaling.factor(scale) * inflation, using: &rng)
-                emit(amount, hour: spec.hour, second: 10 + i, counterparty: cp, memo: memo, category: spec.category)
+                emit(amount, hour: spec.hour, second: 10 + i, counterparty: cp, memo: memo, category: spec.category,
+                     tag: amount > 0 ? .income : SpendingCategory.forSpec(spec.id))
             }
 
             // 3. 거지 debt spiral (end of day)
