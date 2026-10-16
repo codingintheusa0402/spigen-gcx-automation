@@ -358,10 +358,13 @@ function mirrorTerm(p) {
 }
 // host size → scale the font so the host's columns fit this pane (never re-wrap the host's screen)
 function fitPeer(t) {
-  const box = t.el.querySelector('.xt'), w = box.clientWidth, h = box.clientHeight; if (!w || !h) return;
-  const fs = Math.max(7, Math.min(12.5, w / (t.cols * .602), h / (t.rows * 1.15 * 1.18)));
-  if (Math.abs(t.term.options.fontSize - fs) > .05) t.term.options.fontSize = fs;
+  // always the host's grid, even while the tab is hidden: output written at another width wraps wrong for good
   if (t.term.cols !== t.cols || t.term.rows !== t.rows) t.term.resize(t.cols, t.rows);
+  const box = t.el.querySelector('.xt'), w = box.clientWidth - 12, h = box.clientHeight - 6; if (w <= 0 || h <= 0) return;
+  const f0 = t.term.options.fontSize, cell = t.term._core?._renderService?.dimensions?.css?.cell;   // measured cell size at f0
+  const cw = cell && cell.width ? cell.width / f0 : .602, ch = cell && cell.height ? cell.height / f0 : 1.15 * 1.18;
+  const fs = Math.max(7, Math.min(12.5, w / (t.cols * cw), h / (t.rows * ch)));
+  if (Math.abs(f0 - fs) > .05) t.term.options.fontSize = fs;
 }
 // the exact current screen (+ recent scrollback) of one of our terminals, for a phone or the peer opening it
 window.api.termSnap.onRequest((rq, id) => {

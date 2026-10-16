@@ -84,6 +84,7 @@ body[data-view="grid"] .term.focus { border-color: #4b5aa8; }
 body[data-view="grid"] .term .tlabel { display: flex; gap: 8px; align-items: center; padding: 4px 10px; font-size: 11.5px; color: var(--dim); background: var(--panel); border-bottom: 1px solid var(--line); }
 body[data-view="grid"] .term .xt { flex: 1; min-height: 0; padding: 4px 4px 2px 8px; }
 .term .xt { width: 100%; height: 100%; }
+.term.peer .xt { overflow: auto; }   /* a very wide host terminal in a narrow pane: scroll rather than clip */
 
 /* detail panel */
 #panel { width: 380px; flex: none; border-left: 1px solid var(--line); background: var(--bg2); overflow-y: auto; }
