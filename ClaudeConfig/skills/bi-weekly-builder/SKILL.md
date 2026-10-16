@@ -192,7 +192,7 @@ python3 rate_pipeline.py slides --deck <classicDeckId>
 
 ## 7b. BASE = the previous period's SENT Apple deck (user correction 2026-10-16 — always)
 The Apple deliverable is NOT rebuilt from the classic copy each period. Drive-copy the **previous period's sent deck**
-(261002 → `1quCr9Xj…`, its bound GAS `1KcekPNH…`; 261016 → the new golden-base copy) and keep its cover, index,
+(latest = 261016 `1sJ49LsEqMFrFyykAsgpWIREO9SCnWa5GW-ILEBLbG8Q`, bound GAS `1KwZrxhIfcQwd4v2VMp8rtg0qaDDlW_JqzDpp-DlE7tG_AvxfBwkeIMS7`; before that 261002 `1quCr9Xj…`) and keep its cover, index,
 dashboard, Appendix and closing exactly (hand-made design). Then:
 1. Build the classic deck (§1–6) and an Apple working copy of it with the §7 pipeline (gives this period's restyled
    gauges, TOP-7, cards, SIREN, bad-review TOP3 backups).
