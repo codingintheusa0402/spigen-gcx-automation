@@ -1,12 +1,12 @@
 {
   "_comment": "Per-period settings for the Apple-style Bi-Weekly deck. The bi-weekly-builder skill rewrites this every run.",
-  "report_code": "261002",
-  "report_date": "2026.10.02",
+  "report_code": "261016",
+  "report_date": "2026.10.16",
   "period": {
-    "start": "2026-09-11",
-    "end": "2026-10-01"
+    "start": "2026-10-02",
+    "end": "2026-10-15"
   },
-  "source_deck": "12NxCxbW3z0fH1KKEVzX_uqBGH_APlkZpBWdPgET_aCk",
+  "source_deck": "18r_Ceuaxr_on73M4pueuHYL1NgDCeOkKxr7C8itKlko",
   "apple_deck": "1quCr9Xj-pSsVXKrYuaEOq0LPILZMN2LPUwBkY1f_GFI",
   "team_line": "경영지원부문ㅣ사업지원실ㅣ글로벌CX전략팀 ㅣ김지우",
   "series": [
