@@ -20,14 +20,15 @@ const BW_RUN = {
   ]
 };
 
+// Overview TOP3 grids on the ACTIVE deck, classic theme. Resumable across the 6-min cap.
+function bwRunOverview() { _bwOverview(_bwDeck(), CHART_THEMES.classic, 'bw_overview_done_' + BW_RUN.end); }
+
 // Claim/review cards for BW_RUN.start..end into the ACTIVE (bound) deck. Re-runs only add missing cards.
 function bwRunCards() {
   const res = _generateClaimSlides(_bwDeck(), { sources: BW_RUN.sources, startDate: BW_RUN.start, endDate: BW_RUN.end });
   Logger.log(JSON.stringify(res));
 }
 
-// Overview TOP3 grids on the ACTIVE deck, classic theme. Resumable across the 6-min cap.
-function bwRunOverview() { _bwOverview(_bwDeck(), CHART_THEMES.classic, 'bw_overview_done_' + BW_RUN.end); }
 
 // BW_RUN.deck when set, so an already-authorized script can drive a fresh deck copy.
 function _bwDeck() { return BW_RUN.deck ? SlidesApp.openById(BW_RUN.deck) : SlidesApp.getActivePresentation(); }
@@ -659,6 +660,10 @@ function _slideHasSirenBadge(slide) {
   return slide.getShapes().some(function(sh) { try { return /SIREN/.test(sh.getText().asString()); } catch (e) { return false; } });
 }
 
+function _removeSirenBadges(slide) {
+  slide.getShapes().forEach(function(sh) { try { if (sh.getText().asString().trim() === SIREN_BADGE.label) sh.remove(); } catch (e) {} });
+}
+
 function _addSirenBadge(slide, url) {
   const b = SIREN_BADGE;
   const sh = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, b.l, b.t, b.w, b.h);
@@ -972,6 +977,7 @@ function _generateClaimSlides(presentation, opts) {
         else template = templateByType[row.type === 'claim' ? 'review' : 'claim'];
       }
       const dup = template.slide.duplicate();
+      _removeSirenBadges(dup); // the template's own badge must not carry over; re-added below only on a real match
       _placeAfter(presentation, dup, afterSlide);
       if (crossFamily) {
         _setCardText(_getCardShapes(dup).title, cards[0].title);
