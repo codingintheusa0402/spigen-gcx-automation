@@ -28,6 +28,7 @@ const AA_CHART = "%(chart)s";
 const AA_LAYOUT = %(layout)s;
 function _aaBlob(b64, n) { return Utilities.newBlob(Utilities.base64Decode(b64), 'image/png', n); }
 function _aaIcon(page, key, x, y, s, title) { const im = page.insertImage(_aaBlob(AA_ICONS[key], key + '.png'), x, y, s, s); im.setTitle(title || 'apl_icon'); return im; }
+function _aaFlat(list) { const out = []; list.forEach(function(e) { if (e.getPageElementType() === SlidesApp.PageElementType.GROUP) out.push.apply(out, _aaFlat(e.asGroup().getChildren())); else out.push(e); }); return out; }  // text can sit inside groups
 function _aaText(el) { try { return el.asShape().getText().asString().trim(); } catch (e) { return ''; } }
 function aaPlaceIcons() {
   const pres = SlidesApp.openById(AA_DECK);
@@ -61,7 +62,7 @@ function aaSwapChart() {
   pres.getSlides().some(function(s) {
     const imgs = s.getPageElements().filter(function(e) { return e.getPageElementType() === SlidesApp.PageElementType.IMAGE; });
     const old = imgs.filter(function(e) { return e.getTitle() === 'apl_chart'; })[0] ||
-                imgs.filter(function(e) { return e.getWidth() > 500 && e.getHeight() > 200 && s.getPageElements().some(function(o) { return _aaText(o).indexOf('누적 클레임 인입건') >= 0; }); })[0];
+                imgs.filter(function(e) { return e.getWidth() > 500 && e.getHeight() > 200 && _aaFlat(s.getPageElements()).some(function(o) { return _aaText(o).indexOf('누적 클레임 인입건') >= 0; }); })[0];
     if (!old) return false;
     const im = s.insertImage(_aaBlob(AA_CHART, 'weekly_chart.png'), old.getLeft(), old.getTop(), old.getWidth(), old.getHeight());
     im.setTitle('apl_chart'); im.sendToBack(); old.remove(); return true;
