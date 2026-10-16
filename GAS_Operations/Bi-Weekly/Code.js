@@ -31,7 +31,7 @@ const BW_RUN = {
 };
 
 // Same grids on the Apple copy (BW_RUN.appleDeck), apple theme, #F5F5F7 canvas.
-function bwRunOverviewApple() { _bwOverview(SlidesApp.openById(BW_RUN.appleDeck), CHART_THEMES.apple, 'bw_overview_apple_v3_done_' + BW_RUN.end, BW_RUN.appleOverview); }
+function bwRunOverviewApple() { _bwOverview(SlidesApp.openById(BW_RUN.appleDeck), CHART_THEMES.apple, 'bw_overview_apple_v3_done_' + BW_RUN.end, (BW_RUN.appleOverview || []).length ? BW_RUN.appleOverview : null); }
 
 // Overview TOP3 grids on the ACTIVE deck, classic theme. Resumable across the 6-min cap.
 function bwRunOverview() { _bwOverview(_bwDeck(), CHART_THEMES.classic, 'bw_overview_v3_done_' + BW_RUN.end); }

@@ -1,257 +1,140 @@
 ---
 name: bi-weekly-builder
 description: >-
-  Builds the complete GCX Bi-weekly Report for a period, end to end, the way it
-  was built and approved on 2026-10-01 (261002): the classic deck (claim/review
-  card slides from the 클레임 및 배드리뷰 고객사진 모음 decks, Overview TOP3
-  gauge slides, "클레임 + 배드리뷰 / 판매량 TOP 7" tables from Caspi, SIREN
-  status slides, index/cover updates) AND — as the default deliverable — its
-  apple.com-style copy ("<code> GCX Bi-weekly Report-apple": bright #F5F5F7
-  canvas, white rounded tiles, capsule buttons, Material-Symbols icons, Apple
-  bar chart, uniform titles, Inter/Noto Sans KR, Appendix footer page, Apple
-  theme + slide-type layouts, official spigen.com product images). The Apple
-  version is the one SENT, under the standard name "<yymmdd> GCX Bi-weekly
-  Report". Trigger when the user says "run bi-weekly
-  builder", "build the bi-weekly slides / report", "바이위클리 만들어줘",
-  "make this period's bi-weekly", or any close paraphrase. ALWAYS ask for the
-  date range, the monitored series, and the deck / Apps Script URL first.
+  Builds the complete GCX Bi-weekly Report for a period, end to end, the way 261016 was built and approved
+  (2026-10-16): classic working deck (claim/review cards from the 고객사진 모음 decks, Overview TOP3 gauges,
+  TOP-7 from Caspi, SIREN tables, dashboard numbers) → Apple-style working copy → transplanted into a copy of the
+  previous SENT deck (golden base, hand-made design kept) → SIREN 신규 이슈 사례 cards → share + rename (deck and
+  its Apps Script) → FINAL step: Apple-themed live-HTML Gmail draft (never sent). Trigger on "run bi-weekly builder",
+  "build the bi-weekly slides / report", "바이위클리 만들어줘", "make this period's bi-weekly", "bi-weekly report
+  for this time", or any close paraphrase. ALWAYS confirm the date range and series first.
 metadata:
   category: automation
   locale: ko-KR
-  phase: v2.1.0-live
+  phase: v3.0.0-live
 ---
 
-# bi-weekly-builder
+# bi-weekly-builder (v3 runbook)
 
-Project folder: `~/Desktop/GCX/GAS_Operations/Bi-Weekly/` (deck-bound Apps Script via clasp
-+ `tools/` Python). **Golden reference = the final deck sent for 261002 (approved 2026-10-01):**
-https://docs.google.com/presentation/d/1quCr9Xj-pSsVXKrYuaEOq0LPILZMN2LPUwBkY1f_GFI/edit
-(titled `261002 GCX Bi-weekly Report`; built from the classic working deck `12NxCxbW…`).
-"If the skill makes one like this, it did it correctly" — render it next to your output when in doubt.
+**Project:** `~/Desktop/GCX/GAS_Operations/Bi-Weekly/` — `Code.js` (GAS, clasp) + `tools/` (Python) + `tools/apple_theme/`.
+**Golden base (latest SENT deck) = 261016** `1sJ49LsEqMFrFyykAsgpWIREO9SCnWa5GW-ILEBLbG8Q` (bound GAS `1KwZrx…`);
+before: 261002 `1quCr9Xj…`. Update this line every period with the new sent deck.
 
-### Final deck composition (81 slides for 3 series — reproduce this structure)
-| slides | content |
-|---|---|
-| 1 | Cover — classic orange Spigen cover (title, team line, date) |
-| 2 | Index — 01 Overview · 02 iPhone 18 · 03 Pixel 11 · 04 Galaxy Z8 (newest first) · 05 GCX SIREN, icons beside numbers |
-| 3 | 1. Overview dashboard — 집중 모니터링 대상 (newest series red), 최다 인입사유 top-3 tiles, 누적 클레임 + YoY, Apple weekly bar chart |
-| 4 | 1. Overview (2026년 전제품) — TOP3 gauges, claims 2026-01-01~latest |
-| 5–7 | 1. Overview (<series>) 배드리뷰 TOP3 — one per series, cumulative |
-| 8–10 | 1. Overview (<series>) 클레임 TOP3 — one per series, cumulative |
-| 11–13 | Overview (<series>) 클레임 + 배드리뷰 / 판매량 TOP 7 — product thumbnails |
-| 14… | 2. iPhone 18 → 3. Pixel 11 → 4. Galaxy Z8 Claims / Reviews (newest first) — this period's cards only, product tile + photos + spec tiles |
-| next 1–2 | 5. GCX SIREN (26년 하반기 등록 현황) — 9 rows per slide, stat tile + sheet button |
-| next | Appendix — apple.com footer |
-| last | Closing — black Spigen-logo slide |
-Memory with the history/gotchas: `biweekly_slide_maker_and_lg_designs`.
+**Runner script:** GAS project `15U2Db0iWmLAA7Z8l2FVZ5rHe8617jrufJ5Hdc9r4oHneWC_Bpl4hF7Hs` (bound to the old 261002
+classic deck, already authorized incl. Gmail). It drives ANY deck via ids in `BW_RUN` (`deck`, `appleDeck`) — no
+need for the new copy's own script. Run a function = make it the **first function** of the file (or a temp
+`Aa*.js` file, which sorts first), `clasp push --force`, reload the editor, open that file, click Run
+(ghost-click: the Run-dropdown is unreliable). Temp files: delete → **touch Code.js** → push (a pure delete
+says "already up to date" and leaves the remote file). `.claspignore` excludes `tools/**`.
+Python: homebrew `python3` with `tools/rate_pipeline.creds()` (gws_shim: Drive+Slides+Sheets, no Gmail);
+charts/icons with `/usr/bin/python3` (matplotlib/Pillow). Render checks: `presentations.pages.getThumbnail`.
+Slides writes ≤60/min — batch, retry 429.
 
-Python: Slides/Sheets/Drive via `tools/rate_pipeline.creds()` (gws_shim token,
-kjw@spigen.com). Charts/icons render with **`/usr/bin/python3`** (has matplotlib + Pillow;
-the homebrew 3.14 can't install them). Slides API write quota is 60 req/min — batch
-(≤400 requests per call) and retry on 429 (all scripts here already do).
+## Standing user rules (all ALWAYS)
+1. Series order = **newest launch first** (iPhone 18 → Pixel 11 → Galaxy Z8 …) in index, sections, Overview.
+2. Apple deliverable = **copy of the previous SENT deck**, its cover/index/dashboard/Appendix/closing kept; never
+   regenerate the look from scratch. Bright backgrounds; cover (orange) + closing (black logo) untouched.
+3. **SIREN 신규 이슈 사례**: for each SIREN registered in the period, 2–3 cards from its SIREN deck's claim/review slides
+   that show defect photos.
+4. Product names: drop `SP_`; underscore codes → last token in caps (`_new_biz__ev25mfaq` → `EV25MFAQ`). Lives in
+   `Code.js _chartProductName` and `mail_html.pname`.
+5. "알 수 없음 (No product info)" / 해당없음 / unknown are **never ranked** — merged into 그 외 (`_isUnknownLabel`/`_rankKnown`).
+6. Claims everywhere = Zendesk `4. Product Issue` only (EU+UK for TOP-7). Bad reviews exclude the `긍정 리뷰` tag.
+7. Every deck created → Drive `anyone`/`writer` (link-only). Every deck's **bound Apps Script renamed = deck name**.
+8. Final step = Gmail **draft** (never send), **live HTML** (no screenshots), report link at the TOP, subject
+   `Bi-Weekly 제품 이슈 Report, <yy.mm.dd> ~ <yy.mm.dd>` (no "n of 41"), no line-wrapping labels, < 100 KB.
+9. Chat notices only where the user says; never test-post to live rooms (private room `AAQAc9NQmJQ` for tests).
 
----------------------------------------------------------------------------------------------
-## 0. Ask first (one AskUserQuestion turn, never assume)
+## 0. Inputs (one AskUserQuestion)
+- Date range: default = day after the previous report's end → today (report code = today `yymmdd`).
+- Series: default = same as last period. Deck: **copy it yourself** (don't wait for a URL) — Drive-copy the previous
+  classic deck → `<code> GCX Bi-weekly Report (classic)` and use `BW_RUN.deck` + the 15U2 runner.
 
-1. **Date range** for the cards (작성 날짜), e.g. `2026-09-11 ~ today`.
-2. **Series to monitor** (e.g. Galaxy Z8 / Pixel 11 / iPhone 18). Each needs its
-   고객사진 모음 deck id + product monitoring sheet id (tabs `신제품 라인업`, `1-3점`, `1-5점`, `DE`).
-   Find unknown ones with Drive search `title contains '고객사진'`.
-3. **This period's deck URL + its bound Apps Script URL** (the user copies the last
-   classic deck and renames it `<yymmdd> GCX Bi-weekly Report`; the bound script id changes
-   with every copy → set `.clasp.json` `scriptId`).
-Default: also produce the Apple copy (§7). Only skip it if the user says so.
+## 1. Classic working deck
+1. Drive-copy previous classic deck (same folder `0ADTRUOsN0M72Uk9PVA`), share anyone-edit.
+2. `Code.js` BW_RUN: `start`, `end`, `deck` (new id), `sources`. `node -e "new Function(…)"`, `clasp push --force`.
+3. **TOP-7** (`tools/`): `python3 rate_pipeline.py prep --series glxZ8,pixel11,iphone18` → run `state/caspi_sales.sql`
+   with Caspi `run_query` (limit 10000) → copy the saved tool-result file to `state/caspi_sales.json` (check
+   `"truncated": false`) → `python3 rate_pipeline.py aggregate` → `python3 rate_pipeline.py slides --deck <classic>`.
+4. **Cards**: run `bwRunCards` (twice if `remaining>0`; ~5 min each). Then delete cards dated < start (Python: card
+   slides contain '클레임 내용'/'리뷰 내용'; date = first `YYYY.MM.DD`). The maker strips inherited SIREN badges and
+   re-adds only real matches (26년 SIREN SKU + issue) — still eyeball one badged card.
+5. **SIREN tables**: rows = `26년 SIREN` (sheet `15Jh6ZFD…`, header row 18) with 날짜 ≥ half-year start, 등록=O, 9 rows/slide.
+   New rows: `insertTableRows` + per-cell insertText with the reference row's text/paragraph style + cell fill,
+   duplicate a row icon and relink it (SIREN deck = C-column chip `richLinkProperties.uri`), grow the shadow rect,
+   `replaceAllText` the count (= all 2026 rows with 등록=O).
+6. **Dashboard + cover**: `python3 dashboard_stats.py <cutoff = last data day> --apply <deck> --old '<old values|…>'`
+   (cumulative, (~MM.DD), YoY, top-3 defect 인입사유); cover date via replaceAllText.
+7. Gauges on classic are optional (the Apple working copy gets its own in step 2.3).
 
----------------------------------------------------------------------------------------------
-## 1. Prepare the classic deck
+## 2. Apple working copy (`tools/apple_theme/`, all idempotent)
+1. Drive-copy the classic → `<code> …-apple-work`; set `report.json` (report_code/date/period/source_deck =
+   classic, apple_deck = this copy) and `BW_RUN.appleDeck`.
+2. Reorder to newest-first + index swap if the classic isn't already (insert-then-delete texts, one
+   `updateSlidesPosition` per slide, card titles renumbered via temp-token replaceAllText).
+3. Run: `apple_restyle.py` → `apple_cards.py` → `apple_tables.py` → `apple_v3.py` (Appendix after last SIREN slide) →
+   `apple_v4.py` (SIREN stat tile; any count) → GAS `bwRunOverviewApple` (uses `BW_RUN.overview` ids when
+   `appleOverview` is empty — **clear `appleOverview` for a working copy**) → `weekly_fetch.py` + `/usr/bin/python3 chart.py`
+   → `make_assets_gas.py` + run `aaRun` (icons, chart swap — finds the chart inside groups — layout icons, index
+   icons follow report.json series order) → `apple_type.py fix` → `spigen_images.py` → `align_icons.py`.
 
-- `.clasp.json` → this period's scriptId. New series → add to `CLAIM_SLIDE_SOURCES`,
-  `BAD_REVIEW_SOURCES` (Code.js), the SlideMaker.html checkbox, and `tools/series.json`.
-- Edit the **`BW_RUN` block at the top of Code.js**: `start`, `end`, `sources`,
-  `appleDeck` (fill after §7 copy), and `overview` (one job per Overview TOP3 slide id —
-  ids stay stable across copies; new series → duplicate the Pixel 11 TOP3 slides with
-  Slides API `duplicateObject`, replace "Pixel 11 Series" in the title, add jobs).
-- `node -e "new Function(require('fs').readFileSync('Code.js','utf8'))"` then `clasp push --force`.
-- Running from the editor: the Run dropdown can't be clicked reliably (ghost-click) —
-  **put the wrapper you need as the first function of Code.js**, push, reload the editor,
-  open Code.gs, Run. A new copy needs OAuth: the user clicks Review permissions → Allow.
+## 3. Final deck = golden base + this period's slides
+1. Drive-copy the golden base (latest SENT deck) → `<code> GCX Bi-weekly Report`; share anyone-edit.
+2. `transplant_gas.txt` → `AaTransplant.js` (set DST/SRC), push, run `aaTransplant`: keeps cover/index/dashboard/
+   Appendix/closing of DST, inserts SRC's 전제품 → claim TOP3 → TOP-7 → cards → SIREN tables, then bad-review backups
+   after the Appendix, swaps the chart image. Delete temp file, touch Code.js, push.
+3. Cover date + dashboard numbers: `dashboard_stats.py … --apply <final>`; Appendix `원본 보고서 (<code>)` text + link →
+   classic deck. Fix titles to golden style (claim TOP3 titles without "1. ").
+4. **SIREN issue cards**: write `siren_cards.json` (picks = 2–3 photo slides per new SIREN; open the SIREN deck from the
+   26년 SIREN C-column chip; prefer 인입일 inside the period; shorten long details to ≤4 lines) →
+   `python3 siren_cards.py` (template + roles auto-detected, inserted after the last SIREN table, `BW_DECK=<id>` to test
+   on a copy) → `apple_type.py fix` → `align_icons.py`. Add `2026 GCX 신규 SIREN 이슈 사례` to index 05.
+5. If gauges need a rebuild on the final deck: put its gauge slide ids in `BW_RUN.appleOverview`, bump the done-key
+   version in `bwRunOverviewApple`, run, then `apple_type.py fix` + `aaRun` (icons) + `align_icons.py`.
+6. Rename decks (`… (classic)` for the working classic), trash the `-apple-work` copy, then rename each deck's bound
+   Apps Script (open deck → Extensions → Apps Script → click title → Rename; a fresh API copy creates a new empty
+   project — name it too). Update the "Golden base" line at the top of this file + memory.
+7. Render and compare with the golden base: cover, index, dashboard, 전제품, one series TOP3, a TOP-7, 2 cards, SIREN
+   tables, SIREN issue cards, Appendix, closing.
 
-## 2. Claim / review cards (`bwRunCards`)
-
-- A family with **no card in the deck is skipped** → seed one first: duplicate the last card of
-  another family, set its title to `N. <Series> Claims / Reviews`; delete seeds after the run.
-- Run `bwRunCards` (re-runs only add missing cards; 6-min cap → run again).
-- Source decks may contain a dated "템플릿 예시" sample slide — the maker skips it (`_readSourceSlide`).
-- **Delete the copied previous-period cards** (card date < start) — the deck holds only this period.
-- Verify 2–3 cards via `presentations.pages.getThumbnail` (not the browser).
-
-## 3. Overview TOP3 gauge slides (`bwRunOverview`)
-
-Data definitions (user-approved; reproduce the old numbers):
-- **Claims** = Zendesk `26년 전체문의`, Category `4. Product Issue`, Device contains the series
-  (e.g. `Galaxy Z Fold 8`/`Galaxy Z Flip 8`, `Google Pixel 11`, `iPhone 18`).
-- **Bad reviews** = the series sheet `1-3점`, **excluding the `긍정 리뷰` tag**.
-- **Series slides are cumulative (all dates); "Overview (2026년 전제품)" = 2026-01-01 ~ latest.**
-- Display: product names drop the `SP_` prefix; every card uses the same type (count 13.5/12,
-  title 8.5, legend/value 7.5 @115%), long labels lose their "(…)" instead of shrinking.
-`rebuildChartGridOnSlide` redraws in place (keeps title/sidebar); Zendesk sheet read once per run.
-
-## 4. TOP-7 slides (`tools/rate_pipeline.py`)
-
-```
-cd tools
-python3 rate_pipeline.py prep --series glxZ8,pixel11,iphone18      # writes state/caspi_sales.sql
-#  run state/caspi_sales.sql with mcp__claude_ai_CaspiLM__run_query (limit 10000),
-#  copy the saved tool-result file to state/caspi_sales.json
-python3 rate_pipeline.py aggregate      # REFUSES a truncated Caspi result (truncated:true)
-python3 rate_pipeline.py slides --deck <classicDeckId>
-```
-- Sales = `S3.AMAZON_SELLER.VAT_TRANSACTION_DATA`, SALE, EU+UK, 2026, grouped **by SKU only**
-  (per-ASIN/marketplace rows exceed Caspi's ~100KB cap and get silently truncated).
-- Rate = (claims + bad reviews) ÷ sold, min 20 sold, ≥2% red. Footnote says EU+UK / VAT data / data month.
-- If the user asks whether 판매량 is real: spot-check 3–5 SKUs with a direct Caspi COUNT/SUM.
-
-## 5. SIREN slides
-
-- Rows = `26년 SIREN` (sheet `15Jh6ZFD…`, header row 18) with SIREN 등록 = O since the half-year start.
-  The table holds 9 rows → overflow goes on a duplicated continuation slide (delete extra rows,
-  refill cells insert-then-delete, relink the per-row icons/links, shrink the shadow rect).
-- Count badge = number of rows with SIREN 등록 = O. Deck links: find the review deck in Drive
-  by the sheet's C title (try keyword searches when the exact title misses).
-
-## 6. Cover / index / dashboard
-
-- Cover date = report date. **Series order = newest launch first** (manager feedback 261002): index blocks
-  02 = newest series (iPhone 18), 03 = Pixel 11, 04 = Galaxy Z8 …, SIREN last; the card sections follow the
-  same order (`2. iPhone 18 Series Claims / Reviews`, `3. Pixel 11 …`, `4. Galaxy Z8 …`, `5. GCX SIREN …`).
-  To reorder: swap the index blocks' title/list texts (insert-then-delete keeps the list style) and their
-  icons, move each card block with `updateSlidesPosition` (one request per block, in deck order), and
-  renumber titles with `replaceAllText` via a temp token. `report.json` series[] is kept in this order.
-- Overview dashboard (slide 3): `2026 전제품 누적 클레임 인입건 수(~MM.DD)` = row count of
-  `26년 전체문의` (created ≤ cutoff), YoY via `getYoYStats` logic, top-3 `인입사유` counts
-  (all categories), 집중 모니터링 대상 list incl. each series' review-monitoring window —
-  **the newest series' line goes first, in red (#FF3B30)**, e.g. `iPhone 18 Series: 26.9.21~26.12.21`,
-  older series in gray below it.
-
----------------------------------------------------------------------------------------------
-## 7. Apple version (default deliverable) — `tools/apple_theme/`
-
-1. Drive-copy the finished classic deck → `<code> GCX Bi-weekly Report-apple` (same folder) and
-   work on the copy. When it's done and approved, the Apple deck becomes the sent report: rename it
-   `<code> GCX Bi-weekly Report` (ask the user first — the classic working deck has the same name;
-   suggest renaming that one `<code> GCX Bi-weekly Report (classic)`).
-2. Fill `tools/apple_theme/report.json` (report_code, report_date, period, source_deck,
-   apple_deck, series[chip/title_prefix/source_deck/sheet/product_url], zendesk/siren/looker) and set
-   `BW_RUN.appleDeck` in Code.js.
-3. Run in this order (homebrew `python3` unless noted; every script is idempotent):
-   | step | command | what it does |
-   |---|---|---|
-   | a | `python3 apple_restyle.py` | backgrounds, removes navy sidebar chrome, Noto Sans KR, role-based colors, light tables |
-   | b | `python3 apple_cards.py` | each card → photo tile (photos fit-scaled) + content tile + 5 spec tiles, labels, blue capsule button, red SIREN capsule (roles read from the CLASSIC deck by element id) |
-   | c | `python3 apple_tables.py` | TOP-7/SIREN tables on white tiles, hairline rows, blue "보기" links instead of yellow icons |
-   | d | `python3 apple_v3.py` | Appendix (apple.com footer: 5 icon-headed link columns, line "젠데스크, 아마존 배드리뷰 데이터 접근 권한이 필요하면 **Caspi 접근 신청** 페이지에서 요청하세요.", copyright + nav row `Overview · <series…> · SPIGEN` (Overview → first Overview slide; each series → its official device page from `report.json` series[].product_url — Samsung/Google Store/Apple, verify the URL returns the right page title; SPIGEN → https://www.spigen.com/; one link per word), no country). The Apple cover hero only runs if `report.json` `apple_cover: true` — default false |
-   | e | `python3 apple_v4.py` | SIREN header/column alignment, stat tile (rounded tile aligned to the table's right edge, 8pt gap), outline capsule |
-   | f | GAS `bwRunOverviewApple` | TOP3 gauges in `CHART_THEMES.apple` (white tiles, blue/light-blue/indigo/gray rings) |
-   | g | `python3 weekly_fetch.py` then `/usr/bin/python3 chart.py` | Apple weekly bar chart (gray rounded-top bars, latest week blue, faint trend line, SF Pro + Apple SD Gothic Neo). Labels must be readable (manager feedback): values 7pt (≥1,000 → `1.1k`), weeks 6pt, months 7pt bold, y-axis 5.5pt |
-   | h | `/usr/bin/python3 icons_render.py` (only if `icons/*.png` missing) then `python3 make_assets_gas.py` | writes temp `AppleAssets.js` (icons on slides, chart swap, layout icons) → `clasp push`, run `aaRun` (first function of AppleAssets.gs), then **delete AppleAssets.js and push again** |
-   | i | `python3 apple_layouts.py` | Apple theme (master `simple-light-2` color scheme + default type) and 10 layouts on the unused stock layouts p2–p11 (Cover, Index, Overview dashboard, TOP3 gauges, Table, Claim/Review card, SIREN, Appendix, Closing, Big number). Re-run step h afterwards for layout icons. Layout names can't be set via API → tell the user: View → Theme builder → right-click → Rename |
-   | j | `python3 apple_type.py fix` | '1.' list bullets → text, restores bold, every title same box (x36 y16, 18pt bold #1D1D1F, gray "대상 국가…" qualifier), Latin runs → Inter (600 for bold), Hangul → Noto Sans KR |
-   | k | `python3 spigen_images.py` | official spigen.com product shots (public Shopify `products.json`, matched by base SKU, fallback model+series title; cached 7 days): 38pt #F5F5F7 rounded tile + shot left of each card's product name, 26pt thumbnail centered in each TOP-7 row — TOP-7 rows are pinned to header 24pt / rows 40pt (Slides renders wrapped rows taller than rowHeight, which misaligned the thumbnails) and the white table tile is rebuilt to that height; rows with no official image get an empty #F5F5F7 tile so the column stays even. Reports SKUs with no official image (not yet listed on spigen.com; they fill in on a later run). Product shots only — no campaign/lifestyle banners, nothing on cover/closing |
-   | l | `python3 align_icons.py` | centers every icon on its label's text line (run after any font change) |
-   After step j, set gauge counts to 12pt if 4-digit counts touch the ring.
-4. Render and look at: cover, index, slide 3, one gauge, one TOP-7, 2 cards (1 and 2 photos),
-   SIREN, Appendix, closing. Fix anything off before reporting.
-
-### Design system (keep identical every period)
-- Canvas `#F5F5F7` (cover/index/dashboard/closing white), tiles white, **corner radius 12pt**
-  built as 2 rects + 4 circles (Slides' ROUND_RECTANGLE radius can't be controlled — never use it).
-- Ink `#1D1D1F`, secondary `#6E6E73`, tertiary `#86868B`, hairline `#E5E5EA`/`#D2D2D7`,
-  blue `#0071E3` (links `#0066CC`), red `#FF3B30`, chart ring `#0071E3 #64D2FF #5E5CE6 #D2D2D7`.
-- Buttons/chips = **true capsules** (rect + 2 circles of diameter h; outline = blue capsule with an
-  inset capsule in the background color). Never FLOW_CHART_TERMINATOR (elliptical ends).
-- Type: Inter (Latin) + Noto Sans KR (Hangul) — closest available to SF Pro / Apple SD Gothic Neo.
-  Titles 18pt bold, card values 11.5 bold, labels 7.5 gray.
-- Icons: Material Symbols Rounded (Apache-2.0) in Apple blue (gray for source line, red for SIREN).
-  Do not use SF Symbols or Apple PNGs (license).
-- Bright backgrounds only (user: "the bg of the slides should be bright not dark") — **except the
-  cover and closing: they stay the classic Spigen brand slides** (orange cover with logo, team line,
-  date in Gothic A1 / Nanum Gothic; black closing with the white Spigen logo). No script restyles,
-  re-fonts or re-colors slide 1 or the last slide.
-
----------------------------------------------------------------------------------------------
-## 8. Gotchas (all hit on 261002)
-- Caspi `run_query` silently truncates at ~100KB (`truncated:true`) — aggregate in SQL.
-- New Slides shapes store size as 3000000 EMU × scale: move with RELATIVE transforms or
-  ABSOLUTE with recomputed scale, never `scaleX:1`.
-- Text boxes shorter than their text overflow downward → icons look high; fix with align_icons.
-- Setting `fontFamily` drops `bold` on runs → always set weightedFontFamily with weight.
-- Thumbnails can be stale right after a GAS run — re-render.
-- The user edits the Apple deck by hand (e.g. Appendix footer text, pasted cover/closing):
-  scripts must not overwrite user text; if a slide was replaced, ask before rebuilding it.
-- CaspiSalesBackfill (sheet Z col 판매량) is a separate job — cumulative EU+UK orders since launch.
-
-## 7b. BASE = the previous period's SENT Apple deck (user correction 2026-10-16 — always)
-The Apple deliverable is NOT rebuilt from the classic copy each period. Drive-copy the **previous period's sent deck**
-(latest = 261016 `1sJ49LsEqMFrFyykAsgpWIREO9SCnWa5GW-ILEBLbG8Q`, bound GAS `1KwZrxhIfcQwd4v2VMp8rtg0qaDDlW_JqzDpp-DlE7tG_AvxfBwkeIMS7`; before that 261002 `1quCr9Xj…`) and keep its cover, index,
-dashboard, Appendix and closing exactly (hand-made design). Then:
-1. Build the classic deck (§1–6) and an Apple working copy of it with the §7 pipeline (gives this period's restyled
-   gauges, TOP-7, cards, SIREN, bad-review TOP3 backups).
-2. Temp GAS `aaTransplant` (in the authorized 15U2 project): open the golden-base copy, remove every slide except
-   cover/index/dashboard/Appendix/closing, `insertSlide(i, srcSlide)` the working copy's slides in golden order —
-   전제품 → claim TOP3 (iPhone, Pixel, Z8) → TOP-7 → cards (iPhone, Pixel, Z8) → SIREN → [Appendix] → bad-review TOP3
-   backups (iPhone, Z8, Pixel) → [closing]; replace the dashboard `apl_chart` image with the working copy's blob.
-3. replaceAllText on cover date + dashboard numbers; Appendix "원본 보고서 (<code>)" text + link → this period's classic deck.
-4. Delete the temp GAS file; `clasp push` (touch Code.js first — clasp says "already up to date" after a pure delete
-   and leaves the remote file). Render and compare with the golden deck slide by slide.
-
-## 7c. SIREN issue cards (user rule 2026-10-16 — always)
-For every SIREN registered in this period (26년 SIREN rows with 날짜 inside the date range), open its SIREN deck
-(C-column chip link) and pick **2–3 claim/review slides that show defect photos** (prefer 인입일 inside the period).
-Add one Apple card per pick right after the SIREN table slides, title `5. GCX SIREN 신규 등록 이슈 사례`:
-duplicate an Apple claim card that has the red SIREN capsule, replace texts by insert-then-delete (keeps style),
-date = 인입일 (not 결함 발생 기간), detail without the `[SKU]` prefix (shorten to ≤ ~4 lines), country/인입사유/ASIN/SKU
-from the deck's 개요 slide, rating = the deck's Global 리뷰 평점, button link = Zendesk ticket or Amazon review URL
-(review → 리뷰 내용 / From Amazon / 배드리뷰 바로가기 + Amazon icon, copy the button text style from an existing
-review card), SIREN capsule link = the SIREN deck; photos via createImage from the source slide contentUrl, fit-scaled
-side by side in the photo tile (50,124)-(426,372). Then `apple_type.py fix`, `align_icons.py`, render.
-Index 05 list gets `2026 GCX 신규 SIREN 이슈 사례`. 261016 example: Z Fold 8 카메라링 변형 ×2, Tesla TO331 결로 ×3.
-
-## 8b. Sharing + naming (user rules 2026-10-16 — always)
-- Every deck created → Drive permission `anyone`/`writer` (link-only).
-- Every deck's **bound Apps Script project is renamed to exactly the deck's name** (Slides → Extensions → Apps Script →
-  click the project title → rename). Redo it whenever a deck is renamed.
-
-## 8d. FINAL STEP — Gmail draft as LIVE HTML (always; approved 261016)
-The skill is not done until this draft exists. Order of the whole run: classic deck → Apple working copy →
-golden-base transplant (§7b) → SIREN issue cards (§7c) → share/rename (§8b) → **mail draft (this section)** → report back.
-**No slide screenshots** (user 2026-10-16): every Overview/SIREN element is real HTML with working links, Apple theme.
+## 4. FINAL — Gmail draft (live HTML)
 ```
 cd tools/apple_theme
-# 1) edit mail.json: subject "Bi-Weekly 제품 이슈 Report, <start> ~ <end>" (NO "n of 41"), title "Bi-Weekly Report <yy. mm. dd>",
-#    subtitle, intro, voc [[product, issue]...] (top Zendesk 4. Product Issue product×인입사유 in the period), siren (new
-#    registrations), replace_draft (id of a previous draft to delete, or "")
-python3 weekly_fetch.py            # weekly bars data (same as the deck chart)
-python3 mail_html.py               # reads the FINAL deck (report.json apple_deck) → mail_sections.html
-python3 mail_build.py              # → mail.html (+ mail_preview.html; render it with headless Chrome and LOOK)
-python3 mail_gas.py                # → ../../AaMailDraft.js ; clasp push, run aaMailDraft in the editor (first function), then
-                                   #   delete AaMailDraft.js, touch Code.js, clasp push (.claspignore excludes tools/**)
+# mail.json: subject, title "Bi-Weekly Report <yy. mm. dd>", subtitle, intro, voc [[product, issue]] (top Zendesk
+#   4. Product Issue product×인입사유 within the period), siren [[date · product, issue]], replace_draft ("" or old draft id)
+python3 weekly_fetch.py && python3 mail_html.py && python3 mail_build.py     # prints bytes — must be < ~100 KB
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --window-size=760,5400 \
+   --screenshot=<scratch>/mail.png "file://$PWD/mail_preview.html"          # LOOK at it (wraps, alignment)
+python3 mail_gas.py   # → ../../AaMailDraft.js ; push, run aaMailDraft, delete file, touch Code.js, push
 ```
-What mail_html renders from the deck: dashboard (집중 모니터링 list incl. red line, top-3 인입사유 tiles each linked to its
-Looker page + "상세 대시보드" link, 누적 클레임 + YoY, weekly bar chart as table cells, latest week blue), every TOP3 slide
-(count, name, 4-colour stacked bar, rows), TOP-7 tables (spigen.com thumbnails, ≥2% red), SIREN table (보기 links per row,
-this period's dates red, "26년 SIREN 시트 열기" outline capsule, count). Each section title links to its slide.
-Header: title = link to the deck + blue capsule "리포트 슬라이드 열기" (박기세님 feedback: link on top). To wbd@ + the
-43 CC (mail_gas.py CC list; refresh from the last sent mail if it changed).
-**Size:** keep mail.html < ~100 KB (Gmail clips at 102 KB) — mail_html compacts styles (font stack declared once,
-colour/weight inherited); check the printed byte count. Draft only — never send. Gmail scope already granted on 15U2.
+mail_html reads the FINAL deck: dashboard (monitoring list w/ red line, top-3 tiles → Looker links, cumulative + YoY,
+weekly bars as table cells), every TOP3 slide (stacked bar + rows, unknown merged, names normalized, long labels
+truncated with …), TOP-7 tables (spigen.com thumbs, ≥2% red), SIREN table (보기 links, period dates red, sheet button,
+count). Section titles link to their slides; header title + blue capsule link to the deck (박기세님 feedback).
+To `wbd@spigen.com`, CC = 43 (list in mail_gas.py — refresh from the last sent mail `in:sent subject:Bi-Weekly`).
+Compaction keeps size down: font stack once on the wrapper, color/weight inherited, `nowrap` set per table.
+Then open the draft in Gmail (Drafts → expand) and confirm it renders; never click Send.
 
-## 9. Report back
-Include the Gmail draft link/subject alongside the deck links.
-Links to both decks; slide ranges per series; maker notes (missing ASIN/rating, extra photos,
-SIREN badges); TOP-7 highlights (≥2%); SIREN count; Caspi data-month caveat; anything skipped.
+## 5. Report back
+Final deck link, classic link, Gmail draft subject, TOP-7 ≥2% highlights, new SIRENs, maker notes (missing images /
+ratings), anything skipped. Commit + push (`~/Desktop/GCX` repo; auto-sync also commits) and update memory.
 
-## Linked skills
-- **`siren-sweeper`** reuses this skill's Apple design system and helpers (`tools/apple_theme/*`, icons, chart style, golden deck
-  1quCr9Xj…) for the 'GCX SIREN <상/하반기> 등록현황 및 VOC 점검' summary deck. Don't break `apple_cards.rtile`, `apple_v3.pill/hair/text`,
-  `apple_type.latin_ranges/is_hangul`, `spigen_images.catalog/resolve` signatures without updating siren-sweeper.
-- Design direction: anthropic `frontend-design` skill (apple.com style).
+## Design system (unchanged)
+Canvas `#F5F5F7`, white tiles r=12pt (2 rects + 4 circles; never ROUND_RECTANGLE), ink `#1D1D1F`, gray `#6E6E73`/`#86868B`,
+hairline `#E5E5EA`, blue `#0071E3` (links `#0066CC`), red `#FF3B30`, ring `#0071E3 #64D2FF #5E5CE6 #D2D2D7`; capsules =
+rect + 2 circles; Inter (600 bold) + Noto Sans KR; titles x36 y16 18pt bold; Material Symbols Rounded icons.
+
+## Gotchas
+- Caspi `run_query` truncates at ~100 KB → group in SQL; aggregate refuses truncated input.
+- Slides element transforms inside groups are group-relative → match by group membership, not x/y.
+- `updateSlidesPosition` with several ids needs them in current deck order → move one by one, re-reading order.
+- Duplicated card templates carry their SIREN badge → the maker removes it (fixed 261016).
+- New shapes: 3000000 EMU × scale; set `weightedFontFamily` (fontFamily alone drops bold); icons drift after font
+  changes → `align_icons.py`; thumbnails can be stale right after a GAS run.
+- Gmail: clips > 102 KB; standards-mode tables don't inherit font-size from the wrapper — set it on each table;
+  links turn blue unless the anchor has its own lowercase color.
+- Deck copies via the Drive API don't carry a bound script (opening Extensions → Apps Script creates an empty one).
+
+## Linked
+`siren-sweeper` reuses `tools/apple_theme` helpers (`apple_cards.rtile`, `apple_v3.pill/hair/text`, `apple_type.*`,
+`spigen_images.catalog/resolve`) — keep signatures. `siren-report` makes the SIREN decks the issue cards read from.
