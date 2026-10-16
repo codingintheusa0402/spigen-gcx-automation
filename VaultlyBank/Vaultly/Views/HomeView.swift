@@ -24,12 +24,6 @@ struct HomeView: View {
                             HStack(alignment: .firstTextBaseline) {
                                 Text("총자산").font(.app(.subheadline)).foregroundStyle(.secondary)
                                 Spacer()
-                                if !store.clock.isRealTime {
-                                    TimelineView(.periodic(from: .now, by: 1)) { _ in
-                                        Label("\(speedLabel) · \(store.now.formatted(date: .numeric, time: .shortened))", systemImage: "forward.fill")
-                                            .font(.app(.caption2, .semibold)).foregroundStyle(store.theme.accent)
-                                    }
-                                }
                             }
                             MoneyText(amount: store.totalAssets, font: .app(size: 30, .bold))
                             if store.totalDebt > 0 {
@@ -131,14 +125,7 @@ struct HomeView: View {
             HStack {
                 Text("\(store.settings.ownerName)님의 총자산").font(.app(.subheadline)).foregroundStyle(on.opacity(0.8))
                 Spacer()
-                if store.clock.isRealTime {
-                    Text(store.theme.tagline).font(.app(.caption2)).foregroundStyle(on.opacity(0.6))
-                } else {
-                    TimelineView(.periodic(from: .now, by: 1)) { _ in
-                        Label("\(speedLabel) · \(store.now.formatted(date: .numeric, time: .shortened))", systemImage: "forward.fill")
-                            .font(.app(.caption2, .semibold)).foregroundStyle(on.opacity(0.9))
-                    }
-                }
+                Text(store.theme.tagline).font(.app(.caption2)).foregroundStyle(on.opacity(0.6))
             }
             MoneyText(amount: store.totalAssets, font: .app(size: 32, .bold))
                 .foregroundStyle(on)
@@ -181,10 +168,6 @@ struct HomeView: View {
                 }
             }
         }
-    }
-
-    private var speedLabel: String {
-        TimeSpeed.allCases.first { $0.rawValue == store.clock.speed }?.short ?? "\(Int(store.clock.speed))x"
     }
 
     private func section<C: View>(_ title: String, @ViewBuilder content: () -> C) -> some View {
