@@ -221,12 +221,14 @@ Index 05 list gets `2026 GCX 신규 SIREN 이슈 사례`. 261016 example: Z Fold
 - Every deck's **bound Apps Script project is renamed to exactly the deck's name** (Slides → Extensions → Apps Script →
   click the project title → rename). Redo it whenever a deck is renamed.
 
-## 8d. Mail draft (approved 261016 — Apple-themed HTML)
+## 8d. FINAL STEP — Gmail draft (always; approved 261016, Apple-themed HTML)
+The skill is not done until this draft exists. Order of the whole run: classic deck → Apple working copy →
+golden-base transplant (§7b) → SIREN issue cards (§7c) → share/rename (§8b) → **mail draft (this section)** → report back.
 Template: `tools/apple_theme/mail_draft_template.gs.txt` (copy to a temp `AaMailDraft.js` in the 15U2 project, edit
 DECK/PAGES/SUBJECT/text, push, run `aaMailDraft`, then delete + touch Code.js + push). It builds the Gmail draft via
 `GmailApp.createDraft` with inline slide thumbnails (Slides advanced service getThumbnail LARGE):
 - To `wbd@spigen.com`, CC = same 43 as the previous bi-weekly mail (search `in:sent subject:Bi-Weekly`), subject
-  `<n> of 41 Bi-Weekly 제품 이슈 Report, <start> ~ <end>` (n = previous + 1).
+  `Bi-Weekly 제품 이슈 Report, <yy.mm.dd start> ~ <yy.mm.dd end>` — **no "n of 41" prefix** (user 2026-10-16).
 - 박기세님 feedback (10/2): the **slide link goes at the TOP** — title "Bi-Weekly Report <yy. mm. dd>" is itself the link +
   blue capsule "리포트 슬라이드 열기" right under it; closing line refers to the 상단 link.
 - Body tiles (#F5F5F7 canvas, white 18px-radius tiles, SF/Apple SD Gothic/Noto Sans KR stack, blue #0071E3, red #FF3B30):
@@ -236,6 +238,7 @@ DECK/PAGES/SUBJECT/text, push, run `aaMailDraft`, then delete + touch Code.js + 
 - Draft only — never send. First run in a project needs the user to grant the Gmail scope (Review permissions → Allow).
 
 ## 9. Report back
+Include the Gmail draft link/subject alongside the deck links.
 Links to both decks; slide ranges per series; maker notes (missing ASIN/rating, extra photos,
 SIREN badges); TOP-7 highlights (≥2%); SIREN count; Caspi data-month caveat; anything skipped.
 

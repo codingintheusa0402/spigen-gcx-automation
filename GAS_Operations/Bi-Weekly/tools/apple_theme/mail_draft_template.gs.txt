@@ -5,7 +5,7 @@ function aaMailDraft() {
   const PAGES = ["g3f2ca1aded2_0_19", "SLIDES_API1905798936_0", "SLIDES_API1905798936_88", "SLIDES_API1905798936_176", "SLIDES_API1905798936_264", "SLIDES_API1905798936_352", "SLIDES_API1905798936_637", "SLIDES_API1905798936_922", "SLIDES_API1905798936_15996", "SLIDES_API1905798936_16294"];
   const TO = 'wbd@spigen.com';
   const CC = ['arrha@spigen.com','kisepark@spigen.com','ckchoi@sgp-korea.com','jmchoi@spigen.com','chpark@spigen.com','sjjung@spigen.com','swyoon@spigen.com','dklee@spigen.com','kjh3526@spigen.com','gina_jin@spigen.com','swyun@spigen.com','chpak@spigen.com','mhsong@spigen.com','kmson@spigen.com','skpark@spigen.com','kskwon@spigen.com','mgchoi@spigen.com','aya.chen@spigen.com','cqc@spigen.com','cq_production@spigen.com','kbkim@spigen.com','gwlee@spigen.com','swpark@spigen.com','parksm@spigen.com','jihyunlee@spigen.com','yangsr@spigen.com','wanqiong.yang@spigen.com','reda.zou@spigen.com','mjlee@spigen.com','dykim@spigen.com','ebhwang@spigen.com','andy.lee@spigen.com','parkse@spigen.com','jspark@spigen.com','yjlee@spigen.com','wikim@spigen.com','jsong@spigen.com','jokim@spigen.com','hychae@spigen.com','ynchoi@spigen.com','sungjun@spigen.com','jaeseoung@spigen.com','shwoo@spigen.com'].join(',');
-  const SUBJECT = '3 of 41 Bi-Weekly 제품 이슈 Report, 26.10.02 ~ 26.10.15';
+  const SUBJECT = 'Bi-Weekly 제품 이슈 Report, 26.10.02 ~ 26.10.15';
 
   const inline = {};
   PAGES.forEach(function(pid, i) {
