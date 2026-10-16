@@ -1,45 +1,84 @@
-# Amazon ASIN Rating & Review Count Scraper
+# Amazon ASIN Rating & Review Count Scraper – Bulk Rating Checker for 19 Amazon Sites
 
-**Paste a list of Amazon ASINs or product links → get each product's star rating and total ratings count in a clean table.** 19 Amazon marketplaces, no Amazon account or login, ~3,400 products in about 5 minutes, and you pay only for products that return data.
+**Turn a list of ASINs or Amazon product URLs into a clean table of star ratings and review counts.** No Amazon account, no API keys, no browser. Paste your list, click **Start**, and download Excel, CSV or JSON.
 
-> 💡 **$2 per 1,000 products.** The Apify free plan's monthly credit covers roughly 2,000 ASINs, so you can try it on your real catalog for free.
+Perfect for **rating monitoring, review-growth tracking, competitor benchmarking, catalog health checks and daily KPI dashboards**, at **$2 per 1,000 products**, charged only for products that return data.
 
----
+***
 
-## ✅ What does it do?
+### 🔍 What does Amazon ASIN Rating Scraper do?
 
-For every ASIN or Amazon product URL you give it, the scraper opens the public product page and returns:
+You give it products, and it returns one row per product:
 
-| Field | Example | Meaning |
+- ⭐ **Average star rating** (e.g. `4.2`)
+- 🔢 **Total global ratings count** (e.g. `2958`)
+- 🏷️ **Product title** and 🔗 **product link**
+- 🌍 **Marketplace** the data came from
+- 🕒 **Scrape timestamp**, so repeated runs build a history
+- ✅ **Status** per product: found, not sold on that marketplace, or blocked
+
+It accepts:
+
+- **Bare ASINs**: `B0G7RYP439`
+- **Product URLs** from any supported Amazon site: `https://www.amazon.de/dp/B0GDHRZFWH`
+- **Mixed lists** pasted straight from a spreadsheet column. Duplicates, blank cells, `-` and `TBD` are skipped automatically.
+
+***
+
+### 🌍 Which Amazon site gets scraped?
+
+| You enter | Scraped on |
+|---|---|
+| A bare ASIN, e.g. `B0G7RYP439` | The **Marketplace** selected in the input (default amazon.com) |
+| A product URL, e.g. `https://www.amazon.co.uk/dp/B0H2BX5FF2` | **That URL's own site** (amazon.co.uk) |
+
+So **one run can cover the US, UK, Germany, Japan and more**. List the same ASIN as URLs on different sites to compare its rating country by country.
+
+> ⚠️ Amazon ratings are **per marketplace**. A product can be 4.6★ with 13,000 ratings on amazon.com and 4.1★ with 400 ratings on amazon.de. Always check the `marketplace` column.
+
+***
+
+### 🌟 Key features
+
+- **19 Amazon marketplaces**: US, UK, DE, FR, IT, ES, NL, SE, PL, TR, JP, IN, CA, MX, BR, AU, AE, SA, SG
+- **Fast**: ~3,400 products in about 5½ minutes on default settings
+- **Cheap**: $2 per 1,000 products, roughly 2× cheaper than typical full Amazon product scrapers
+- **Fair billing**: not-found and blocked products are **never charged**
+- **Stable**: each parallel session behaves like one real shopper, with its own IP, cookies and real-browser fingerprint, human-like pacing, rotation, and automatic slow-down if Amazon pushes back
+- **Smart proxies**: fast datacenter IPs first, residential only for products that keep getting blocked
+- **Clean data**: incomplete pages are retried instead of saved, and Amazon's "Continue shopping" check page is passed automatically
+- **Small footprint**: runs on 512 MB, and more memory isn't needed
+- **Monitored daily** with live test runs on amazon.com and amazon.de
+
+***
+
+### ⚖️ Why choose this scraper?
+
+| | **This actor** | Typical Amazon product scrapers |
 |---|---|---|
-| `asin` | `B0G7RYP439` | The product's ASIN |
-| `title` | Spigen GlasTR EZ Fit Privacy Tempered Glass Screen Protector for Galaxy S26 | Product title as shown on Amazon |
-| `rating` | `4.2` | Average star rating (out of 5) |
-| `ratingsCount` | `2958` | Total number of global ratings |
-| `marketplace` | `amazon.com` | Which Amazon store the data came from |
-| `url` | `https://www.amazon.com/dp/B0G7RYP439` | Product link |
-| `found` | `true` | `true` = product page found · `false` = ASIN not sold on that marketplace · `null` = blocked (see `error`) |
-| `scrapedAt` | `2026-10-16T01:03:12Z` | When it was scraped (UTC) |
+| Price per 1,000 products | **$2.00** | $3–5 |
+| Charged for not-found / blocked products | **No** | Often yes (every dataset row) |
+| Mix several Amazon sites in one run | **Yes, from the URL** | Usually one country per run |
+| Default memory | **512 MB** | 1–4 GB |
+| ~3,400 products | **~5½ min** | Often much longer (full page parsing) |
+| Output | Focused: rating, count, title, link | 40+ fields you may not need |
+| Amazon login / cookies needed | **No** | Sometimes |
 
-## 🎯 Who uses it?
+If you need **only ratings and review counts**, this is the fastest and cheapest way to get them.
 
-- **Amazon sellers & brands**: watch your own listings' ratings every day and catch a drop the morning it happens
-- **Competitor tracking**: monitor rival products' review growth and rating changes
-- **Agencies**: produce rating and review-count reports for client catalogs across countries
-- **Analysts & data teams**: feed ratings into dashboards, spreadsheets, BI tools or pricing models
-- **Product launches**: see how fast a new product collects reviews in each marketplace
+***
 
-## 🚀 How to use it (3 steps)
+### 📥 Input
 
-1. **Add your products** to the **ASINs or product URLs** field: one per line, or paste a whole column from a spreadsheet.
-   - Bare ASIN, e.g. `B0G7RYP439`, uses the **Marketplace** you pick (default amazon.com)
-   - Product URL, e.g. `https://www.amazon.de/dp/B0GDHRZFWH`, is scraped on **its own marketplace**, so one run can cover the US, Germany, Japan and more
-2. Click **Start**. Leave everything else at the defaults.
-3. **Download the results** as Excel, CSV, JSON or HTML from the **Output** tab, or pull them via API.
+| Field | Required | Description |
+|---|---|---|
+| **ASINs or product URLs** | ✅ | One per line. Bare ASINs or Amazon product links, mixed freely |
+| **Marketplace for bare ASINs** | | `com` (default), `co.uk`, `de`, `co.jp` … Product URLs always use their own site |
+| **Parallel sessions** | | Default 40, max 50. Capped automatically to fit the run's memory |
+| **Proxy** | | Default: Apify datacenter, auto-escalating to residential. Leave as is |
+| **Save raw pages (debug)** | | Stores fetched HTML for troubleshooting. Off by default |
 
-Duplicates are removed automatically, and anything that isn't an ASIN or Amazon link (blank cells, `-`, `TBD`) is skipped.
-
-## 📥 Input example
+**Example input**
 
 ```json
 {
@@ -53,7 +92,23 @@ Duplicates are removed automatically, and anything that isn't an ASIN or Amazon 
 }
 ```
 
-## 📤 Output example
+***
+
+### 📋 Output fields
+
+| Field | Type | Description |
+|---|---|---|
+| `asin` | string | The product's ASIN |
+| `found` | boolean / null | `true` = product page found · `false` = not sold on this marketplace / delisted · `null` = blocked after all retries |
+| `rating` | number / null | Average star rating out of 5. `null` if the product has no ratings yet |
+| `ratingsCount` | integer | Total number of global ratings (`0` if none) |
+| `title` | string | Product title as shown on Amazon |
+| `url` | string | Product page link |
+| `marketplace` | string | Amazon site the data came from, e.g. `amazon.de` |
+| `scrapedAt` | string | Scrape time, UTC, ISO 8601 |
+| `error` | string | Only on blocked items: why it couldn't be scraped |
+
+### 📤 Example output
 
 ```json
 [
@@ -76,51 +131,82 @@ Duplicates are removed automatically, and anything that isn't an ASIN or Amazon 
     "ratingsCount": 245,
     "marketplace": "amazon.de",
     "scrapedAt": "2026-10-16T01:03:20.026163+00:00"
-  },
-  {
-    "asin": "B0B7MFZ2SH",
-    "found": false,
-    "marketplace": "amazon.com"
   }
 ]
 ```
 
-A product with no reviews yet comes back as `"found": true, "rating": null, "ratingsCount": 0`.
+The **Output** tab shows these as a table (*Ratings overview*), ready to export to Excel, CSV, JSON, XML or HTML.
 
-## 💰 How much does it cost?
+### 🚧 Not-found and blocked items
 
-Pay-per-event pricing: you pay for results, not for compute time.
+Every product you enter gets a row, so nothing silently goes missing:
+
+```json
+{ "asin": "B0B7MFZ2SH", "found": false, "marketplace": "amazon.com" }
+```
+`found: false`: Amazon has no product page for this ASIN on this site. **Not charged.**
+
+```json
+{ "asin": "B0XXXXXXXX", "found": null, "error": "Blocked after 6 attempts", "marketplace": "amazon.com" }
+```
+`found: null`: Amazon blocked all 6 attempts, each on a fresh identity and the last ones on residential IPs. Rare; just run those ASINs again. **Not charged.**
+
+***
+
+### 💰 How much does it cost to scrape Amazon ratings?
+
+**From $2.00 per 1,000 products.** It's pay-per-event, so platform usage isn't billed on top.
 
 | Event | Price |
 |---|---|
 | Product scraped (rating + count returned) | **$0.002** |
 | Run start | $0.005 per run |
-| ASIN not found on that marketplace | free |
-| Blocked after all retries | free |
+| Not found / blocked | **free** |
 
-**Examples:** 100 products ≈ $0.21 · 1,000 products ≈ $2.01 · 10,000 products ≈ $20.01, and a daily check of 500 products comes to about $30 a month.
+| You check | Cost |
+|---|---|
+| 100 products once | ≈ $0.21 |
+| 1,000 products once | ≈ $2.01 |
+| 10,000 products once | ≈ $20.01 |
+| 500 products every weekday (~22 runs/month) | ≈ $22 / month |
 
-## ⚡ Speed & reliability
+New to Apify? The **free plan's monthly credit covers roughly 2,000 products**, enough to test on your real catalog.
 
-- About **3,400 ASINs in ~5.5 minutes** with default settings
-- Each parallel session behaves like one real shopper: its own proxy IP, cookies and real-browser fingerprint, human-like pacing, and rotation after a few dozen pages
-- Automatically gets past Amazon's "Continue shopping" check page, retries incomplete pages, and slows down if Amazon pushes back
-- Starts on fast datacenter proxies and switches to residential proxies only for products that keep getting blocked
-- Checked daily with real runs on amazon.com and amazon.de
+***
 
-## 🌍 Supported marketplaces
+### 🚀 How to scrape Amazon ratings by ASIN (step by step)
 
-amazon.com · amazon.co.uk · amazon.de · amazon.fr · amazon.it · amazon.es · amazon.nl · amazon.se · amazon.pl · amazon.com.tr · amazon.co.jp · amazon.in · amazon.ca · amazon.com.mx · amazon.com.br · amazon.com.au · amazon.ae · amazon.sa · amazon.sg
+1. Click **Try for free** (or **Start**) on this page and sign in to Apify.
+2. Paste your **ASINs or product URLs** into the first field, one per line.
+3. Bare ASINs only: pick their **Marketplace** (default amazon.com).
+4. Click **Start**. A few hundred products take about a minute.
+5. Open the **Output** tab and click **Export** to download Excel, CSV or JSON.
+6. Optional: click **Save as a new task**, then **Schedule** it (e.g. every weekday at 08:00) to track ratings over time.
 
-## 🔁 Track ratings over time
+***
 
-1. Save your product list as a **Task**: click **Save as a new task** after entering the input.
-2. Add a **Schedule** (for example, every weekday at 08:00) under *Schedules → Create new*.
-3. Connect the output to where you work: **Google Sheets**, **Slack**, **email**, **Zapier**, **Make** or a **webhook** (all under *Integrations*).
+### 📊 Popular use cases
 
-Each run's results carry a `scrapedAt` timestamp, so stacking daily runs gives you a rating and review history.
+- **Brand & seller rating monitoring**
+  - Daily snapshot of every listing's rating and review count
+  - Spot a rating drop the morning it happens, before it hurts conversion
+- **Competitor benchmarking**
+  - Track rival products' review velocity after their launch or promotion
+  - Compare your rating to the category's top sellers
+- **Multi-country catalog health**
+  - Same product, many marketplaces: find the countries where it underperforms
+- **Agency & client reporting**
+  - Scheduled rating reports to Google Sheets, Slack or email, no manual checking
+- **Product launch tracking**
+  - Measure how fast a new ASIN collects its first 100, 500 and 1,000 ratings
+- **Data & BI pipelines**
+  - Feed ratings into dashboards, pricing models or ML features via API
 
-## 🧑‍💻 Use it from code
+***
+
+### 🔌 Integrations & API
+
+Connect results to **Google Sheets, Slack, email, Zapier, Make, Airbyte, GitHub, webhooks** and more under the **Integrations** tab. Or call it from code:
 
 **Python**
 ```python
@@ -146,36 +232,64 @@ const { items } = await client.dataset(run.defaultDatasetId).listItems();
 console.table(items.map(({ asin, rating, ratingsCount }) => ({ asin, rating, ratingsCount })));
 ```
 
-**cURL** (run and get the results in one call)
+**cURL** (run and get the results in one request)
 ```bash
 curl -X POST "https://api.apify.com/v2/acts/cosmic_meteorite~amazon-asin-rating-scraper/run-sync-get-dataset-items?token=<YOUR_APIFY_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{"asins": ["B0G7RYP439", "B0G7QZ7RMD"]}'
 ```
 
-## ⚙️ Advanced settings
+***
 
-| Setting | Default | When to change it |
-|---|---|---|
-| Marketplace | `com` | Your bare ASINs belong to another store (e.g. `de`, `co.jp`) |
-| Parallel sessions | 40 | Lower it if you want gentler traffic. It's capped automatically to fit the run's memory |
-| Proxy | Apify datacenter, auto-escalating to residential | Force a specific proxy group or your own proxies |
-| Save HTML (debug) | off | Turn on to inspect the raw pages when something looks wrong |
+### 💡 Tips for best results
 
-Memory: 512 MB (default) handles any list size. More memory doesn't make it faster.
+- **Test with 10–20 products first** to check the marketplace setting and the output format.
+- **Use full product URLs for non-US products.** That way each one is scraped on the right site, even in a mixed list.
+- **Variants share reviews.** Color and size variants of one product usually show the same rating and count, because Amazon pools them.
+- **Schedule instead of re-running by hand.** The `scrapedAt` field lets you stack runs into a history in Sheets or your database.
+- **Leave the proxy and memory defaults alone.** They're tuned for speed and cost.
 
-## ❓ FAQ
+### 🤝 When to use this vs a full Amazon product scraper
 
-**Why does a product show `found: false`?** The ASIN isn't sold on that marketplace, or it has been delisted. Check that you used the right marketplace, or pass the full product URL.
+- **Use this actor** when you need **ratings and review counts** for a known list of products, especially many products, often.
+- **Use a full product scraper** when you need prices, sellers, images or descriptions as well.
+- **Use a review scraper** when you need the individual review texts.
 
-**Why are several color variants showing the same numbers?** Amazon pools reviews across variations of the same product, so every variant shows the shared rating and count. That's what customers see too.
+***
 
-**Do I need an Amazon account, cookies or API keys?** No. Only public product pages are read.
+### ❓ FAQ
 
-**Does it return the review texts?** No. This actor is built to be the fastest and cheapest way to get ratings and review counts. Use a review scraper if you need the review texts.
+**How do I check Amazon ratings for many ASINs at once?**
+Paste them all into the input, one per line. A list of thousands is fine; ~3,400 products take about 5½ minutes.
 
-**Is scraping Amazon legal?** This actor only reads publicly available data and collects no personal data. You're responsible for how you use the results. Check Amazon's terms and the laws that apply to you.
+**Which Amazon countries are supported?**
+19 sites: amazon.com, .co.uk, .de, .fr, .it, .es, .nl, .se, .pl, .com.tr, .co.jp, .in, .ca, .com.mx, .com.br, .com.au, .ae, .sa and .sg.
 
-## 💬 Feedback & support
+**Do I need an Amazon account, cookies or the Amazon API?**
+No. Only public product pages are read.
 
-Missing a field, marketplace or integration? Open an issue on the **Issues** tab. If the actor saves you time, a ⭐ review helps other people find it.
+**Why does a product show `found: false`?**
+It isn't sold on that marketplace or has been delisted. Check the marketplace, or pass the full product URL. You aren't charged for it.
+
+**Why is `rating` null with `ratingsCount: 0`?**
+The product has no ratings yet. That's real data, not an error.
+
+**Does it return the 5-star / 1-star breakdown or the review texts?**
+No. It focuses on the headline rating and total count, which is what keeps it fast and cheap. Use a review scraper for review texts.
+
+**Can I schedule it and send results to Google Sheets?**
+Yes. Save your input as a task, add a schedule, and connect the Google Sheets integration.
+
+**Is it legal to scrape Amazon ratings?**
+This actor only collects publicly available product data and no personal data. You're responsible for how you use the results. Check Amazon's terms and the laws that apply to you.
+
+**Something doesn't look right. How do I get help?**
+Open an issue on the **Issues** tab with the run link and a few example ASINs.
+
+***
+
+### 💬 Your feedback
+
+Missing a marketplace, field or integration? Tell us on the **Issues** tab. If this actor saves you time, please leave a ⭐ **review**, because it helps other people find it.
+
+🔖 **Tags:** amazon rating scraper · amazon review count · asin lookup · bulk asin checker · amazon star rating · review monitoring · amazon competitor tracking · amazon seller tools · ecommerce data · amazon api alternative
