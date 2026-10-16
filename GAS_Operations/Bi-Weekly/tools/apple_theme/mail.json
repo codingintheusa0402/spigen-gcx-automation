@@ -1,0 +1,10 @@
+{
+  "to": "wbd@spigen.com",
+  "subject": "Bi-Weekly 제품 이슈 Report, 26.10.02 ~ 26.10.15",
+  "title": "Bi-Weekly Report 26. 10. 16",
+  "subtitle": "26.10.02 ~ 26.10.15 · iPhone 18 · Pixel 11 · Galaxy Z8",
+  "intro": "지난번 보고에 이어 <b>26.10.02 ~ 26.10.15</b> 중 취합한, 새로 출시된 iPhone 18 Series, Galaxy Z8 Series, 그리고 Pixel 11 Series 제품들에 대한 이슈들 및 SIREN 등록한 이슈들 위주로 작성했습니다.",
+  "voc": [["iPhone 18 Series용 Glas.tR EZ Fit Slim", "글라스 깨짐 · 측면 들뜸 · 버블"], ["iPhone 18 Series용 Glas.tR EZ Fit Pro", "측면 들뜸"], ["Galaxy Z Fold 8용 Air Skin Aramid MagFit", "카메라링 변형"]],
+  "siren": [["10.13 · Tesla Model Y용 전면 카메라 보호 커버 (TO331)", "결로"], ["10.14 · Galaxy Z Fold 8용 Air Skin Aramid MagFit", "카메라링 변형"]],
+  "replace_draft": "r9103480619939460246"
+}

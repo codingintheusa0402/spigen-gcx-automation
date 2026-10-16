@@ -1,0 +1,4 @@
+tools/**
+state/**
+**/*.py
+node_modules/**

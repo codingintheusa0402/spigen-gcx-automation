@@ -27,9 +27,9 @@ def title_of(sl): return next((txt(e) for e in walk(sl['pageElements']) if xy(e)
 def slide_link(sid): return f'https://docs.google.com/presentation/d/{DECK}/edit#slide=id.{sid}'
 
 # ---------- building blocks (inline CSS only; Gmail-safe tables) ----------
-def tile(inner, pad='22px 24px', mb=14): return f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:18px;margin:0 0 {mb}px"><tr><td style="padding:{pad}">{inner}</td></tr></table>'
+def tile(inner, pad='22px 24px', mb=14): return f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:18px;margin:0 0 {mb}px"><tr><td style="padding:{pad};font-size: 11px;color:#1D1D1F">{inner}</td></tr></table>'
 def h2(t, sub='', href=''):
-    a = f'<a href="{href}" style="color:{INK};text-decoration:none">{esc(t)}</a>' if href else esc(t)
+    a = f'<a href="{href}" style="color:#1d1d1f;text-decoration:none">{esc(t)}</a>' if href else esc(t)
     s = f' <span style="color:{GRAY2};font-weight:600">{esc(sub)}</span>' if sub else ''
     return f'<div style="font:700 19px {F};color:{INK};margin:4px 0 12px;line-height:1.3">{a}{s}</div>'
 def lab(t, extra=''): return f'<div style="font:600 13px {F};color:{INK};margin:2px 0 10px">{esc(t)} <span style="color:{GRAY2};font-weight:400">{esc(extra)}</span></div>'
@@ -49,17 +49,16 @@ def dashboard(sl):
     cum_lab = txt(find(lambda t: '누적 클레임 인입건' in t)); yoy = txt(find(lambda t: 'YoY' in t))
     imgs = [e for e in els if 'image' in e and e['image'].get('imageProperties', {}).get('link')]
     # top-3 reason tiles (rank text '1st/2nd/3rd' + '<reason> <n>' + english) with their Looker link (icon nearest in x)
+    groups = [[c for c in walk([g])] for g in sl['pageElements'] if 'elementGroup' in g]
+    icons = sorted([i for i in imgs if xy(i)[1] > min(xy(k)[1] for k in imgs) + 1] or imgs, key=lambda i: xy(i)[0])
     tiles = []
-    for rank in ('1st', '2nd', '3rd'):
-        r = find(lambda t, k=rank: t == k); rx, ry = xy(r)
-        near = sorted([e for e in els if txt(e) and e is not r and abs(xy(e)[1] - ry) < 40 and 0 <= xy(e)[0] - rx < 40], key=lambda e: xy(e)[1])
-        main = next(txt(e) for e in near if re.search(r'\d', txt(e)))
-        eng = next((txt(e) for e in near if re.fullmatch(r'[A-Za-z ]+', txt(e))), '')
-        icon = min([i for i in imgs if xy(i)[1] > 90] or imgs, key=lambda i: abs(xy(i)[0] - rx - 5) + abs(xy(i)[1] - ry - 20))
-        tiles.append((rank, main, eng, icon['image']['imageProperties']['link']['url']))
+    for n, rank in enumerate(('1st', '2nd', '3rd')):
+        g = next(g for g in groups if any(txt(c) == rank for c in g)); ts = [txt(c) for c in g if txt(c) and txt(c) != rank]
+        main = next(t for t in ts if re.search(r'\d', t)); eng = next((t for t in ts if re.fullmatch(r'[A-Za-z ]+', t)), '')
+        tiles.append((rank, main, eng, icons[min(n, len(icons) - 1)]['image']['imageProperties']['link']['url']))
     head_link = min(imgs, key=lambda i: xy(i)[1])['image']['imageProperties']['link']['url']
     cells = ''.join(f'<td width="33%" style="padding:0 {6 if i < 2 else 0}px 0 0"><a href="{u}" style="text-decoration:none;display:block;background:{CANVAS};border-radius:14px;padding:12px 14px">'
-                    f'<div style="font:700 12px {F};color:{RED if i == 0 else BLUE}">{rk}</div><div style="font:700 16px {F};color:{INK};margin:4px 0 2px">{esc(m)}</div>'
+                    f'<div style="font:700 12px {F};color:{RED if i == 0 else BLUE}">{rk}</div><div style="font:700 16px {F};color:#1d1d1f;margin:4px 0 2px">{esc(m)}</div>'
                     f'<div style="font:400 11px {F};color:{GRAY}">{esc(en)} &rsaquo;</div></a></td>' for i, (rk, m, en, u) in enumerate(tiles))
     # weekly bar chart as HTML (table cells), same data/window as chart.py
     wk = json.load(open(os.path.join(HERE, 'weekly.json')))['weeks']
@@ -170,7 +169,9 @@ body = dashboard(dash) + ''.join(gauges(s) for s in gauge_sl) + ''.join(top7(s) 
 body = re.sub(r'font:(\d+) (\d+)px ' + re.escape(F), lambda m: f'font-weight:{m.group(1)};font-size:{m.group(2)}px', body)
 body = re.sub(r'<span style="display:inline-block;width:7px;height:7px;border-radius:4px;background:#[0-9A-F]+;margin-right:5px"></span>', '', body)
 body = body.replace('color:#1D1D1F;', '').replace(';color:#1D1D1F"', '"').replace('font-weight:400;', '').replace('font-weight:400', '')
-body = body.replace(' style=""', '').replace('padding:7px 4px;border-bottom:1px solid #E5E5EA', 'padding:7px 4px;border-bottom:1px solid #EEE')
+body = body.replace('font-weight:400;font-size:11px;', '').replace('font-size:11px;', '').replace(';font-size:11px"', '"').replace('font-size:11px"', '"')
+body = body.replace(' style=""', '')
+body = re.sub(r'<table width="100%" cellspacing="0"(?! style)', '<table width="100%" cellspacing="0" style="font-size:11px"', body).replace('padding:7px 4px;border-bottom:1px solid #E5E5EA', 'padding:7px 4px;border-bottom:1px solid #EEE')
 body = body.replace(' role="presentation"', '').replace(' cellpadding="0" cellspacing="0"', ' cellspacing="0"')
 open(os.path.join(HERE, 'mail_sections.html'), 'w').write(body)
 print('sections', len(body), 'chars', len(body.encode()), 'bytes;', len(gauge_sl), 'gauge,', len(top7_sl), 'top7,', len(siren_sl), 'siren')
