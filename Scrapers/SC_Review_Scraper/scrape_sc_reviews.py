@@ -198,6 +198,11 @@ SCRAPER_PROFILE_DIR = os.path.expanduser("~/.chrome-scraper-profile")
 # sc-review-propagate Phase G — laptop shortcut "Amazon logins (photo check)"). Mac unchanged.
 if sys.platform.startswith("linux"):
     SCRAPER_PROFILE_DIR = os.environ.get("SC_SCRAPER_PROFILE_DIR", os.path.expanduser("~/.chrome-phaseg-profile"))
+# Mac mini (user kevin): every Amazon / Seller Central job shares ONE Chrome — the unified
+# ~/.chrome-scraper-profile kept running by launchd com.gcx.amazon-chrome on CDP :9223 (user rule
+# 2026-10-17). When set, the scraper attaches to it instead of launching its own window.
+CDP_URL = os.environ.get("SC_SCRAPER_CDP_URL") or (
+    "http://127.0.0.1:9223" if os.path.expanduser("~") == "/Users/kevin" else "")
 # Dedicated Chrome profile for scraping. SC login sessions are saved here between runs.
 # First run: Chrome opens → log in to all SC accounts → sessions persist automatically.
 # Subsequent runs: Chrome opens with saved sessions → scraping starts after Enter.
@@ -1546,15 +1551,21 @@ async def main():
         if not _use_per_domain_profiles:
             os.makedirs(SCRAPER_PROFILE_DIR, exist_ok=True)
             print(f"Launching Chrome with scraper profile: {SCRAPER_PROFILE_DIR}")
-            _shared_ctx = await pw.chromium.launch_persistent_context(
-                SCRAPER_PROFILE_DIR, channel="chrome", headless=HEADLESS)
+            if CDP_URL:
+                print(f"Attaching to the unified Amazon Chrome at {CDP_URL}")
+                _cdp_browser = await pw.chromium.connect_over_cdp(CDP_URL)
+                _shared_ctx = _cdp_browser.contexts[0]
+            else:
+                _shared_ctx = await pw.chromium.launch_persistent_context(
+                    SCRAPER_PROFILE_DIR, channel="chrome", headless=HEADLESS)
 
         print("Opening Seller Central tabs "
               + ("(one profile per account) …" if _use_per_domain_profiles else "…"))
         domain_ctxs = {}
         domain_pages = {}
         needs_login = []
-        _shared_existing_pages = list(_shared_ctx.pages) if _shared_ctx else []
+        # Attached to the shared Chrome: never take over tabs the user or other jobs have open.
+        _shared_existing_pages = list(_shared_ctx.pages) if (_shared_ctx and not CDP_URL) else []
         for _label, _url in _login_endpoints:
             if _use_per_domain_profiles:
                 _profile_dir = f"{SCRAPER_PROFILE_DIR}_{_label}"
@@ -1776,8 +1787,16 @@ async def main():
 
         results = await asyncio.gather(*[_run(d) for d in DOMAINS])
 
-        for _ctx in {id(c): c for c in domain_ctxs.values()}.values():
-            await _ctx.close()
+        if CDP_URL and not _use_per_domain_profiles:
+            # Shared Chrome stays running for the next job — close only the tabs this run opened.
+            for _p in domain_pages.values():
+                try:
+                    await _p.close()
+                except Exception:
+                    pass
+        else:
+            for _ctx in {id(c): c for c in domain_ctxs.values()}.values():
+                await _ctx.close()
 
     print(f"\n{'═'*60}")
     print("  SUMMARY")

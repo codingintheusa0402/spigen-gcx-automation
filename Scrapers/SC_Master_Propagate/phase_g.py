@@ -26,6 +26,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import propagate as P  # noqa: E402  (PRODUCTS, get_service, header_row, find_col, is_today_cell, ...)
 
 PROFILE_DIR = os.path.expanduser("~/.chrome-phaseg-profile")
+# Mac mini: attach to the unified Amazon Chrome (launchd com.gcx.amazon-chrome, CDP :9223) — one Chrome
+# for every Amazon / Seller Central job there (user rule 2026-10-17). MacBook/server keep PROFILE_DIR.
+CDP_URL = os.environ.get("SC_SCRAPER_CDP_URL") or (
+    "http://127.0.0.1:9223" if os.path.expanduser("~") == "/Users/kevin" else "")
 SKIP_DOMAINS = {"www.amazon.es": "needs amazon.es login"}
 EXTRACT_JS = """(rid) => {
   const el = document.getElementById(rid) || document.querySelector('[data-hook="review"]');
@@ -78,8 +82,12 @@ async def fetch_images(cands):
     from playwright.async_api import async_playwright
     os.makedirs(PROFILE_DIR, exist_ok=True)
     async with async_playwright() as pw:
-        ctx = await pw.chromium.launch_persistent_context(PROFILE_DIR, channel="chrome", headless=False)
-        page = ctx.pages[0] if ctx.pages else await ctx.new_page()
+        if CDP_URL:
+            ctx = (await pw.chromium.connect_over_cdp(CDP_URL)).contexts[0]
+            page = await ctx.new_page()
+        else:
+            ctx = await pw.chromium.launch_persistent_context(PROFILE_DIR, channel="chrome", headless=False)
+            page = ctx.pages[0] if ctx.pages else await ctx.new_page()
         for c in cands:
             try:
                 await page.goto(c["link"], wait_until="domcontentloaded", timeout=45000)
@@ -90,7 +98,10 @@ async def fetch_images(cands):
                     c["note"] = "sign-in or captcha page"
             except Exception as e:  # keep going; report per row
                 c["imgs"], c["note"] = None, f"error: {str(e)[:80]}"
-        await ctx.close()
+        if CDP_URL:
+            await page.close()  # leave the shared Chrome running
+        else:
+            await ctx.close()
 
 
 def main():
