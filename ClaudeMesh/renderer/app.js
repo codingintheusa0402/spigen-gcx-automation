@@ -383,17 +383,19 @@ function fitOwn(id, t) {
     t.sentCols = t.cols; t.sentRows = t.rows; window.api.peerTerm.resize(id, t.cols, t.rows);
     // no confirmation (host offline, or a build that can't resize): show the host's real size again
     clearTimeout(t.confirmT);
-    t.confirmT = setTimeout(() => { if (t.driving && (t.hostCols !== t.cols || t.hostRows !== t.rows)) { t.driving = false; t.sentCols = t.sentRows = 0; t.cols = t.hostCols || t.cols; t.rows = t.hostRows || t.rows; fitScaled(t); } }, 2000);
+    t.confirmT = setTimeout(() => { if (t.driving && (t.hostCols !== t.cols || t.hostRows !== t.rows)) { t.driving = false; t.noClaimUntil = Date.now() + 60000; t.sentCols = t.sentRows = 0; t.cols = t.hostCols || t.cols; t.rows = t.hostRows || t.rows; fitScaled(t); } }, 2000);
   }
 }
 function fitTerm(id, t) { (t.peer ? t.driving : !t.remote) ? fitOwn(id, t) : fitScaled(t); }
 let lastUse = 0;
+const peerCanResize = () => !!(snap.peer && snap.peer.online && (snap.peer.caps || []).includes('resize'));
 function windowUsed(e) {
   if (!e.isTrusted || document.body.dataset.size === 'mini') return;   // real input only; the compact window never takes the size
   if (Date.now() - lastUse < 700) return; lastUse = Date.now();
   for (const [id, t] of terms) {
     if (!termVisible(t)) continue;
-    if (t.peer && !t.driving) { t.driving = true; t.sentCols = t.sentRows = 0; fitOwn(id, t); }
+    // a host build that can't resize (or didn't confirm a minute ago) is left alone: asking again would flip the size back and forth
+    if (t.peer && !t.driving && peerCanResize() && !(t.noClaimUntil > Date.now())) { t.driving = true; t.sentCols = t.sentRows = 0; fitOwn(id, t); }
     else if (!t.peer && t.remote) { t.remote = false; fitOwn(id, t); }
   }
 }

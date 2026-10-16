@@ -61,7 +61,7 @@ function createPeer({ userData, selfKind }) {
   // local snapshot + the peer's sessions (marked remote; offline ones greyed) — never mutates `local`
   function merge(local) {
     if (!local) return local;
-    const out = { ...local, peer: cfg ? { kind: kind(), label: label(), online, lastSeen: lastOk || null } : null };
+    const out = { ...local, peer: cfg ? { kind: kind(), label: label(), online, lastSeen: lastOk || null, caps: (last && last.caps) || [] } : null };
     out.sessions = local.sessions.map(s => ({ ...s, hostKind: selfKind }));
     if (!last || !cfg || (!online && Date.now() - lastOk > OFFLINE_KEEP_MS)) return out;
     const mine = new Set(out.sessions.map(s => s.sid));

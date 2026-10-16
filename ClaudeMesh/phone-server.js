@@ -73,7 +73,7 @@ function createPhoneServer(ctx) {
       const s = view(ctx.getSnap()); if (s) send(res, 'telemetry', s);
       req.on('close', () => clients.delete(c)); return;
     }
-    if (p === '/api/local-snapshot') { peerPolledAt = Date.now(); return json(res, 200, ctx.getSnap() || { sessions: [] }); }   // for the peer (never merged)
+    if (p === '/api/local-snapshot') { peerPolledAt = Date.now(); return json(res, 200, { ...(ctx.getSnap() || { sessions: [] }), caps: ['upload', 'resize'] }); }   // caps: what this build accepts from the peer   // for the peer (never merged)
     if (p === '/api/history') return json(res, 200, await ctx.getHistory());
     if (p === '/api/details') {
       const sid = u.searchParams.get('sid') || '';
