@@ -25,7 +25,7 @@ struct HomeView: View {
                                 Text("총자산").font(.app(.subheadline)).foregroundStyle(.secondary)
                                 Spacer()
                             }
-                            MoneyText(amount: store.totalAssets, font: .app(size: 30, .bold))
+                            MoneyText(amount: store.totalAssets, font: .app(size: 30, .semibold))
                             if store.totalDebt > 0 {
                                 HStack(spacing: 4) {
                                     Text("대출").font(.app(.caption)).foregroundStyle(.secondary)
@@ -127,7 +127,7 @@ struct HomeView: View {
                 Spacer()
                 Text(store.theme.tagline).font(.app(.caption2)).foregroundStyle(on.opacity(0.6))
             }
-            MoneyText(amount: store.totalAssets, font: .app(size: 32, .bold))
+            MoneyText(amount: store.totalAssets, font: .app(size: 32, .semibold))
                 .foregroundStyle(on)
             HStack(spacing: 4) {
                 Text("은행").font(.app(.caption)).foregroundStyle(on.opacity(0.75))
