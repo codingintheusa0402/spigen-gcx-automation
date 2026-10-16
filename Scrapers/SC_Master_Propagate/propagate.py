@@ -482,9 +482,16 @@ def phase_b_c_d_product(svc, product, dry_run=True):
         # iPh18 book's ASINs instead of trusting the tag.
         ip = PRODUCTS["iPh18"]
         iph18_asins = {a.strip() for a in col_values(svc, ip["dest_id"], ip["dest_sheet"], "A") if a.strip()}
-        shared = [r for r in new_rows if r[0].strip() in iph18_asins]
+        # Plus the exact Review IDs the user had removed (covers pre-09-17 rows whose
+        # ASINs never made it into the iPh18 book).
+        try:
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "yu_excluded_review_ids.json")) as f:
+                excluded = set(json.load(f))
+        except FileNotFoundError:
+            excluded = set()
+        shared = [r for r in new_rows if r[0].strip() in iph18_asins or r[SC_REVIEW_ID_IDX] in excluded]
         if shared:
-            new_rows = [r for r in new_rows if r[0].strip() not in iph18_asins]
+            new_rows = [r for r in new_rows if not (r[0].strip() in iph18_asins or r[SC_REVIEW_ID_IDX] in excluded)]
             print(f"[{product}] skipped {len(shared)} iPh18-shared row(s) (ASIN in iPh18 book; Device-tag flicker guard)")
     print(f"[{product}] {len(existing_ids)} already in {dest_sheet}; "
           f"{len(new_rows)} genuinely new")
