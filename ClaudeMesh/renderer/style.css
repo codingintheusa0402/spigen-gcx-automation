@@ -423,7 +423,9 @@ body:not(.pixel) #sideHandle:hover, body.side-resizing:not(.pixel) #sideHandle {
 
 /* status dots: solid, no neon halo */
 body:not(.pixel) .hdot { width: 8px; height: 8px; border: 0; }
-body:not(.pixel) .h-working { background: var(--ok) !important; box-shadow: none; }
+body:not(.pixel) .h-working { background: var(--ok) !important; box-shadow: 0 0 6px 1px rgba(91,227,164,.75); animation: liveGlow 1.6s ease-in-out infinite; }
+@keyframes liveGlow { 0%, 100% { box-shadow: 0 0 3px 0 rgba(91,227,164,.55); } 50% { box-shadow: 0 0 10px 3px rgba(91,227,164,.9); } }
+@media (prefers-reduced-motion: reduce) { body:not(.pixel) .h-working { animation: none; } }
 body:not(.pixel) .h-idle { background: #46454d !important; }
 body:not(.pixel) .h-waiting, body:not(.pixel) .h-quiet { background: var(--warn) !important; box-shadow: none; }
 body:not(.pixel) .h-error { background: var(--err) !important; box-shadow: none; }

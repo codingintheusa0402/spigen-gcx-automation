@@ -7,6 +7,11 @@ const hhmm = t => t ? new Date(t).toLocaleTimeString([], { hour: '2-digit', minu
 const store = { get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { } } };
 
+// live-dot glow: rows are re-rendered every tick, so pin each pulse to the shared document clock (no restart flicker)
+document.addEventListener('animationstart', e => {
+  if (e.animationName === 'liveGlow') for (const a of e.target.getAnimations()) if (a.animationName === 'liveGlow') a.startTime = 0;
+});
+
 let snap = { sessions: [], models: [], ptys: [] };
 let selected = null;
 let bell = store.get('bell', true);
