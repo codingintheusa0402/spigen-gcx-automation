@@ -2,7 +2,7 @@
 
 **Turn a list of ASINs or Amazon product URLs into a clean table of star ratings and review counts.** No Amazon account, no API keys, no browser. Paste your list, click **Start**, and download Excel, CSV or JSON.
 
-Perfect for **rating monitoring, review-growth tracking, competitor benchmarking, catalog health checks and daily KPI dashboards**, at **$2 per 1,000 products**, charged only for products that return data.
+Perfect for **rating monitoring, review-growth tracking, competitor benchmarking, catalog health checks and daily KPI dashboards**, from **$1.60 per 1,000 products** (and just **$1 per 1,000 on the Apify Free plan**), charged only for products that return data.
 
 ***
 
@@ -42,7 +42,7 @@ So **one run can cover the US, UK, Germany, Japan and more**. List the same ASIN
 
 - **19 Amazon marketplaces**: US, UK, DE, FR, IT, ES, NL, SE, PL, TR, JP, IN, CA, MX, BR, AU, AE, SA, SG
 - **Fast**: ~3,400 products in about 5½ minutes on default settings
-- **Cheap**: $2 per 1,000 products, roughly 2× cheaper than typical full Amazon product scrapers
+- **Cheap**: $1.60–2 per 1,000 products ($1 on the Free plan), roughly 2× cheaper than typical full Amazon product scrapers
 - **Fair billing**: not-found and blocked products are **never charged**
 - **Stable**: each parallel session behaves like one real shopper, with its own IP, cookies and real-browser fingerprint, human-like pacing, rotation, and automatic slow-down if Amazon pushes back
 - **Smart proxies**: fast datacenter IPs first, residential only for products that keep getting blocked
@@ -56,7 +56,7 @@ So **one run can cover the US, UK, Germany, Japan and more**. List the same ASIN
 
 | | **This actor** | Typical Amazon product scrapers |
 |---|---|---|
-| Price per 1,000 products | **$2.00** | $3–5 |
+| Price per 1,000 products | **$1.60–2.00** ($1 on Free plan) | $3–5 |
 | Charged for not-found / blocked products | **No** | Often yes (every dataset row) |
 | Mix several Amazon sites in one run | **Yes, from the URL** | Usually one country per run |
 | Default memory | **512 MB** | 1–4 GB |
@@ -155,22 +155,25 @@ Every product you enter gets a row, so nothing silently goes missing:
 
 ### 💰 How much does it cost to scrape Amazon ratings?
 
-**From $2.00 per 1,000 products.** It's pay-per-event, so platform usage isn't billed on top.
+**From $1.60 per 1,000 products, with bigger discounts on higher Apify plans.** It's pay-per-event, so platform usage isn't billed on top.
 
-| Event | Price |
-|---|---|
-| Product scraped (rating + count returned) | **$0.002** |
-| Run start | $0.005 per run |
-| Not found / blocked | **free** |
+| Your Apify plan | Per product | Per 1,000 products |
+|---|---|---|
+| 🎁 Free (try it on your monthly free credit) | $0.001 | **$1.00** |
+| Starter | $0.002 | $2.00 |
+| Scale | $0.0018 | $1.80 |
+| Business / Platinum / Diamond | $0.0016 | **$1.60** |
 
-| You check | Cost |
+Plus $0.005 per run. **Not-found and blocked products are always free.**
+
+| You check (Starter plan) | Cost |
 |---|---|
 | 100 products once | ≈ $0.21 |
 | 1,000 products once | ≈ $2.01 |
 | 10,000 products once | ≈ $20.01 |
 | 500 products every weekday (~22 runs/month) | ≈ $22 / month |
 
-New to Apify? The **free plan's monthly credit covers roughly 2,000 products**, enough to test on your real catalog.
+🎁 **Free trial:** new to Apify? The Free plan's monthly $5 credit covers **about 5,000 products** at the Free-plan price, every month, enough to test on your real catalog before you pay anything.
 
 ***
 
@@ -213,7 +216,7 @@ Connect results to **Google Sheets, Slack, email, Zapier, Make, Airbyte, GitHub,
 from apify_client import ApifyClient
 
 client = ApifyClient("<YOUR_APIFY_TOKEN>")
-run = client.actor("cosmic_meteorite/amazon-asin-rating-scraper").call(
+run = client.actor("k-data-lab/amazon-asin-rating-scraper").call(
     run_input={"asins": ["B0G7RYP439", "https://www.amazon.de/dp/B0GDHRZFWH"]}
 )
 for item in client.dataset(run["defaultDatasetId"]).iterate_items():
@@ -225,7 +228,7 @@ for item in client.dataset(run["defaultDatasetId"]).iterate_items():
 import { ApifyClient } from 'apify-client';
 
 const client = new ApifyClient({ token: '<YOUR_APIFY_TOKEN>' });
-const run = await client.actor('cosmic_meteorite/amazon-asin-rating-scraper').call({
+const run = await client.actor('k-data-lab/amazon-asin-rating-scraper').call({
     asins: ['B0G7RYP439', 'https://www.amazon.de/dp/B0GDHRZFWH'],
 });
 const { items } = await client.dataset(run.defaultDatasetId).listItems();
@@ -234,7 +237,7 @@ console.table(items.map(({ asin, rating, ratingsCount }) => ({ asin, rating, rat
 
 **cURL** (run and get the results in one request)
 ```bash
-curl -X POST "https://api.apify.com/v2/acts/cosmic_meteorite~amazon-asin-rating-scraper/run-sync-get-dataset-items?token=<YOUR_APIFY_TOKEN>" \
+curl -X POST "https://api.apify.com/v2/acts/k-data-lab~amazon-asin-rating-scraper/run-sync-get-dataset-items?token=<YOUR_APIFY_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{"asins": ["B0G7RYP439", "B0G7QZ7RMD"]}'
 ```

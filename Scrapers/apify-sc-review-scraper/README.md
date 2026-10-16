@@ -112,18 +112,18 @@ Building an integration? Set **Output field names → camelCase** to get `asin`,
 
 ### 💰 How much does it cost?
 
-**From $4 per 1,000 reviews.** It's pay-per-event, so platform usage isn't billed on top, and you're **charged only for review rows delivered**. Expired or missing sessions and failed regions cost nothing beyond the run start.
+**From $3 per 1,000 reviews on the Free plan, $4–6 on paid plans.** It's pay-per-event, so platform usage isn't billed on top, and you're **charged only for review rows delivered**. Expired or missing sessions and failed regions cost nothing beyond the run start.
 
 | Your Apify plan | Price per review | Per 1,000 reviews |
 |---|---|---|
-| Free | $0.008 | $8.00 |
+| 🎁 Free (try it on your monthly free credit) | $0.003 | **$3.00** |
 | Starter | $0.006 | $6.00 |
 | Scale | $0.005 | $5.00 |
 | Business / Platinum / Diamond | $0.004 | $4.00 |
 
 Plus **$0.01 per run** (browser start).
 
-**Examples (Starter plan):** a daily incremental run of ~150 new reviews ≈ $0.91, a full export of 1,500 reviews × 4 marketplaces ≈ $36.01, and the Free plan's monthly credit covers about 600 reviews to test with.
+**Examples (Starter plan):** a daily incremental run of ~150 new reviews ≈ $0.91, a full export of 1,500 reviews × 4 marketplaces ≈ $36.01, and 🎁 the Free plan's monthly $5 credit covers **about 1,600 reviews** to test with, every month.
 
 **Keep costs predictable:** set *Maximum cost per run* in the run options. The actor stops cleanly when it's reached, and it never bills past it.
 
