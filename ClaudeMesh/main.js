@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Notification, shell, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Notification, shell, clipboard, screen } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -28,6 +28,8 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: true },
   });
   if (process.env.MESH_SIZE) { const [w, h] = process.env.MESH_SIZE.split('x').map(Number); win.setSize(w, h); }   // test runs
+  else keepOnScreen(loadBounds());
+  win.on('moved', saveBounds); win.on('resized', saveBounds);
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.on('closed', () => { win = null; });
   // tell the renderer when nobody can see the window so it stops drawing (telemetry keeps flowing)
@@ -36,6 +38,24 @@ function createWindow() {
   app.on('hide', vis(false)); app.on('show', vis(true));
   if (process.env.MESH_DEBUG) win.webContents.on('console-message', (e, ...a) => console.log('[renderer]', JSON.stringify(e.message ?? a)));
 }
+
+// the window comes back where it was, and never hangs off the edge of the screen — also after a resolution or
+// display change (e.g. the mini's screen switched to 2560×1440 while the window was bigger or further right)
+const BOUNDS_F = () => path.join(app.getPath('userData'), 'window-bounds.json');
+function loadBounds() { try { return JSON.parse(fs.readFileSync(BOUNDS_F(), 'utf8')); } catch { return null; } }
+function saveBounds() { if (win && !win.isFullScreen() && !win.isMaximized()) try { fs.writeFileSync(BOUNDS_F(), JSON.stringify(win.getBounds())); } catch { } }
+function keepOnScreen(want) {
+  if (!win || win.isFullScreen()) return;
+  const b = want || win.getBounds(), wa = screen.getDisplayMatching(b).workArea;
+  const width = Math.min(b.width, wa.width), height = Math.min(b.height, wa.height);
+  const x = Math.min(Math.max(b.x, wa.x), wa.x + wa.width - width), y = Math.min(Math.max(b.y, wa.y), wa.y + wa.height - height);
+  const cur = win.getBounds();
+  if (cur.x !== x || cur.y !== y || cur.width !== width || cur.height !== height) win.setBounds({ x, y, width, height });
+}
+app.whenReady().then(() => {
+  const fix = () => setTimeout(() => keepOnScreen(), 300);
+  screen.on('display-metrics-changed', fix); screen.on('display-removed', fix); screen.on('display-added', fix);
+});
 
 // ---------------- terminals (node-pty) ----------------
 // cleanEnv / loginShell come from core.js (shared with the server program)
