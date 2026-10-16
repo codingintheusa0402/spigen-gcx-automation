@@ -112,15 +112,14 @@ Prefer English keys (`asin`, `createdDate`, `hasPhoto` …)? Set **Output field 
 
 ### 💰 How much does it cost?
 
-**From $2.50 per 1,000 reviews.** It's pay-per-event, so platform usage isn't billed on top, and you're **charged only for review rows delivered**. Expired or missing sessions and failed regions cost nothing beyond the run start.
+**From $4 per 1,000 reviews.** It's pay-per-event, so platform usage isn't billed on top, and you're **charged only for review rows delivered**. Expired or missing sessions and failed regions cost nothing beyond the run start.
 
 | Your Apify plan | Price per review | Per 1,000 reviews |
 |---|---|---|
 | Free | $0.008 | $8.00 |
 | Starter | $0.006 | $6.00 |
 | Scale | $0.005 | $5.00 |
-| Business | $0.004 | $4.00 |
-| Platinum / Diamond | $0.003 / $0.0025 | $3.00 / $2.50 |
+| Business / Platinum / Diamond | $0.004 | $4.00 |
 
 Plus **$0.01 per run** (browser start).
 
