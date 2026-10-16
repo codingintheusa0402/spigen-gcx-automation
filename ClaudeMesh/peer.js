@@ -87,6 +87,8 @@ function createPeer({ userData, selfKind }) {
       up.pipe(res);
       onClose(() => up.destroy());
     },
+    // raw SSE response of the peer's terminal `id` (with the peer: prefix), for the desktop window's mirror
+    openTerm: id => request('GET', '/api/term/' + encodeURIComponent(id.slice(PREFIX.length)), { stream: true, timeout: 0 }),
     termWrite: (id, data) => request('POST', '/api/term/' + encodeURIComponent(id.slice(PREFIX.length)), { body: { data } }).then(r => r.json),
   };
 }

@@ -44,7 +44,7 @@ window.api.onTelemetry(s => {
   snap = s;
   if (s.ready) $('#loading').style.display = 'none';
   viz.update(s);
-  renderHeader(); renderList(); renderToday(); renderPanel(); syncTermTitles(); notifyTransitions(); renderRail(); renderBoard();
+  renderHeader(); renderList(); renderToday(); renderPanel(); syncPeerTerms(); syncTermTitles(); notifyTransitions(); renderRail(); renderBoard();
 });
 
 function renderHeader() {
@@ -190,7 +190,7 @@ function renderCtl() {
       <button class="primary" id="cSend">Send</button>
       <button id="cEsc" title="Send Esc (interrupt the current turn)">Interrupt</button>
       <button id="cCompact">/compact</button>
-      ${peer ? '' : `<button id="cFocus">${owned ? 'Show terminal' : 'Focus in Terminal'}</button>`}
+      ${peer ? (s.owner && terms.has(s.owner) ? '<button id="cFocus">Show terminal</button>' : '') : `<button id="cFocus">${owned ? 'Show terminal' : 'Focus in Terminal'}</button>`}
       ${owned ? '<button class="danger" id="cKill">Kill</button>' : ''}
     </div>
     <div class="note">${peer ? (live ? `Runs on ${esc(s.hostLabel)}: prompts are passed to it over Tailscale.` : `${esc(s.hostLabel)} is offline or this session can’t be reached.`) : owned ? 'Runs inside GCX Mesh — keystrokes go straight to its terminal.' :
@@ -219,6 +219,7 @@ function renderCtl() {
     if (s.onPeer || s.owner || s.tty) await sessInterrupt(s);
     viz.command(s.sid); toast('Interrupt sent');
   };
+  if (peer && $('#cFocus')) $('#cFocus').onclick = () => { if (document.body.dataset.view === 'mesh') setView('split'); activate(s.owner); };
   if (!peer) $('#cFocus').onclick = async () => {
     const s = cur(); if (!s) return;
     if (s.owner) { if (document.body.dataset.view === 'mesh') setView('split'); activate(s.owner); }
@@ -299,19 +300,72 @@ function wireDrop(el, insert) {
 }
 
 // ---------------- terminals ----------------
+const termOpts = () => ({
+  fontFamily: '"SF Mono", Menlo, monospace', fontSize: 12.5, lineHeight: 1.15, cursorBlink: !isSimple(), allowProposedApi: true,
+  macOptionIsMeta: true, scrollback: 20000,
+  theme: { background: '#06051a', foreground: '#e6e9f2', cursor: '#a78bfa', selectionBackground: '#3b4a7a88',
+    black: '#1b1f2a', brightBlack: '#555e78', blue: '#7aa2f7', brightBlue: '#9ab8ff', magenta: '#bb9af7', cyan: '#2dd4bf', green: '#34d399', red: '#f87171', yellow: '#fbbf24' },
+});
+
+// Live mirrors of the other machine's in-app terminals (peer:… ids). They keep the host's size — the
+// text is scaled to fit instead — and keystrokes go back to the host. Closing a mirror only detaches it.
+const peerClosed = new Set();
+function syncPeerTerms() {
+  const want = new Map((snap.ptys || []).filter(p => p.onPeer).map(p => [p.id, p]));
+  for (const [id, p] of want) {
+    if (peerClosed.has(id)) continue;
+    let t = terms.get(id);
+    if (!t) t = mirrorTerm(p);
+    if (!t.attached) { t.attached = true; window.api.peerTerm.open(id); }
+  }
+  for (const [id, t] of terms) if (t.peer && !want.has(id)) { window.api.peerTerm.close(id); t.term.dispose(); t.el.remove(); terms.delete(id); if (activeTerm === id) activeTerm = null; renderTabs(); layoutGrid(); }
+  for (const id of peerClosed) if (!want.has(id)) peerClosed.delete(id);
+  $('#noTerms').style.display = terms.size ? 'none' : '';
+}
+function mirrorTerm(p) {
+  const el = document.createElement('div'); el.className = 'term peer';
+  el.innerHTML = `<div class="tlabel"><span class="hdot h-idle"></span><span class="ttl"></span></div><div class="xt"></div>`;
+  $('#terms').appendChild(el);
+  const term = new Terminal(termOpts());
+  term.open(el.querySelector('.xt'));
+  // only real keystrokes go back: xterm's automatic replies to terminal queries (device attributes, cursor
+  // position, focus, colour reports) are already answered by the host's own terminal, and would land as typed text
+  const isReport = d => /^\x1b\[[?>=]?[\d;]*[cnRtIOy]$/.test(d) || /^\x1b\[[IO]$/.test(d) || d.startsWith('\x1b]') || d.startsWith('\x1bP');
+  term.onData(d => { if (!isReport(d)) window.api.pty.write(p.id, d); });
+  el.addEventListener('paste', async e => { e.preventDefault(); e.stopPropagation(); const r = await clipboardInsert(); if (r.text) term.paste(r.text); }, true);
+  term.textarea && term.textarea.addEventListener('focus', () => { activeTerm = p.id; markFocus(); });
+  const t = { term, fit: null, el, title: p.title, kind: p.kind, peer: true, cols: 120, rows: 30 };
+  terms.set(p.id, t);
+  if (!activeTerm) activeTerm = p.id;
+  renderTabs(); layoutGrid();
+  return t;
+}
+// host size → scale the font so the host's columns fit this pane (never re-wrap the host's screen)
+function fitPeer(t) {
+  const box = t.el.querySelector('.xt'), w = box.clientWidth, h = box.clientHeight; if (!w || !h) return;
+  const fs = Math.max(7, Math.min(12.5, w / (t.cols * .602), h / (t.rows * 1.15 * 1.18)));
+  if (Math.abs(t.term.options.fontSize - fs) > .05) t.term.options.fontSize = fs;
+  if (t.term.cols !== t.cols || t.term.rows !== t.rows) t.term.resize(t.cols, t.rows);
+}
+// the exact current screen (+ recent scrollback) of one of our terminals, for a phone or the peer opening it
+window.api.termSnap.onRequest((rq, id) => {
+  const t = terms.get(id);
+  if (!t || !t.ser) return window.api.termSnap.reply(rq, null);
+  // wait until everything written before this request is parsed — output after it is streamed separately
+  t.term.write('', () => { let out = null; try { out = t.ser.serialize({ scrollback: 1500 }); } catch { } window.api.termSnap.reply(rq, out); });
+});
+window.api.peerTerm.onInit((id, i) => { const t = terms.get(id); if (!t) return; t.cols = i.cols; t.rows = i.rows; t.term.reset(); fitPeer(t); t.term.write(i.backlog || ''); });
+window.api.peerTerm.onSize((id, i) => { const t = terms.get(id); if (!t) return; t.cols = i.cols; t.rows = i.rows; fitPeer(t); });
+window.api.peerTerm.onClosed(id => { const t = terms.get(id); if (t) t.attached = false; });   // reconnects on the next telemetry tick
 async function newTerm(opts) {
   if (document.body.dataset.view === 'mesh') setView('split');
   const info = await window.api.pty.spawn({ ...opts, cols: 120, rows: 30 });
   const el = document.createElement('div'); el.className = 'term';
   el.innerHTML = `<div class="tlabel"><span class="hdot h-idle"></span><span class="ttl"></span></div><div class="xt"></div>`;
   $('#terms').appendChild(el);
-  const term = new Terminal({ 
-    fontFamily: '"SF Mono", Menlo, monospace', fontSize: 12.5, lineHeight: 1.15, cursorBlink: !isSimple(), allowProposedApi: true,
-    macOptionIsMeta: true, scrollback: 20000,
-    theme: { background: '#06051a', foreground: '#e6e9f2', cursor: '#a78bfa', selectionBackground: '#3b4a7a88',
-      black: '#1b1f2a', brightBlack: '#555e78', blue: '#7aa2f7', brightBlue: '#9ab8ff', magenta: '#bb9af7', cyan: '#2dd4bf', green: '#34d399', red: '#f87171', yellow: '#fbbf24' },
-  });
+  const term = new Terminal(termOpts());
   const fit = new FitAddon.FitAddon(); term.loadAddon(fit);
+  const ser = new SerializeAddon.SerializeAddon(); term.loadAddon(ser);
   term.open(el.querySelector('.xt'));
   term.onData(d => window.api.pty.write(info.id, d));
   // ⌘V: Finder-copied files → their paths, screenshot/image → saved PNG path, else plain text.
@@ -323,7 +377,7 @@ async function newTerm(opts) {
   wireDrop(el, text => { term.paste(text); term.focus(); });
   term.onResize(({ cols, rows }) => window.api.pty.resize(info.id, cols, rows));
   term.textarea && term.textarea.addEventListener('focus', () => { activeTerm = info.id; markFocus(); });
-  terms.set(info.id, { term, fit, el, title: info.title, kind: opts.kind });
+  terms.set(info.id, { term, fit, ser, el, title: info.title, kind: opts.kind });
   $('#noTerms').style.display = 'none';
   activate(info.id); if (isMini()) miniShow('term');
   return info.id;
@@ -338,7 +392,8 @@ window.api.pty.onExit((id) => {
 
 function closeTerm(id) {
   const t = terms.get(id); if (!t) return;
-  if (!t.exited) window.api.pty.kill(id);
+  if (t.peer) { peerClosed.add(id); window.api.peerTerm.close(id); }   // a mirror: detach only, the session keeps running on the peer
+  else if (!t.exited) window.api.pty.kill(id);
   t.term.dispose(); t.el.remove(); terms.delete(id);
   if (activeTerm === id) activeTerm = [...terms.keys()].pop() || null;
   $('#noTerms').style.display = terms.size ? 'none' : '';
@@ -360,7 +415,7 @@ function markFocus() { for (const [k, t] of terms) t.el.classList.toggle('focus'
 
 function renderTabs() {
   $('#tabs').innerHTML = [...terms].map(([id, t]) => `<div class="tab ${id === activeTerm ? 'on' : ''}" data-id="${id}">
-    <span class="hdot h-${t.health || (t.exited ? 'error' : 'idle')}"></span><span class="t">${esc(t.title)}</span><span class="x" data-x="${id}">×</span></div>`).join('') +
+    <span class="hdot h-${t.health || (t.exited ? 'error' : 'idle')}"></span><span class="t">${esc(t.title)}</span>${t.peer && snap.peer ? `<span class="tag peer">${esc(snap.peer.label)}</span>` : ''}<span class="x" data-x="${id}">×</span></div>`).join('') +
     `<div class="tab" id="tabNew" title="New session (⌘T)">＋</div>`;
   for (const el of document.querySelectorAll('.tab[data-id]')) el.onclick = e => { if (e.target.dataset.x) closeTerm(e.target.dataset.x); else activate(el.dataset.id); };
   $('#tabNew').onclick = openNew;
@@ -381,7 +436,7 @@ function syncTermTitles() {
 function fitAll() {
   for (const [, t] of terms) {
     if (document.body.dataset.view !== 'grid' && !t.el.classList.contains('on')) continue;
-    try { t.fit.fit(); } catch { }
+    try { t.peer ? fitPeer(t) : t.fit.fit(); } catch { }
   }
 }
 function layoutGrid() {

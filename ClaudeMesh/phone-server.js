@@ -87,10 +87,14 @@ function createPhoneServer(ctx) {
       const pt = ctx.ptys.get(id); if (!pt) return json(res, 404, { error: 'no such terminal' });
       sse(res);
       if (ctx.termOpen) await ctx.termOpen(id);                           // server: start streaming the tmux pane
-      send(res, 'init', { cols: pt.proc.cols, rows: pt.proc.rows, backlog: pt.buf || '' });
-      const on = (pid, d) => { if (pid === id) send(res, 'data', d); }, off = pid => { if (pid === id) send(res, 'exit', {}); };
+      // listen first and hold output back until init went out, so nothing falls between the snapshot and the stream
+      let held = [];
+      const on = (pid, d) => { if (pid === id) held ? held.push(d) : send(res, 'data', d); }, off = pid => { if (pid === id) send(res, 'exit', {}); };
       const sz = (pid, cols, rows) => { if (pid === id) send(res, 'size', { cols, rows }); };   // the terminal was resized on the host
       ctx.ptyBus.on('data', on); ctx.ptyBus.on('exit', off); ctx.ptyBus.on('resize', sz);
+      const screen = ctx.termSnapshot ? await ctx.termSnapshot(id).catch(() => null) : null;   // Mac app: the window's exact screen
+      send(res, 'init', { cols: pt.proc.cols, rows: pt.proc.rows, backlog: screen != null ? screen : pt.buf || '' });
+      for (const d of held) send(res, 'data', d); held = null;
       req.on('close', () => { ctx.ptyBus.off('data', on); ctx.ptyBus.off('exit', off); ctx.ptyBus.off('resize', sz); if (ctx.termClose) ctx.termClose(id); }); return;
     }
     if (req.method !== 'POST') return json(res, 405, {});

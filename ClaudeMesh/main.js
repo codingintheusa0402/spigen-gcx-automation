@@ -77,7 +77,49 @@ ipcMain.handle('pty:spawn', (_e, opts) => {
   });
   return { id, pid: proc.pid, title, cwd };
 });
-ipcMain.on('pty:write', (_e, id, data) => { const p = ptys.get(id); if (p) p.proc.write(data); });
+ipcMain.on('pty:write', (_e, id, data) => {
+  if (peerLink && peerLink.ownsTerm(id)) return void peerLink.termWrite(id, data).catch(() => { });   // a mirrored terminal of the peer
+  const p = ptys.get(id); if (p) p.proc.write(data);
+});
+// a clean copy of an in-app terminal's screen, serialized by the window's xterm (the raw backlog replays
+// redraws made at other sizes and garbles); null if the window can't answer in time
+const snapWaits = new Map(); let snapSeq = 0;
+ipcMain.on('term:snap:reply', (_e, rq, data) => { const w = snapWaits.get(rq); if (w) { snapWaits.delete(rq); w(data); } });
+function termSnapshot(id) {
+  if (!win) return Promise.resolve(null);
+  return new Promise(res => {
+    const rq = ++snapSeq; snapWaits.set(rq, res); win.webContents.send('term:snap', rq, id);
+    setTimeout(() => { if (snapWaits.delete(rq)) res(null); }, 1500);
+  });
+}
+// Mirrors of the peer machine's in-app terminals: its /api/term SSE stream re-emitted as pty:data / pty:exit
+const peerTerms = new Map();   // id (peer:…) -> upstream response
+ipcMain.on('peerterm:open', async (_e, id) => {
+  if (!peerLink || peerTerms.has(id)) return;
+  peerTerms.set(id, null);
+  let up;
+  try { up = await peerLink.openTerm(id); } catch { peerTerms.delete(id); return; }
+  if (!peerTerms.has(id)) return up.destroy();          // closed while connecting
+  if (up.statusCode !== 200) { up.resume(); peerTerms.delete(id); return; }
+  peerTerms.set(id, up);
+  let buf = '';
+  up.setEncoding('utf8');
+  up.on('data', chunk => {
+    buf += chunk; let i;
+    while ((i = buf.indexOf('\n\n')) >= 0) {
+      const block = buf.slice(0, i); buf = buf.slice(i + 2);
+      const ev = (block.match(/^event: (.*)$/m) || [])[1], dm = block.match(/^data: (.*)$/m);
+      if (!ev || !dm || !win) continue;
+      let d; try { d = JSON.parse(dm[1]); } catch { continue; }
+      if (ev === 'data') win.webContents.send('pty:data', id, d);
+      else if (ev === 'init' || ev === 'size') win.webContents.send('peerterm:' + ev, id, d);
+      else if (ev === 'exit') win.webContents.send('pty:exit', id, 0);
+    }
+  });
+  const gone = () => { if (peerTerms.get(id) === up) { peerTerms.delete(id); if (win) win.webContents.send('peerterm:closed', id); } };
+  up.on('end', gone); up.on('error', gone); up.on('close', gone);
+});
+ipcMain.on('peerterm:close', (_e, id) => { const up = peerTerms.get(id); peerTerms.delete(id); if (up) up.destroy(); });
 ipcMain.on('pty:resize', (_e, id, c, r) => {
   const p = ptys.get(id);
   if (p && c > 0 && r > 0 && (c !== p.proc.cols || r !== p.proc.rows)) try { p.proc.resize(c, r); ptyBus.emit('resize', id, c, r); } catch { }
@@ -239,7 +281,7 @@ let peerLink = null;
 function initPhone() {
   peerLink = createPeer({ userData: app.getPath('userData'), selfKind: 'mac' }); peerLink.start();
   phone = createPhoneServer({
-    root: __dirname, userData: app.getPath('userData'), ptys, ptyBus, peer: peerLink,
+    root: __dirname, userData: app.getPath('userData'), ptys, ptyBus, peer: peerLink, termSnapshot,
     getSnap: () => lastSnap,
     getHistory: () => scanHistory(),
     details: sid => sessionDetails(sid),
@@ -290,8 +332,8 @@ async function loop() {
       snap.agents = core.agents(); refreshAgents();
       snap.usage = core.usage(); refreshUsage();
       snap.ptys = [...ptys].map(([id, p]) => ({ id, pid: p.proc.pid, title: p.title, kind: p.kind, cwd: p.cwd }));
-      // the window shows BOTH machines (the peer's sessions merged in, its terminals not); phone + peer keep the local snap
-      const shown = peerLink ? { ...peerLink.merge(snap), ptys: snap.ptys } : snap;
+      // the window shows BOTH machines (the peer's sessions and terminals merged in); phone + peer keep the local snap
+      const shown = peerLink ? peerLink.merge(snap) : snap;   // includes the peer's terminals (peer:… ids, onPeer)
       win.webContents.send('telemetry', shown);
       lastSnap = snap; if (phone) phone.broadcast(snap); recordSessions(snap);
     }

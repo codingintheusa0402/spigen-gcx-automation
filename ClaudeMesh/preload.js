@@ -10,6 +10,17 @@ contextBridge.exposeInMainWorld('api', {
     onData: cb => ipcRenderer.on('pty:data', (_e, id, d) => cb(id, d)),
     onExit: cb => ipcRenderer.on('pty:exit', (_e, id, code) => cb(id, code)),
   },
+  termSnap: {
+    onRequest: cb => ipcRenderer.on('term:snap', (_e, rq, id) => cb(rq, id)),
+    reply: (rq, data) => ipcRenderer.send('term:snap:reply', rq, data),
+  },
+  peerTerm: {
+    open: id => ipcRenderer.send('peerterm:open', id),
+    close: id => ipcRenderer.send('peerterm:close', id),
+    onInit: cb => ipcRenderer.on('peerterm:init', (_e, id, i) => cb(id, i)),
+    onSize: cb => ipcRenderer.on('peerterm:size', (_e, id, i) => cb(id, i)),
+    onClosed: cb => ipcRenderer.on('peerterm:closed', (_e, id) => cb(id)),
+  },
   ext: {
     send: (tty, text) => ipcRenderer.invoke('ext:send', tty, text),
     interrupt: tty => ipcRenderer.invoke('ext:interrupt', tty),
