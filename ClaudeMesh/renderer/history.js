@@ -153,6 +153,7 @@ async function removeSession(sid) {
     histHidden.add(sid); saveHidden(); renderHistory();
     return toast('Removed ' + name.slice(0, 50) + ' — search still finds it');
   }
+  if (live.onPeer) return toast(`${name.slice(0, 50)} runs on ${live.hostLabel}. Stop it there.`);
   modal(`<h2>Stop this session?</h2>
     <div style="color:var(--dim);line-height:1.6;font-size:13px"><b style="color:var(--text)">${esc(name)}</b> is still running${live.health === 'working' ? ' <b style="color:var(--warn)">and working right now</b>' : ''}.
     Removing it stops it${live.owner ? ' and closes its terminal' : live.tty ? ' (its Terminal.app tab stays open)' : ''}. It moves to <b style="color:var(--text)">Recent</b>, where you can resume it any time.</div>
@@ -178,7 +179,7 @@ function renameSession(sid, current) {
     const live = snap.sessions.find(s => s.sid === sid);
     let r;
     if (live && canControl(live)) {          // a running session renames itself, so its prompt box/title update too
-      r = live.owner ? await window.api.ctl.send(live.owner, '/rename ' + name, true) : await window.api.ext.send(live.tty, '/rename ' + name);
+      r = await sessSend(live, '/rename ' + name);
       if (r && (r.ok === false || r.out === 'notfound')) r = await window.api.rename(sid, name);
     } else r = await window.api.rename(sid, name);
     if (r && r.ok === false) return toast('Rename failed: ' + (r.err || ''));

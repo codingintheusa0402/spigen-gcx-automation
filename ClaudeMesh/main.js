@@ -154,10 +154,15 @@ const scanHistory = () => core.listHistory();
 ipcMain.handle('cmds:list', (_e, cwd) => commandsFor(cwd));
 ipcMain.handle('hist:list', () => scanHistory());
 ipcMain.handle('hist:rename', (_e, sid, name) => renameTranscript(sid, name));
-ipcMain.handle('sess:details', (_e, sid) => sessionDetails(sid));
+ipcMain.handle('sess:details', (_e, sid) => !liveSession(sid) && peerLink && peerLink.owns(sid)
+  ? peerLink.forward('GET', '/api/details', undefined, { sid }).catch(e => ({ ok: false, err: String(e.message || e) })) : sessionDetails(sid));
+// a session running on the peer machine: send / interrupt go through its phone server
+ipcMain.handle('peer:send', (_e, sid, text) => peerLink ? peerLink.forward('POST', '/api/send', { sid, text }).catch(e => ({ ok: false, err: String(e.message || e) })) : { ok: false, err: 'no peer' });
+ipcMain.handle('peer:interrupt', (_e, sid) => peerLink ? peerLink.forward('POST', '/api/interrupt', { sid }).catch(e => ({ ok: false, err: String(e.message || e) })) : { ok: false, err: 'no peer' });
 // stop a running session (one outside the app — in-app terminals are closed by the renderer)
 ipcMain.handle('session:stop', async (_e, pid) => {
   pid = +pid; if (!pid || pid === process.pid) return { ok: false, err: 'bad pid' };
+  if (!(lastSnap && lastSnap.sessions.some(s => s.pid === pid))) return { ok: false, err: 'not a session on this machine' };   // never a peer's pid
   try { process.kill(pid, 'SIGTERM'); } catch (e) { return { ok: e.code === 'ESRCH', err: e.message }; }
   for (let i = 0; i < 30; i++) { await new Promise(r => setTimeout(r, 100)); try { process.kill(pid, 0); } catch { return { ok: true }; } }
   try { process.kill(pid, 'SIGKILL'); } catch { } return { ok: true };
@@ -285,7 +290,9 @@ async function loop() {
       snap.agents = core.agents(); refreshAgents();
       snap.usage = core.usage(); refreshUsage();
       snap.ptys = [...ptys].map(([id, p]) => ({ id, pid: p.proc.pid, title: p.title, kind: p.kind, cwd: p.cwd }));
-      win.webContents.send('telemetry', snap);
+      // the window shows BOTH machines (the peer's sessions merged in, its terminals not); phone + peer keep the local snap
+      const shown = peerLink ? { ...peerLink.merge(snap), ptys: snap.ptys } : snap;
+      win.webContents.send('telemetry', shown);
       lastSnap = snap; if (phone) phone.broadcast(snap); recordSessions(snap);
     }
   } catch (e) { console.error(e); }

@@ -5,7 +5,7 @@
 // (with "Resume here" once their transcript has been synced to this machine).
 //
 // Config: <userData>/peer.json  { "url": "http://100.112.43.88:47320", "token": "<the peer's phone token>",
-//                                 "kind": "mac" | "server" }
+//                                 "kind": "mac" | "server", "label": "mini" (optional display name) }
 // Nothing here touches Electron.
 const fs = require('fs');
 const path = require('path');
@@ -23,7 +23,7 @@ function createPeer({ userData, selfKind }) {
     return cfg;
   }
   const kind = () => (cfg && cfg.kind) || (selfKind === 'server' ? 'mac' : 'server');
-  const label = () => kind() === 'mac' ? 'Mac' : 'server';
+  const label = () => (cfg && cfg.label) || (kind() === 'mac' ? 'Mac' : 'server');
 
   function request(method, p, { body, query, timeout = 6000, stream } = {}) {
     return new Promise((resolve, reject) => {
@@ -67,7 +67,7 @@ function createPeer({ userData, selfKind }) {
     const mine = new Set(out.sessions.map(s => s.sid));
     for (const s of last.sessions || []) {
       if (mine.has(s.sid)) continue;                 // same conversation resumed here — the local copy wins
-      out.sessions.push({ ...s, hostKind: kind(), onPeer: true, offline: !online,
+      out.sessions.push({ ...s, hostKind: kind(), hostLabel: label(), onPeer: true, offline: !online,
         owner: online && s.owner ? PREFIX + s.owner : null,
         health: online ? s.health : 'offline', tps: online ? s.tps : 0 });
     }

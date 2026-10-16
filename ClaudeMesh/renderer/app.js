@@ -65,7 +65,7 @@ function renderHeader() {
 function renderList() {
   $('#sessCount').textContent = `· ${snap.sessions.length}`;
   $('#list').innerHTML = snap.sessions.map(s => `<div class="srow ${s.sid === selected ? 'sel' : ''}${doneCls(s.sid)}" data-sid="${s.sid}">
-    <div class="n"><span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span>${s.owner ? '<span class="tag">app</span>' : s.kind === 'bg' ? '<span class="tag">bg</span>' : ''}<span class="more" data-more="${s.sid}" title="Commands (or right-click)">⋯</span></div>
+    <div class="n"><span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span>${s.onPeer ? peerTag(s) : s.owner ? '<span class="tag">app</span>' : s.kind === 'bg' ? '<span class="tag">bg</span>' : ''}<span class="more" data-more="${s.sid}" title="Commands (or right-click)">⋯</span></div>
     <div class="m"><span style="color:${FAMILY_COLOR[s.family]}">${esc((s.model || '—').replace('claude-', ''))}</span><span>${fmt$(s.todayUsd)}</span><span>${s.health === 'working' ? Math.round(s.tps) + ' tok/s' : ago(s.sinceWrite)}</span></div>
   </div>`).join('');
   for (const el of document.querySelectorAll('.srow')) el.onclick = () => select(el.dataset.sid);
@@ -76,7 +76,7 @@ let lastBoard = '';
 function renderBoard() {
   if (!isSimple()) return;
   const html = snap.sessions.map(s => `<div class="bcard ${s.sid === selected ? 'sel' : ''}" data-sid="${s.sid}">
-    <div class="n"><span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span></div>
+    <div class="n"><span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span>${peerTag(s)}</div>
     <div class="m"><span style="color:${FAMILY_COLOR[s.family]}">${esc((s.model || '—').replace('claude-', ''))}</span><span>${fmt$(s.todayUsd)}</span><span>${s.health === 'working' ? 'working' : s.health}</span></div>
   </div>`).join('') || '<div class="bempty">No live sessions.</div>';
   if (html === lastBoard) return;
@@ -112,6 +112,17 @@ function select(sid) {
 
 function cur() { return snap.sessions.find(s => s.sid === selected); }
 
+// one path for every session: in-app terminal, Terminal.app tab, or a session on the other machine (peer)
+function sessSend(s, text) {
+  if (s.onPeer) return window.api.peer.send(s.sid, text);
+  return s.owner ? window.api.ctl.send(s.owner, text, true) : window.api.ext.send(s.tty, text);
+}
+function sessInterrupt(s) {
+  if (s.onPeer) return window.api.peer.interrupt(s.sid);
+  return s.owner ? window.api.pty.write(s.owner, '\x1b') : window.api.ext.interrupt(s.tty);
+}
+const peerTag = s => s.onPeer ? `<span class="tag peer" title="Runs on ${esc(s.hostLabel)}">${esc(s.hostLabel)}${s.offline ? ' · offline' : ''}</span>` : '';
+
 function renderPanel() {
   if (!selected) return;
   const s = cur(), box = $('#pStatic'); if (!box) return;
@@ -125,7 +136,7 @@ function renderPanel() {
   box.innerHTML = `
   <div class="ph"><div class="row1"><span class="hdot h-${s.health}"></span><h2 title="${esc(s.name)}">${esc(s.name)}</h2><button class="close" id="pClose">×</button></div>
     <div class="meta"><span style="color:${col}">${esc(s.model || 'no model yet')}</span><span>${s.health}${s.status && s.status !== 'busy' && s.status !== 'idle' ? ' (' + esc(s.status) + ')' : ''}</span>
-    <span>pid ${s.pid}</span><span>${s.tty ? s.tty.replace('/dev/', '') : 'no tty'}</span><span>${s.owner ? 'in-app' : s.kind === 'bg' ? 'background' : 'Terminal.app'}</span>
+    <span>pid ${s.pid}</span><span>${s.tty ? s.tty.replace('/dev/', '') : 'no tty'}</span><span>${s.onPeer ? 'on ' + esc(s.hostLabel) : s.owner ? 'in-app' : s.kind === 'bg' ? 'background' : 'Terminal.app'}</span>
     ${s.remote ? '<span>remote-control on</span>' : ''}<span>v${esc(s.version)}</span><span title="${esc(s.cwd)}">${esc(s.cwd.replace(/^\/Users\/[^/]+/, '~'))}</span></div></div>
   <div class="sec"><h3>Live</h3><div class="kpis">
     <div class="kpi"><div class="l">Speed now</div><div class="v">${Math.round(s.tps)} <small>tok/s</small></div></div>
@@ -171,24 +182,24 @@ function drawSpark(c, data, col, peak) {
 // Controls stay mounted while stats re-render, so typing isn't interrupted.
 function renderCtl() {
   const s = cur(); const box = $('#pCtl'); if (!box || !s) return;
-  const owned = !!s.owner, ext = !owned && s.tty && s.kind !== 'bg';
+  const peer = !!s.onPeer, live = peer ? !s.offline && (s.owner || (s.tty && s.kind !== 'bg')) : false;
+  const owned = !peer && !!s.owner, ext = !peer && !owned && s.tty && s.kind !== 'bg';
   box.innerHTML = `<div class="sec ctl"><h3>Control</h3>
-    <textarea id="cText" placeholder="${owned || ext ? 'Type a prompt… drop files or ⌘V images to attach (⌘↩ to send)' : 'This session has no terminal the app can reach'}"></textarea>
+    <textarea id="cText" placeholder="${owned || ext || live ? 'Type a prompt… drop files or ⌘V images to attach (⌘↩ to send)' : 'This session has no terminal the app can reach'}"></textarea>
     <div class="btns">
       <button class="primary" id="cSend">Send</button>
       <button id="cEsc" title="Send Esc (interrupt the current turn)">Interrupt</button>
       <button id="cCompact">/compact</button>
-      <button id="cFocus">${owned ? 'Show terminal' : 'Focus in Terminal'}</button>
+      ${peer ? '' : `<button id="cFocus">${owned ? 'Show terminal' : 'Focus in Terminal'}</button>`}
       ${owned ? '<button class="danger" id="cKill">Kill</button>' : ''}
     </div>
-    <div class="note">${owned ? 'Runs inside GCX Mesh — keystrokes go straight to its terminal.' :
+    <div class="note">${peer ? (live ? `Runs on ${esc(s.hostLabel)}: prompts are passed to it over Tailscale.` : `${esc(s.hostLabel)} is offline or this session can’t be reached.`) : owned ? 'Runs inside GCX Mesh — keystrokes go straight to its terminal.' :
       ext ? 'Lives in a Terminal.app window. Prompts are typed into that tab via AppleScript (first use asks for Automation permission). Multi-line text is sent as one line.' :
       'Background job — view only.'}</div></div>`;
   const send = async (text) => {
     const s = cur(); if (!s || !text) return;
     let r;
-    if (s.owner) r = await window.api.ctl.send(s.owner, text, true);
-    else if (s.tty) r = await window.api.ext.send(s.tty, text);
+    if (s.onPeer || s.owner || s.tty) r = await sessSend(s, text);
     if (r && (r.ok === false || r.out === 'notfound')) toast(r.out === 'notfound' ? 'No Terminal.app tab found for ' + s.tty : 'Send failed: ' + (r.err || ''));
     else { viz.command(s.sid); toast('Sent to ' + s.name); }
   };
@@ -205,21 +216,21 @@ function renderCtl() {
   $('#cCompact').onclick = () => send('/compact');
   $('#cEsc').onclick = async () => {
     const s = cur(); if (!s) return;
-    if (s.owner) window.api.pty.write(s.owner, '\x1b'); else if (s.tty) await window.api.ext.interrupt(s.tty);
+    if (s.onPeer || s.owner || s.tty) await sessInterrupt(s);
     viz.command(s.sid); toast('Interrupt sent');
   };
-  $('#cFocus').onclick = async () => {
+  if (!peer) $('#cFocus').onclick = async () => {
     const s = cur(); if (!s) return;
     if (s.owner) { if (document.body.dataset.view === 'mesh') setView('split'); activate(s.owner); }
     else if (s.tty) { const r = await window.api.ext.focus(s.tty); if (r.out === 'notfound') toast('No Terminal.app tab for ' + s.tty); }
   };
   if (owned) $('#cKill').onclick = () => { window.api.pty.kill(s.owner); toast('Killed'); };
-  if (!owned && !ext) for (const id of ['#cSend', '#cEsc', '#cCompact', '#cFocus', '#cText']) $(id).disabled = true;
+  if (!owned && !ext && !live) for (const id of ['#cSend', '#cEsc', '#cCompact', '#cFocus', '#cText']) if ($(id)) $(id).disabled = true;
 }
 
 // ---------------- broadcast (click the core) ----------------
 function openBroadcast() {
-  const targets = snap.sessions.filter(s => s.owner || (s.tty && s.kind !== 'bg'));
+  const targets = snap.sessions.filter(s => !s.offline && (s.owner || (s.tty && s.kind !== 'bg')));
   modal(`<h2>Broadcast to sessions</h2>
     <div class="blist">${targets.map(s => `<label class="chk"><input type="checkbox" data-sid="${s.sid}" checked><span class="hdot h-${s.health}"></span>${esc(s.name)} <span style="color:var(--dim)">${s.health}</span></label>`).join('') || '<div class="note">No controllable sessions.</div>'}</div>
     <label>Message</label><textarea id="bText" style="width:100%;min-height:80px" placeholder="e.g. /compact  ·  give me a one-line status"></textarea>
@@ -229,7 +240,7 @@ function openBroadcast() {
     const sids = [...document.querySelectorAll('.blist input:checked')].map(i => i.dataset.sid);
     for (const sid of sids) {
       const s = snap.sessions.find(x => x.sid === sid); if (!s) continue;
-      if (s.owner) await window.api.ctl.send(s.owner, text, true); else await window.api.ext.send(s.tty, text);
+      await sessSend(s, text);
       viz.command(sid);
     }
     closeModal(); toast(`Broadcast to ${sids.length} session(s)`);

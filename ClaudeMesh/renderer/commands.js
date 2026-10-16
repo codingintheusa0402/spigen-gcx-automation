@@ -44,7 +44,7 @@ async function commandsFor(s) {
   if (!customCache.has(key)) customCache.set(key, await window.api.listCommands(s.cwd).catch(() => []));
   return SESSION_ACTIONS.concat(BUILTIN_CMDS, customCache.get(key));
 }
-const canControl = s => s && (s.owner || (s.tty && s.kind !== 'bg'));
+const canControl = s => s && !s.offline && (s.owner || (s.tty && s.kind !== 'bg'));
 
 async function runCommand(s, item) {
   if (item.action) return item.action(s);
@@ -52,11 +52,10 @@ async function runCommand(s, item) {
   if (item.arg) { select(s.sid); requestAnimationFrame(() => { const ta = $('#cText'); if (ta) { ta.value = item.cmd + ' '; ta.focus(); } }); return; }
   if (item.danger && !await confirmCmd(s, item)) return;
   let r;
-  if (s.owner) r = await window.api.ctl.send(s.owner, item.cmd, true);
-  else r = await window.api.ext.send(s.tty, item.cmd);
+  r = await sessSend(s, item.cmd);
   if (r && (r.ok === false || r.out === 'notfound')) return toast(r.out === 'notfound' ? 'No Terminal.app tab for ' + s.tty : 'Send failed');
   viz.command(s.sid);
-  if (item.ui) {                       // show the terminal where the command's screen/output appears
+  if (item.ui && !s.onPeer) {                       // show the terminal where the command's screen/output appears
     if (s.owner) { if (document.body.dataset.view === 'mesh') setView('split'); activate(s.owner); }
     else await window.api.ext.focus(s.tty);
   }
