@@ -190,6 +190,10 @@ python3 rate_pipeline.py slides --deck <classicDeckId>
   scripts must not overwrite user text; if a slide was replaced, ask before rebuilding it.
 - CaspiSalesBackfill (sheet Z col 판매량) is a separate job — cumulative EU+UK orders since launch.
 
+## 8b. Sharing (user rule 2026-10-16 — always)
+Every deck this skill creates (classic copy AND Apple copy) → Drive permission `anyone` / `writer`
+(link-only, `allowFileDiscovery: false`, `supportsAllDrives=True`) right after it is created. Verify with permissions.list.
+
 ## 9. Report back
 Links to both decks; slide ranges per series; maker notes (missing ASIN/rating, extra photos,
 SIREN badges); TOP-7 highlights (≥2%); SIREN count; Caspi data-month caveat; anything skipped.
