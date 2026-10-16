@@ -41,7 +41,7 @@ DEFAULT_WEBHOOK = json.load(open(os.path.expanduser("~/.config/gcx_webhooks.json
 # resolve a plain thread reply back to a ticket id, without needing chat.bot API read access.
 QUEUE_SHEET_ID = "1GUU2CLa60XSGWHI6yZ6Jkx4nrzcGgBJnuxwQAZktH7M"
 QUEUE_TAB = "TicketQueue"
-GWS_SHIM_TOKEN = "/Users/kevinkim/.config/gws_shim/token.json"
+GWS_SHIM_TOKEN = os.path.expanduser("~/.config/gws_shim/token.json")
 
 RED = "#D93025"    # CS 미제공 / 거절 관련 강조
 BLUE = "#1A73E8"   # CS 제공 관련 강조

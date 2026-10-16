@@ -11,13 +11,14 @@ Usage:
 """
 import argparse
 import json
+import os
 import sys
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-TOKEN_PATH = "/Users/kevinkim/.config/gws_shim/token.json"
+TOKEN_PATH = os.path.expanduser("~/.config/gws_shim/token.json")
 SHEET_ID = "1HZ14uqTVeP7bGYZDu9v9Ve2C1xNY_m6dcSv-KMCoAKc"
 TABS = ["Lazada log", "Shopee log"]
 

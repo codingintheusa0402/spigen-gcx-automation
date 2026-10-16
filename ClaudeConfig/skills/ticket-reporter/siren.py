@@ -73,7 +73,7 @@ ALLOWED_DEFECT_TERMS = frozenset({
     "구성품누락",
 })
 
-GWS_SHIM_TOKEN = "/Users/kevinkim/.config/gws_shim/token.json"
+GWS_SHIM_TOKEN = os.path.expanduser("~/.config/gws_shim/token.json")
 QUEUE_SHEET_ID = "1GUU2CLa60XSGWHI6yZ6Jkx4nrzcGgBJnuxwQAZktH7M"
 SIREN_TAB = "SIREN_Log"
 
