@@ -40,6 +40,7 @@ def siren_and_end():
     reqs = []
     for s in p['slides']:
         sid = s['objectId']
+        if not any(txt(e) == LABEL for e in s['pageElements']): continue   # SIREN slides only (cards also use at_st_ tiles)
         badge = [_bbox(e) for e in s['pageElements'] if e['objectId'].startswith(('apl_badge_', 'at_st_'))]
         if badge:
             bx, by = min(b[0] for b in badge), min(b[1] for b in badge)
