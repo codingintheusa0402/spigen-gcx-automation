@@ -237,7 +237,6 @@ _DOMAINS = {
         "amazon_home":     "https://www.amazon.co.uk/",
         "review_url":      "https://www.amazon.co.uk/gp/customer-reviews/",
         "country":         "UK",
-        "image_fetch":     False,  # no amazon.co.uk customer session in scraper profile
     },
     "DE": {
         "sc_base":         "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
@@ -254,7 +253,6 @@ _DOMAINS = {
         "amazon_home":     "https://www.amazon.fr/",
         "review_url":      "https://www.amazon.fr/gp/customer-reviews/",
         "country":         "FR",
-        "image_fetch":     False,  # no amazon.fr customer session in scraper profile
     },
     "IT": {
         "sc_base":         "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
@@ -263,7 +261,6 @@ _DOMAINS = {
         "amazon_home":     "https://www.amazon.it/",
         "review_url":      "https://www.amazon.it/gp/customer-reviews/",
         "country":         "IT",
-        "image_fetch":     False,  # no amazon.it customer session in scraper profile
     },
     "ES": {
         "sc_base":         "https://sellercentral-europe.amazon.com/brand-customer-reviews/",
@@ -272,7 +269,6 @@ _DOMAINS = {
         "amazon_home":     "https://www.amazon.es/",
         "review_url":      "https://www.amazon.es/gp/customer-reviews/",
         "country":         "ES",
-        "image_fetch":     False,  # no amazon.es customer session in scraper profile
     },
     "JP": {
         "sc_base":     "https://sellercentral.amazon.co.jp/brand-customer-reviews/",
