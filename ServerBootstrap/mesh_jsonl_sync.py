@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""GCX Mesh — merge Claude session histories (~/.claude/projects/**/*.jsonl) between the Mac and gcx-server.
+"""GCX Mesh — merge Claude session histories (~/.claude/projects/**/*.jsonl) between the MacBook and the server
+(the Mac mini gcx-macmini since 2026-10-16; was the Windows laptop gcx-server).
 
 Runs ON THE MAC (called by mesh_sync_mac.sh); the same file is used on the server over ssh for its side.
 A session can be continued on both machines (e.g. resumed on the server while the Mac was off, and the Mac
@@ -11,18 +12,18 @@ Line identity = its "uuid" field, else a hash of the raw line. Only newline-term
 writer's half-written last line is left for the next run). Automatic `claude -p` runs (entrypoint sdk-cli,
 e.g. the AI Trader's news scoring) are not copied.
 
-Project folders are renamed on the way: Mac -Users-kevinkim… <-> server -home-kevinkim…  (memory/ is skipped).
+Project folders are renamed on the way: each machine's prefix is its home path (MacBook -Users-kevinkim…,
+mini -Users-kevin…, old laptop -home-kevinkim…)  (memory/ is skipped).
 Subcommands (internal):  list | keys <rel>... | emit (stdin: {rel: [keys]}) | append (stdin: stream)
 """
 import hashlib, json, os, subprocess, sys
 
 HOME = os.path.expanduser('~')
 ROOT = os.path.join(HOME, '.claude', 'projects')
-MAC_P, SRV_P = '-Users-kevinkim', '-home-kevinkim'
-LOCAL_P = SRV_P if HOME.startswith('/home/') else MAC_P
+LOCAL_P = HOME.replace('/', '-')          # how Claude Code names project folders under this home
 CACHE = os.path.join(HOME, '.gcx-mesh-jsonl-cache.json')
-H = 'kevinkim@gcx-server'
-REMOTE = os.environ.get('MESH_SYNC_REMOTE', '~/Desktop/GCX/ServerBootstrap/mesh_jsonl_sync.py')
+H = os.environ.get('MESH_SYNC_HOST', 'gcx-macmini')
+REMOTE = os.environ.get('MESH_SYNC_REMOTE', '~/.gcx-mesh/mesh_jsonl_sync.py')   # mesh_sync_mac.sh copies this file there
 
 
 def to_local(rel):   # rel uses the neutral prefix "K"
@@ -33,7 +34,9 @@ def walk():
     out = {}
     for d in os.listdir(ROOT):
         full = os.path.join(ROOT, d)
-        if not d.startswith(LOCAL_P) or os.path.islink(full) or not os.path.isdir(full):
+        rest = d[len(LOCAL_P):]
+        # -Users-kevin must not swallow -Users-kevinkim…: the prefix has to end at a path separator
+        if not d.startswith(LOCAL_P) or (rest and rest[0] != '-') or os.path.islink(full) or not os.path.isdir(full):
             continue
         for dp, dns, fns in os.walk(full):
             dns[:] = [x for x in dns if x != 'memory']
