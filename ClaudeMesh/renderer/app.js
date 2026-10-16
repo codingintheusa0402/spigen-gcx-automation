@@ -65,7 +65,7 @@ function renderHeader() {
 function renderList() {
   $('#sessCount').textContent = `· ${snap.sessions.length}`;
   $('#list').innerHTML = snap.sessions.map(s => `<div class="srow ${s.sid === selected ? 'sel' : ''}${doneCls(s.sid)}" data-sid="${s.sid}">
-    <div class="n"><span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span>${s.onPeer ? peerTag(s) : s.owner ? '<span class="tag">app</span>' : s.kind === 'bg' ? '<span class="tag">bg</span>' : ''}<span class="more" data-more="${s.sid}" title="Commands (or right-click)">⋯</span></div>
+    <div class="n"><span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span>${s.onPeer || s.hostLabel ? peerTag(s) : s.owner ? '<span class="tag">app</span>' : s.kind === 'bg' ? '<span class="tag">bg</span>' : ''}<span class="more" data-more="${s.sid}" title="Commands (or right-click)">⋯</span></div>
     <div class="m"><span style="color:${FAMILY_COLOR[s.family]}">${esc((s.model || '—').replace('claude-', ''))}</span><span>${fmt$(s.todayUsd)}</span><span>${s.health === 'working' ? Math.round(s.tps) + ' tok/s' : ago(s.sinceWrite)}</span></div>
   </div>`).join('');
   for (const el of document.querySelectorAll('.srow')) el.onclick = () => select(el.dataset.sid);
@@ -121,7 +121,8 @@ function sessInterrupt(s) {
   if (s.onPeer) return window.api.peer.interrupt(s.sid);
   return s.owner ? window.api.pty.write(s.owner, '\x1b') : window.api.ext.interrupt(s.tty);
 }
-const peerTag = s => s.onPeer ? `<span class="tag peer" title="Runs on ${esc(s.hostLabel)}">${esc(s.hostLabel)}${s.offline ? ' · offline' : ''}</span>` : '';
+const peerTag = s => s.onPeer ? `<span class="tag peer" title="Runs on ${esc(s.hostLabel)}">${esc(s.hostLabel)}${s.offline ? ' · offline' : ''}</span>`
+  : s.hostLabel ? `<span class="tag peer" title="Runs on this machine (${s.owner ? 'in-app' : s.kind === 'bg' ? 'background' : 'Terminal'})">${esc(s.hostLabel)}</span>` : '';
 
 function renderPanel() {
   if (!selected) return;

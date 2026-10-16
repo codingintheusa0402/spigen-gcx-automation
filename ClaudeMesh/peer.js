@@ -5,7 +5,8 @@
 // (with "Resume here" once their transcript has been synced to this machine).
 //
 // Config: <userData>/peer.json  { "url": "http://100.112.43.88:47320", "token": "<the peer's phone token>",
-//                                 "kind": "mac" | "server", "label": "mini" (optional display name) }
+//                                 "kind": "mac" | "server", "label": "mini" (optional display name),
+//                                 "selfLabel": "MacMini" (optional — tags THIS machine's own sessions) }
 // Nothing here touches Electron.
 const fs = require('fs');
 const path = require('path');
@@ -62,7 +63,8 @@ function createPeer({ userData, selfKind }) {
   function merge(local) {
     if (!local) return local;
     const out = { ...local, peer: cfg ? { kind: kind(), label: label(), online, lastSeen: lastOk || null, caps: (last && last.caps) || [] } : null };
-    out.sessions = local.sessions.map(s => ({ ...s, hostKind: selfKind }));
+    const selfLabel = cfg && cfg.selfLabel;
+    out.sessions = local.sessions.map(s => ({ ...s, hostKind: selfKind, ...(selfLabel ? { hostLabel: selfLabel } : {}) }));
     if (!last || !cfg || (!online && Date.now() - lastOk > OFFLINE_KEEP_MS)) return out;
     const mine = new Set(out.sessions.map(s => s.sid));
     for (const s of last.sessions || []) {

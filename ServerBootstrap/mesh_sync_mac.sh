@@ -33,8 +33,8 @@ MAC_TS=$(/usr/local/bin/tailscale ip -4 2>/dev/null || /Applications/Tailscale.a
 MAC_TOK=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['token'])" "$MAC_UD/phone.json" 2>/dev/null)
 SRV_TOK=$(ssh $H "/usr/bin/python3 -c \"import json,os;print(json.load(open(os.path.expanduser('~/$SRV_UD/phone.json')))['token'])\"" 2>/dev/null)
 if [ -n "$MAC_TS" ] && [ -n "$MAC_TOK" ] && [ -n "$SRV_TOK" ]; then
-  want_srv="{\"url\":\"http://$MAC_TS:47320\",\"token\":\"$MAC_TOK\",\"kind\":\"mac\",\"label\":\"MacBook\"}"
-  want_mac="{\"url\":\"http://$SRV_IP:47320\",\"token\":\"$SRV_TOK\",\"kind\":\"server\",\"label\":\"mini\"}"
+  want_srv="{\"url\":\"http://$MAC_TS:47320\",\"token\":\"$MAC_TOK\",\"kind\":\"mac\",\"label\":\"MacBook\",\"selfLabel\":\"MacMini\"}"
+  want_mac="{\"url\":\"http://$SRV_IP:47320\",\"token\":\"$SRV_TOK\",\"kind\":\"server\",\"label\":\"MacMini\",\"selfLabel\":\"MacBook\"}"
   [ "$(ssh $H "cat '$SRV_UD/peer.json'" 2>/dev/null)" = "$want_srv" ] || { printf '%s' "$want_srv" | ssh $H "umask 077; cat > '$SRV_UD/peer.json'"; log "server peer.json updated"; }
   [ "$(cat "$MAC_UD/peer.json" 2>/dev/null)" = "$want_mac" ] || { (umask 077; printf '%s' "$want_mac" > "$MAC_UD/peer.json"); log "mac peer.json updated"; }
 else
