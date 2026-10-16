@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('api', {
   peerTerm: {
     open: id => ipcRenderer.send('peerterm:open', id),
     close: id => ipcRenderer.send('peerterm:close', id),
+    resize: (id, c, r) => ipcRenderer.send('peerterm:resize', id, c, r),
+    onRemoteSize: cb => ipcRenderer.on('pty:remoteSize', (_e, id, c, r) => cb(id, c, r)),
     onInit: cb => ipcRenderer.on('peerterm:init', (_e, id, i) => cb(id, i)),
     onSize: cb => ipcRenderer.on('peerterm:size', (_e, id, i) => cb(id, i)),
     onClosed: cb => ipcRenderer.on('peerterm:closed', (_e, id) => cb(id)),

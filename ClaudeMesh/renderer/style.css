@@ -78,7 +78,7 @@ textarea:focus, input:focus { border-color: #4b5aa8; }
 body[data-view="mesh"] #dock, body[data-view="mesh"] #dockHandle { display: none; }
 body[data-view="grid"] #meshWrap, body[data-view="grid"] #dockHandle, body[data-view="grid"] #tabs { display: none; }
 body[data-view="grid"] #dock { height: auto; flex: 1; }
-body[data-view="grid"] #terms { display: grid; gap: 6px; padding: 6px; grid-template-columns: repeat(var(--cols, 3), 1fr); grid-auto-rows: 1fr; }
+body[data-view="grid"] #terms { display: grid; gap: 6px; padding: 6px; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); }
 body[data-view="grid"] .term { position: relative; inset: auto; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 9px; background: #07080d; padding: 0; overflow: hidden; }
 body[data-view="grid"] .term.focus { border-color: #4b5aa8; }
 body[data-view="grid"] .term .tlabel { display: flex; gap: 8px; align-items: center; padding: 4px 10px; font-size: 11.5px; color: var(--dim); background: var(--panel); border-bottom: 1px solid var(--line); }

@@ -334,6 +334,7 @@ function mirrorTerm(p) {
   el.innerHTML = `<div class="tlabel"><span class="hdot h-idle"></span><span class="ttl"></span></div><div class="xt"></div>`;
   $('#terms').appendChild(el);
   const term = new Terminal(termOpts());
+  const fit = new FitAddon.FitAddon(); term.loadAddon(fit);
   term.open(el.querySelector('.xt'));
   // only real keystrokes go back: xterm's automatic replies to terminal queries (device attributes, cursor
   // position, focus, colour reports) are already answered by the host's own terminal, and would land as typed text
@@ -350,22 +351,49 @@ function mirrorTerm(p) {
     term.paste(u.paths.map(shq).join(' ') + ' '); term.focus();
   });
   term.textarea && term.textarea.addEventListener('focus', () => { activeTerm = p.id; markFocus(); });
-  const t = { term, fit: null, el, title: p.title, kind: p.kind, peer: true, cols: 120, rows: 30 };
+  const t = { term, fit, el, title: p.title, kind: p.kind, peer: true, cols: 120, rows: 30, driving: false };
   terms.set(p.id, t);
   if (!activeTerm) activeTerm = p.id;
   renderTabs(); layoutGrid();
   return t;
 }
-// host size → scale the font so the host's columns fit this pane (never re-wrap the host's screen)
-function fitPeer(t) {
-  // always the host's grid, even while the tab is hidden: output written at another width wraps wrong for good
+// A terminal shared with the other machine has one size. Whichever window was used last sets it (keys, clicks,
+// scrolling, focus): its panes fit normally and the session rewraps; the other side keeps that grid and scales
+// the text to fit, so nothing re-wraps wrong there.
+const BASE_FONT = termOpts().fontSize;
+function fitScaled(t) {
+  // always the given grid, even while the tab is hidden: output written at another width wraps wrong for good
   if (t.term.cols !== t.cols || t.term.rows !== t.rows) t.term.resize(t.cols, t.rows);
   const box = t.el.querySelector('.xt'), w = box.clientWidth - 12, h = box.clientHeight - 6; if (w <= 0 || h <= 0) return;
   const f0 = t.term.options.fontSize, cell = t.term._core?._renderService?.dimensions?.css?.cell;   // measured cell size at f0
   const cw = cell && cell.width ? cell.width / f0 : .602, ch = cell && cell.height ? cell.height / f0 : 1.15 * 1.18;
-  const fs = Math.max(7, Math.min(12.5, w / (t.cols * cw), h / (t.rows * ch)));
+  const fs = Math.max(7, Math.min(BASE_FONT, w / (t.cols * cw), h / (t.rows * ch)));
   if (Math.abs(f0 - fs) > .05) t.term.options.fontSize = fs;
 }
+const termVisible = t => document.body.dataset.view === 'grid' || t.el.classList.contains('on');
+// this window's own size for a terminal; a mirror also asks the host to resize the session to it
+function fitOwn(id, t) {
+  if (t.term.options.fontSize !== BASE_FONT) t.term.options.fontSize = BASE_FONT;
+  if (!t.peer) return t.fit.fit();
+  const d = t.fit.proposeDimensions(); if (!d || !(d.cols > 0) || !(d.rows > 0)) return;
+  t.cols = Math.max(20, d.cols); t.rows = Math.max(5, d.rows);
+  if (t.term.cols !== t.cols || t.term.rows !== t.rows) t.term.resize(t.cols, t.rows);
+  if (t.sentCols !== t.cols || t.sentRows !== t.rows) { t.sentCols = t.cols; t.sentRows = t.rows; window.api.peerTerm.resize(id, t.cols, t.rows); }
+}
+function fitTerm(id, t) { (t.peer ? t.driving : !t.remote) ? fitOwn(id, t) : fitScaled(t); }
+let lastUse = 0;
+function windowUsed() {
+  if (Date.now() - lastUse < 700) return; lastUse = Date.now();
+  for (const [id, t] of terms) {
+    if (!termVisible(t)) continue;
+    if (t.peer && !t.driving) { t.driving = true; t.sentCols = t.sentRows = 0; fitOwn(id, t); }
+    else if (!t.peer && t.remote) { t.remote = false; fitOwn(id, t); }
+  }
+}
+['keydown', 'mousedown', 'wheel'].forEach(ev => addEventListener(ev, windowUsed, true));
+addEventListener('focus', windowUsed);
+// the other machine took the size of one of our terminals
+window.api.peerTerm.onRemoteSize((id, c, r) => { const t = terms.get(id); if (!t || t.peer) return; t.remote = true; t.cols = c; t.rows = r; fitScaled(t); });
 // the exact current screen (+ recent scrollback) of one of our terminals, for a phone or the peer opening it
 window.api.termSnap.onRequest((rq, id) => {
   const t = terms.get(id);
@@ -373,8 +401,16 @@ window.api.termSnap.onRequest((rq, id) => {
   // wait until everything written before this request is parsed — output after it is streamed separately
   t.term.write('', () => { let out = null; try { out = t.ser.serialize({ scrollback: 1500 }); } catch { } window.api.termSnap.reply(rq, out); });
 });
-window.api.peerTerm.onInit((id, i) => { const t = terms.get(id); if (!t) return; t.cols = i.cols; t.rows = i.rows; t.term.reset(); fitPeer(t); t.term.write(i.backlog || ''); });
-window.api.peerTerm.onSize((id, i) => { const t = terms.get(id); if (!t) return; t.cols = i.cols; t.rows = i.rows; fitPeer(t); });
+window.api.peerTerm.onInit((id, i) => {
+  const t = terms.get(id); if (!t) return;
+  t.cols = i.cols; t.rows = i.rows; t.term.reset(); t.term.options.fontSize = BASE_FONT; fitScaled(t); t.term.write(i.backlog || '');
+  if (t.driving) { t.sentCols = t.sentRows = 0; fitOwn(id, t); }   // reconnected while this window had the size: ask again
+});
+window.api.peerTerm.onSize((id, i) => {
+  const t = terms.get(id); if (!t) return;
+  if (t.driving && i.cols === t.cols && i.rows === t.rows) return;   // our own request, echoed
+  t.driving = false; t.cols = i.cols; t.rows = i.rows; fitScaled(t);   // the host (or a phone) set another size
+});
 window.api.peerTerm.onClosed(id => { const t = terms.get(id); if (t) t.attached = false; });   // reconnects on the next telemetry tick
 async function newTerm(opts) {
   if (document.body.dataset.view === 'mesh') setView('split');
@@ -453,9 +489,9 @@ function syncTermTitles() {
 }
 
 function fitAll() {
-  for (const [, t] of terms) {
+  for (const [id, t] of terms) {
     if (document.body.dataset.view !== 'grid' && !t.el.classList.contains('on')) continue;
-    try { t.peer ? fitPeer(t) : t.fit.fit(); } catch { }
+    try { fitTerm(id, t); } catch { }
   }
 }
 function layoutGrid() {

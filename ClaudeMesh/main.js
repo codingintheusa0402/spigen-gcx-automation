@@ -124,6 +124,17 @@ ipcMain.on('pty:resize', (_e, id, c, r) => {
   const p = ptys.get(id);
   if (p && c > 0 && r > 0 && (c !== p.proc.cols || r !== p.proc.rows)) try { p.proc.resize(c, r); ptyBus.emit('resize', id, c, r); } catch { }
 });
+// Whichever machine is being used sets the size of a shared terminal (like tmux's "latest" window-size): the
+// peer's mirror asks for its pane size, the pty is resized so Claude Code rewraps, and our window scales its copy
+// to that size until it is used here again (then it fits itself and takes the size back).
+function termResize(id, c, r) {
+  const p = ptys.get(id);
+  if (!p || !(c >= 20 && c <= 500 && r >= 5 && r <= 200)) return { ok: false };
+  if (c !== p.proc.cols || r !== p.proc.rows) try { p.proc.resize(c, r); ptyBus.emit('resize', id, c, r); } catch { return { ok: false }; }
+  if (win) win.webContents.send('pty:remoteSize', id, c, r);
+  return { ok: true };
+}
+ipcMain.on('peerterm:resize', (_e, id, c, r) => { if (peerLink) peerLink.termResize(id, c, r).catch(() => { }); });
 ipcMain.on('pty:kill', (_e, id) => { const p = ptys.get(id); if (p) try { p.proc.kill(); } catch { } });
 
 // ---------------- control of sessions running in Terminal.app ----------------
@@ -295,7 +306,7 @@ let peerLink = null;
 function initPhone() {
   peerLink = createPeer({ userData: app.getPath('userData'), selfKind: 'mac' }); peerLink.start();
   phone = createPhoneServer({
-    root: __dirname, userData: app.getPath('userData'), ptys, ptyBus, peer: peerLink, termSnapshot,
+    root: __dirname, userData: app.getPath('userData'), ptys, ptyBus, peer: peerLink, termSnapshot, termResize,
     getSnap: () => lastSnap,
     getHistory: () => scanHistory(),
     details: sid => sessionDetails(sid),

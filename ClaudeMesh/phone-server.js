@@ -109,7 +109,7 @@ function createPhoneServer(ctx) {
     if (['/api/send', '/api/interrupt', '/api/rename'].includes(p) && remote(b.sid))
       return json(res, 200, await peer.forward('POST', p, b).catch(e => ({ ok: false, err: `${peer.label()}: ${e.message}` })));
     if (p.startsWith('/api/term/') && peer && peer.ownsTerm(termId(p)))
-      return json(res, 200, await peer.termWrite(termId(p), String(b.data || '')).catch(() => ({ ok: false })));
+      return json(res, 200, await (b.resize ? peer.termResize(termId(p), b.resize.cols, b.resize.rows) : peer.termWrite(termId(p), String(b.data || ''))).catch(() => ({ ok: false })));
     if (p === '/api/send') return json(res, 200, await ctx.sendToSession(b.sid, String(b.text || '')));
     if (p === '/api/interrupt') return json(res, 200, await ctx.interruptSession(b.sid));
     if (p === '/api/resume') return json(res, 200, ctx.resumeOnMac(b.sid));
@@ -117,6 +117,7 @@ function createPhoneServer(ctx) {
     if (p === '/api/convert') return json(res, 200, await ctx.convert(b.sid, b.task || ''));
     if (p.startsWith('/api/term/')) {                                    // keystrokes from the phone's terminal
       const pt = ctx.ptys.get(termId(p)); if (!pt) return json(res, 404, {});
+      if (b.resize) return json(res, 200, ctx.termResize ? ctx.termResize(termId(p), +b.resize.cols, +b.resize.rows) : { ok: false });   // the peer's window is in use: its size wins
       pt.proc.write(String(b.data || '')); return json(res, 200, { ok: true });
     }
     json(res, 404, {});
