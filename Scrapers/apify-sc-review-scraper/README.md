@@ -13,7 +13,7 @@ No password and no OTP are given to the actor. **You paste your own logged-in Se
 - Switches between the EU marketplaces automatically (DE → IT → FR → ES → UK) on one Europe session
 - Adds the **Order ID** of verified purchases from Seller Central's own reviews API
 - Optionally adds the **reviewer photo URLs**
-- Returns one row per review, with columns **identical to the GCX SC scraper and the Caspi review fetch**, so the results can be appended straight into existing sheets
+- Returns **one clean row per review** with stable column names, ready to append into a spreadsheet, database or BI tool
 
 > Brand Customer Reviews is available to **Brand Registry** brand owners. You need access to that page in Seller Central.
 
@@ -87,18 +87,18 @@ Seller Central sessions **expire**: after roughly a day of inactivity, when you 
 }
 ```
 
-### 📤 Output (same columns as the GCX SC scraper / Caspi fetch)
+### 📤 Output columns
 
 | Column | Example | Meaning |
 |---|---|---|
 | `ASIN` | `B0G7RYP439` | Child ASIN |
-| `Created 날짜` | `2026-10-15` | Review date (yyyy-mm-dd) |
-| `사진 유무` | `Y` / `N` | Review has photos (when photo fetch is on) |
+| `Created Date` | `2026-10-15` | Review date (yyyy-mm-dd) |
+| `Has Photo` | `Y` / `N` | Review has photos (when photo fetch is on) |
 | `Reviewer` | `Jane D.` | Public reviewer name |
 | `Review Ratings` | `2` | Stars given |
 | `Review Title` | `Stopped sticking after a week` | Title |
-| `본문` | `…` | Review text |
-| `국가` | `US` | Marketplace: US, DE, IT, FR, ES, UK, JP, IN |
+| `Review Text` | `…` | Review text |
+| `Country` | `US` | Marketplace: US, DE, IT, FR, ES, UK, JP, IN |
 | `Review Link` | `https://www.amazon.com/gp/customer-reviews/R…` | Public review link |
 | `Image URL` | `https://m.media-amazon.com/images/I/…jpg\|…` | Photo URLs, `\|`-separated |
 | `Review ID` | `R2ABCDEF123456` | Amazon review ID (unique key) |
@@ -106,7 +106,7 @@ Seller Central sessions **expire**: after roughly a day of inactivity, when you 
 | `Product Rating` | `4.2` | Product average rating |
 | `Ratings Count` | `2958` | Product total ratings |
 
-Prefer English keys (`asin`, `createdDate`, `hasPhoto` …)? Set **Output field names → English**.
+Building an integration? Set **Output field names → camelCase** to get `asin`, `createdDate`, `hasPhoto` … instead.
 
 ***
 
@@ -131,12 +131,12 @@ Plus **$0.01 per run** (browser start).
 
 ### 📸 Reviewer photos (optional)
 
-Amazon shows review photos only to **signed-in shoppers**, and that's a different login from Seller Central. To fill `사진 유무` / `Image URL`:
+Amazon shows review photos only to **signed-in shoppers**, and that's a different login from Seller Central. To fill `Has Photo` / `Image URL`:
 
 1. Turn on **Fetch reviewer photo URLs**.
 2. Sign in as a shopper on each store site you scrape (e.g. `www.amazon.com`, `www.amazon.de`), export with Cookie-Editor, and paste the export(s) into **Amazon shopper (storefront) session**. Several exports can be merged into one JSON array.
 
-Without a shopper session, every review shows `사진 유무 = N`, as in the SC scraper.
+Without a shopper session, every review shows `Has Photo = N`.
 
 ***
 

@@ -2,7 +2,7 @@
   "title": "Amazon Seller Central Review Scraper input",
   "type": "object",
   "schemaVersion": 1,
-  "description": "1) Pick marketplaces  2) Paste a Seller Central session for each region you picked  3) Start. Output columns match the GCX SC scraper / Caspi review fetch.",
+  "description": "1) Pick marketplaces  2) Paste a Seller Central session for each region you picked  3) Start. One row per review: ASIN, Created Date, Has Photo, Reviewer, Review Ratings, Review Title, Review Text, Country, Review Link, Image URL, Review ID, Order ID, Product Rating, Ratings Count.",
   "properties": {
     "marketplaces": {
       "title": "Marketplaces",
@@ -138,7 +138,7 @@
       "title": "Fetch reviewer photo URLs",
       "type": "boolean",
       "default": false,
-      "description": "Fills 사진 유무 / Image URL. Needs an Amazon <b>shopper</b> session below (photos are only shown to signed-in shoppers)."
+      "description": "Fills Has Photo / Image URL. Needs an Amazon <b>shopper</b> session below (photos are only shown to signed-in shoppers)."
     },
     "storefrontSession": {
       "title": "Amazon shopper (storefront) session — for photos",
@@ -178,14 +178,14 @@
       "type": "string",
       "editor": "select",
       "enum": [
-        "sc-scraper",
-        "english"
+        "title",
+        "camel"
       ],
       "enumTitles": [
-        "Same as GCX SC scraper / Caspi (ASIN, Created 날짜, 사진 유무 …)",
-        "English camelCase (asin, createdDate, hasPhoto …)"
+        "Title Case (ASIN, Created Date, Has Photo …)",
+        "camelCase for developers (asin, createdDate, hasPhoto …)"
       ],
-      "default": "sc-scraper",
+      "default": "title",
       "description": "Column names in the output.",
       "sectionCaption": "Advanced"
     },

@@ -2,8 +2,8 @@
 
 Port of the GCX SC_Review_Scraper (scrape_sc_reviews.py) for Apify: instead of logging in with a
 password + OTP, the user pastes their own Seller Central login session (cookies) per region.
-Output rows use exactly the SC scraper / Caspi fetch columns:
-  ASIN | Created 날짜 | 사진 유무 | Reviewer | Review Ratings | Review Title | 본문 | 국가 |
+Output columns (same order as the GCX SC scraper / Caspi fetch, English headers):
+  ASIN | Created Date | Has Photo | Reviewer | Review Ratings | Review Title | Review Text | Country |
   Review Link | Image URL | Review ID | Order ID | Product Rating | Ratings Count
 """
 import asyncio
@@ -45,14 +45,14 @@ PROFILES = {  # detection avoidance — identical to scrape_sc_reviews.py _PROFI
              'fetch_jitter': (0, 1200), 'batch_min': 8, 'batch_max': 15, 'scroll': True},
 }
 
-ALL_HEADERS = ['ASIN', 'Created 날짜', '사진 유무', 'Reviewer', 'Review Ratings', 'Review Title', '본문',
-               'Product Rating', 'Ratings Count', 'Domain Code', '국가', 'Review Link', 'Image URL',
+ALL_HEADERS = ['ASIN', 'Created Date', 'Has Photo', 'Reviewer', 'Review Ratings', 'Review Title', 'Review Text',
+               'Product Rating', 'Ratings Count', 'Domain Code', 'Country', 'Review Link', 'Image URL',
                'Review ID', 'Order ID']
-OUTPUT_HEADERS = ['ASIN', 'Created 날짜', '사진 유무', 'Reviewer', 'Review Ratings', 'Review Title', '본문',
-                  '국가', 'Review Link', 'Image URL', 'Review ID', 'Order ID', 'Product Rating', 'Ratings Count']
-ENGLISH_KEYS = {'ASIN': 'asin', 'Created 날짜': 'createdDate', '사진 유무': 'hasPhoto', 'Reviewer': 'reviewer',
-                'Review Ratings': 'reviewRating', 'Review Title': 'reviewTitle', '본문': 'reviewText',
-                '국가': 'marketplace', 'Review Link': 'reviewLink', 'Image URL': 'imageUrls',
+OUTPUT_HEADERS = ['ASIN', 'Created Date', 'Has Photo', 'Reviewer', 'Review Ratings', 'Review Title', 'Review Text',
+                  'Country', 'Review Link', 'Image URL', 'Review ID', 'Order ID', 'Product Rating', 'Ratings Count']
+ENGLISH_KEYS = {'ASIN': 'asin', 'Created Date': 'createdDate', 'Has Photo': 'hasPhoto', 'Reviewer': 'reviewer',
+                'Review Ratings': 'reviewRating', 'Review Title': 'reviewTitle', 'Review Text': 'reviewText',
+                'Country': 'marketplace', 'Review Link': 'reviewLink', 'Image URL': 'imageUrls',
                 'Review ID': 'reviewId', 'Order ID': 'orderId', 'Product Rating': 'productRating',
                 'Ratings Count': 'ratingsCount'}
 IDX = {h: i for i, h in enumerate(ALL_HEADERS)}
@@ -214,7 +214,7 @@ class Scraper:
         self.asin_filter = {a.strip().upper() for a in (inp.get('asinFilter') or []) if a.strip()}
         self.fetch_order_id = inp.get('fetchOrderId', True)
         self.fetch_images = inp.get('fetchImages', False)
-        self.english = inp.get('outputFieldNames', 'sc-scraper') == 'english'
+        self.english = inp.get('outputFieldNames', 'title') == 'camel'
         self.health: dict[str, dict] = {}
         self.pushed = 0
 
@@ -361,7 +361,7 @@ class Scraper:
                 raise RuntimeError(f'{market}: review cards found but not in English — switch the Seller Central '
                                    f'language to English (top-right language menu) and copy the session again')
             for r in rows:
-                r[IDX['Created 날짜']] = normalize_date(r[IDX['Created 날짜']])
+                r[IDX['Created Date']] = normalize_date(r[IDX['Created Date']])
             bad = stale_ids(rows)
             if bad:  # reload once, as the SC scraper does
                 await asyncio.sleep(random.uniform(1.0, 2.5))
@@ -373,12 +373,12 @@ class Scraper:
                     pass
                 rows = await page.evaluate(extract)
                 for r in rows:
-                    r[IDX['Created 날짜']] = normalize_date(r[IDX['Created 날짜']])
+                    r[IDX['Created Date']] = normalize_date(r[IDX['Created Date']])
                 still = stale_ids(rows)
                 rows = [r for r in rows if r[IDX['Review ID']] not in still]
             Actor.log.info(f'[{market}] page {p}/{self.max_pages}: {len(rows)} reviews')
             rows_all.extend(rows)
-            if self.min_date and rows and all(r[IDX['Created 날짜']] < self.min_date for r in rows):
+            if self.min_date and rows and all(r[IDX['Created Date']] < self.min_date for r in rows):
                 Actor.log.info(f'[{market}] page {p} is older than {self.min_date} — stopping early')
                 break
             p += 1
@@ -438,7 +438,7 @@ class Scraper:
                 res = {}
             for rid, imgs in (res or {}).items():
                 if imgs:
-                    by_id[rid][IDX['사진 유무']] = 'Y'
+                    by_id[rid][IDX['Has Photo']] = 'Y'
                     by_id[rid][IDX['Image URL']] = '|'.join(imgs)
                     found += 1
             i += len(batch)
@@ -451,7 +451,7 @@ class Scraper:
         for r in rows:
             if self.asin_filter and r[IDX['ASIN']].upper() not in self.asin_filter:
                 continue
-            if self.min_date and r[IDX['Created 날짜']] < self.min_date:
+            if self.min_date and r[IDX['Created Date']] < self.min_date:
                 continue
             item = {h: r[IDX[h]] for h in OUTPUT_HEADERS}
             out.append({ENGLISH_KEYS[k]: v for k, v in item.items()} if self.english else item)
