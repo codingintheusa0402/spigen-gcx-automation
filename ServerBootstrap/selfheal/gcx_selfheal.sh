@@ -5,6 +5,18 @@
 #   gcx-owner-watch · gcx-mesh (iPhone GCX Mesh, server copy) · tmux session gcx: Claude gcx-main, Zendesk Chrome (CDP 9222), ticket monitor (unless Mac owns it)
 # A thing restarted 3× within 30 min is left alone (crash loop) and reported instead.
 exec 9>/tmp/gcx-selfheal.lock; flock -n 9 || exit 0
+# RETIRED as AI Trader host (2026-10-16): the primary engine moved to the Mac mini gcx-macmini. If this old
+# laptop ever boots again, its systemd mock-trader would also call itself "server" in the real-money lease and
+# trade the same Toss account twice — so stop + disable it here, every run, before anything else, and never restart it.
+if [ -f ~/.config/systemd/user/mock-trader.service ]; then
+  mkdir -p ~/.gcx-owner; touch ~/.gcx-owner/aitrader.stopped
+  if systemctl --user is-enabled -q mock-trader 2>/dev/null || systemctl --user is-active -q mock-trader 2>/dev/null; then
+    systemctl --user disable --now mock-trader >/dev/null 2>&1
+    echo "$(date '+%m-%d %H:%M:%S') RETIRED: stopped+disabled mock-trader (primary is gcx-macmini)" >> $HOME/.gcx-selfheal.log
+    python3 $HOME/Desktop/GCX/ServerBootstrap/watchdog/gcx_alert.py "AI Trader: old server engine disabled" \
+      "The old laptop came back online; its AI Trader engine was stopped and disabled (the Mac mini is the primary now)." >/dev/null 2>&1 || true
+  fi
+fi
 export PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin DISPLAY=:0 WAYLAND_DISPLAY=wayland-0
 export XDG_RUNTIME_DIR=/run/user/$(id -u) DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus
 G=$HOME/Desktop/GCX; F=$G/ServerBootstrap/fallback; ST=$HOME/.gcx-selfheal; mkdir -p $ST
@@ -35,8 +47,8 @@ done
 for s in gcx-owner-watch gcx-mesh; do
   [ -f ~/.config/systemd/user/$s.service ] && ! systemctl --user is-active -q $s && heal "$s" "systemctl --user restart $s"
 done
-if [ -f ~/.config/systemd/user/mock-trader.service ] && [ ! -f ~/.gcx-owner/aitrader.stopped ] && \
-   ! systemctl --user is-active -q mock-trader; then
+if false && [ -f ~/.config/systemd/user/mock-trader.service ] && \
+   ! systemctl --user is-active -q mock-trader; then   # retired 2026-10-16 (see top)
   st=$(systemctl --user show -p ActiveState --value mock-trader)
   [ "$st" = activating ] || heal "AI Trader engine" "systemctl --user start --no-block mock-trader"
 fi
