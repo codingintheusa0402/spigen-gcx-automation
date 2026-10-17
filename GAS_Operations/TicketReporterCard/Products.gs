@@ -66,7 +66,10 @@ function handleProductsCommand_(query, similar) {
   } else {
     var base = matches.filter(function (p) { return isRealDevice_(p.device); })[0];
     if (!base) {
-      return chatCreate_({ text: '⚠️ "' + query + '" 에서 기종(호환 기기)을 찾지 못했습니다. SKU나 ASIN으로 다시 시도해 주세요.' });
+      if (matches.length) {   // found, but 기종 is Common/blank — a universal accessory has no device to match on
+        return chatCreate_({ text: '⚠️ "' + query + '" (' + matches[0].sku + ') 는 기종이 "' + (matches[0].device || '미지정') + '" 인 공용 제품이라 같은 기종 제품을 찾을 수 없습니다. /products 로 조회해 주세요.' });
+      }
+      return chatCreate_({ text: '⚠️ "' + query + '" 와 일치하는 제품이 SKU master / ASIN master 에 없습니다.' });
     }
     var devs = deviceSet_(base.device);
     var same = index.filter(function (p) {
