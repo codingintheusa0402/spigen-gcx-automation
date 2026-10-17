@@ -56,7 +56,7 @@ async function runCommand(s, item) {
   if (r && (r.ok === false || r.out === 'notfound')) return toast(r.out === 'notfound' ? 'No Terminal.app tab for ' + s.tty : 'Send failed');
   viz.command(s.sid);
   if (item.ui && !s.onPeer) {                       // show the terminal where the command's screen/output appears
-    if (s.owner) { if (document.body.dataset.view === 'mesh') setView('split'); activate(s.owner); }
+    if (termOf(s) && terms.has(termOf(s))) { if (document.body.dataset.view === 'mesh') setView('split'); activate(termOf(s)); }
     else await window.api.ext.focus(s.tty);
   }
   toast(`${item.cmd} → ${s.name}`);

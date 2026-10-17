@@ -103,10 +103,11 @@ function renderToday() {
 }
 
 // ---------------- detail panel ----------------
+const termOf = s => s && (s.owner || s.pane);   // the session's terminal tab: in-app pty or its tmux pane
 function select(sid) {
   seen(sid);
   const ms = sid && snap.sessions.find(x => x.sid === sid);
-  if (isMini() && ms && ms.owner && terms.has(ms.owner)) { selected = sid; viz.selected = sid; $('#panel').classList.add('hidden'); miniShow('term'); activate(ms.owner); renderList(); return; }
+  if (isMini() && termOf(ms) && terms.has(termOf(ms))) { selected = sid; viz.selected = sid; $('#panel').classList.add('hidden'); miniShow('term'); activate(termOf(ms)); renderList(); return; }
   selected = sid; viz.selected = sid;
   $('#panel').classList.toggle('hidden', !sid);
   $('#panelBody').innerHTML = sid ? '<div id="pStatic"></div><div id="pCtl"></div>' : '';
@@ -114,7 +115,7 @@ function select(sid) {
   renderList(); renderBoard();
   // an in-app session: bring its terminal tab to the front in the dock (Split / Grid views)
   const s = sid && snap.sessions.find(x => x.sid === sid);
-  if (s && s.owner && terms.has(s.owner) && s.owner !== activeTerm && document.body.dataset.view !== 'mesh') activate(s.owner);
+  if (s && termOf(s) && terms.has(termOf(s)) && termOf(s) !== activeTerm && document.body.dataset.view !== 'mesh') activate(termOf(s));
   requestAnimationFrame(() => viz.resize());
 }
 
@@ -199,10 +200,11 @@ function renderCtl() {
       <button class="primary" id="cSend">Send</button>
       <button id="cEsc" title="Send Esc (interrupt the current turn)">Interrupt</button>
       <button id="cCompact">/compact</button>
-      ${peer ? (s.owner && terms.has(s.owner) ? '<button id="cFocus">Show terminal</button>' : '') : `<button id="cFocus">${owned ? 'Show terminal' : 'Focus in Terminal'}</button>`}
+      ${peer ? (s.owner && terms.has(s.owner) ? '<button id="cFocus">Show terminal</button>' : '') : `<button id="cFocus">${owned || s.pane ? 'Show terminal' : 'Focus in Terminal'}</button>`}
       ${owned ? '<button class="danger" id="cKill">Kill</button>' : ''}
     </div>
     <div class="note">${peer ? (live ? `Runs on ${esc(s.hostLabel)}: prompts are passed to it over Tailscale.` : `${esc(s.hostLabel)} is offline or this session can’t be reached.`) : owned ? 'Runs inside GCX Mesh — keystrokes go straight to its terminal.' :
+      ext && s.pane ? 'Runs in a tmux pane on this Mac (keeps running when GCX Mesh restarts). Prompts are typed into it with tmux send-keys.' :
       ext ? 'Lives in a Terminal.app window. Prompts are typed into that tab via AppleScript (first use asks for Automation permission). Multi-line text is sent as one line.' :
       'Background job — view only.'}</div></div>`;
   const send = async (text) => {
@@ -231,7 +233,7 @@ function renderCtl() {
   if (peer && $('#cFocus')) $('#cFocus').onclick = () => { if (document.body.dataset.view === 'mesh') setView('split'); activate(s.owner); };
   if (!peer) $('#cFocus').onclick = async () => {
     const s = cur(); if (!s) return;
-    if (s.owner) { if (document.body.dataset.view === 'mesh') setView('split'); activate(s.owner); }
+    if (termOf(s) && terms.has(termOf(s))) { if (document.body.dataset.view === 'mesh') setView('split'); activate(termOf(s)); }
     else if (s.tty) { const r = await window.api.ext.focus(s.tty); if (r.out === 'notfound') toast('No Terminal.app tab for ' + s.tty); }
   };
   if (owned) $('#cKill').onclick = () => { window.api.pty.kill(s.owner); toast('Killed'); };
@@ -338,7 +340,7 @@ const termOpts = () => ({
 // text is scaled to fit instead — and keystrokes go back to the host. Closing a mirror only detaches it.
 const peerClosed = new Set();
 function syncPeerTerms() {
-  const want = new Map((snap.ptys || []).filter(p => p.onPeer).map(p => [p.id, p]));
+  const want = new Map((snap.ptys || []).filter(p => p.onPeer || p.kind === 'tmux').map(p => [p.id, p]));   // the peer's terminals + our tmux panes
   for (const [id, p] of want) {
     if (peerClosed.has(id)) continue;
     let t = terms.get(id);
@@ -372,7 +374,7 @@ function mirrorTerm(p) {
     term.paste(u.paths.map(shq).join(' ') + ' '); term.focus();
   });
   term.textarea && term.textarea.addEventListener('focus', () => { activeTerm = p.id; markFocus(); });
-  const t = { term, fit, el, title: p.title, kind: p.kind, peer: true, cols: 120, rows: 30, driving: false };
+  const t = { term, fit, el, title: p.title, kind: p.kind, peer: true, local: !p.onPeer, cols: 120, rows: 30, driving: false };
   terms.set(p.id, t);
   if (!activeTerm) activeTerm = p.id;
   renderTabs(); layoutGrid();
@@ -421,7 +423,7 @@ function windowUsed(e) {
   for (const [id, t] of terms) {
     if (!termVisible(t)) continue;
     // a host build that can't resize (or didn't confirm a minute ago) is left alone: asking again would flip the size back and forth
-    if (t.peer && !t.driving && peerCanResize() && !(t.noClaimUntil > Date.now())) { t.driving = true; t.sentCols = t.sentRows = 0; fitOwn(id, t); }
+    if (t.peer && !t.driving && (t.local || peerCanResize()) && !(t.noClaimUntil > Date.now())) { t.driving = true; t.sentCols = t.sentRows = 0; fitOwn(id, t); }
     else if (!t.peer && t.remote) { t.remote = false; fitOwn(id, t); }
   }
 }
@@ -496,7 +498,7 @@ function closeTerm(id) {
 
 function activate(id) {
   activeTerm = id;
-  { const s = snap.sessions.find(x => x.owner === id); if (s) seen(s.sid); }
+  { const s = snap.sessions.find(x => termOf(x) === id); if (s) seen(s.sid); }
   for (const [k, t] of terms) t.el.classList.toggle('on', k === id);
   renderTabs(); markFocus();
   const tab = document.querySelector(`#tabs .tab[data-id="${id}"]`);   // bring the tab into view in a long tab row
@@ -507,7 +509,7 @@ function markFocus() { for (const [k, t] of terms) t.el.classList.toggle('focus'
 
 function renderTabs() {
   $('#tabs').innerHTML = [...terms].map(([id, t]) => `<div class="tab ${id === activeTerm ? 'on' : ''}" data-id="${id}">
-    <span class="hdot h-${t.health || (t.exited ? 'error' : 'idle')}"></span><span class="t">${esc(t.title)}</span>${t.peer && snap.peer ? `<span class="tag peer">${esc(snap.peer.label)}</span>` : ''}<span class="x" data-x="${id}">×</span></div>`).join('') +
+    <span class="hdot h-${t.health || (t.exited ? 'error' : 'idle')}"></span><span class="t">${esc(t.title)}</span>${t.local ? '<span class="tag">tmux</span>' : t.peer && snap.peer ? `<span class="tag peer">${esc(snap.peer.label)}</span>` : ''}<span class="x" data-x="${id}">×</span></div>`).join('') +
     `<div class="tab" id="tabNew" title="New session (⌘T)">＋</div>`;
   for (const el of document.querySelectorAll('.tab[data-id]')) el.onclick = e => { if (e.target.dataset.x) closeTerm(e.target.dataset.x); else activate(el.dataset.id); };
   $('#tabNew').onclick = openNew;
@@ -517,7 +519,7 @@ function renderTabs() {
 function syncTermTitles() {
   let changed = false;
   for (const [id, t] of terms) {
-    const s = snap.sessions.find(x => x.owner === id);
+    const s = snap.sessions.find(x => termOf(x) === id);
     const title = s ? s.name : t.kind === 'claude' ? t.title : t.title;
     const health = s ? s.health : t.exited ? 'error' : 'idle';
     if (title !== t.title || health !== t.health) { t.title = title; t.health = health; changed = true; }

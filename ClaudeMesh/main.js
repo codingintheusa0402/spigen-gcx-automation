@@ -10,6 +10,7 @@ const { createPhoneServer } = require('./phone-server');
 const { createPeer } = require('./peer');             // the GCX server: one mesh on the iPhone whichever machine serves it
 const { createCore, cleanEnv, loginShell } = require('./core');
 const ptyBus = new EventEmitter(); ptyBus.setMaxListeners(50);   // pty output fan-out (desktop + phone terminals)
+const panes = require('./tmux-panes')({ ptyBus });           // Claude sessions in tmux panes (the mini keeps them there)
 let lastSnap = null, phone = null;
 
 const HOME = os.homedir();
@@ -99,6 +100,7 @@ ipcMain.handle('pty:spawn', (_e, opts) => {
 });
 ipcMain.on('pty:write', (_e, id, data) => {
   if (peerLink && peerLink.ownsTerm(id)) return void peerLink.termWrite(id, data).catch(() => { });   // a mirrored terminal of the peer
+  if (panes.has(id)) return panes.write(id, data);                                                     // a tmux pane on this machine
   const p = ptys.get(id); if (p) p.proc.write(data);
 });
 // a clean copy of an in-app terminal's screen, serialized by the window's xterm (the raw backlog replays
@@ -106,6 +108,7 @@ ipcMain.on('pty:write', (_e, id, data) => {
 const snapWaits = new Map(); let snapSeq = 0;
 ipcMain.on('term:snap:reply', (_e, rq, data) => { const w = snapWaits.get(rq); if (w) { snapWaits.delete(rq); w(data); } });
 function termSnapshot(id) {
+  if (panes.has(id)) return Promise.resolve(panes.snapshot(id));   // tmux knows its pane's screen itself
   if (!win) return Promise.resolve(null);
   return new Promise(res => {
     const rq = ++snapSeq; snapWaits.set(rq, res); win.webContents.send('term:snap', rq, id);
@@ -115,6 +118,7 @@ function termSnapshot(id) {
 // Mirrors of the peer machine's in-app terminals: its /api/term SSE stream re-emitted as pty:data / pty:exit
 const peerTerms = new Map();   // id (peer:…) -> upstream response
 ipcMain.on('peerterm:open', async (_e, id) => {
+  if (panes.has(id)) return openPaneView(id);
   if (!peerLink || peerTerms.has(id)) return;
   peerTerms.set(id, null);
   let up;
@@ -139,6 +143,22 @@ ipcMain.on('peerterm:open', async (_e, id) => {
   const gone = () => { if (peerTerms.get(id) === up) { peerTerms.delete(id); if (win) win.webContents.send('peerterm:closed', id); } };
   up.on('end', gone); up.on('error', gone); up.on('close', gone);
 });
+// this window's view of one of our own tmux panes: the same events a peer mirror gets, straight from ptyBus
+function openPaneView(id) {
+  if (peerTerms.has(id) || !win) return;
+  let held = [];
+  const on = (pid, d) => { if (pid === id && win) held ? held.push(d) : win.webContents.send('pty:data', id, d); };
+  const sz = (pid, cols, rows) => { if (pid === id && win) win.webContents.send('peerterm:size', id, { cols, rows }); };
+  const off = pid => { if (pid === id && win) win.webContents.send('pty:exit', id, 0); };
+  ptyBus.on('data', on); ptyBus.on('resize', sz); ptyBus.on('exit', off);
+  const view = { destroy() { ptyBus.off('data', on); ptyBus.off('resize', sz); ptyBus.off('exit', off); panes.close(id); } };
+  peerTerms.set(id, view);
+  panes.open(id).then(() => {
+    const p = panes.proc(id); if (!p || !win || peerTerms.get(id) !== view) return;
+    win.webContents.send('peerterm:init', id, { cols: p.proc.cols, rows: p.proc.rows, backlog: panes.snapshot(id) });
+    for (const d of held) win.webContents.send('pty:data', id, d); held = null;
+  });
+}
 ipcMain.on('peerterm:close', (_e, id) => { const up = peerTerms.get(id); peerTerms.delete(id); if (up) up.destroy(); });
 ipcMain.on('pty:resize', (_e, id, c, r) => {
   const p = ptys.get(id);
@@ -148,6 +168,10 @@ ipcMain.on('pty:resize', (_e, id, c, r) => {
 // peer's mirror asks for its pane size, the pty is resized so Claude Code rewraps, and our window scales its copy
 // to that size until it is used here again (then it fits itself and takes the size back).
 function termResize(id, c, r) {
+  if (panes.has(id)) {
+    if (!(c >= 20 && c <= 500 && r >= 5 && r <= 200) || !panes.resize(id, c, r)) return { ok: false };
+    ptyBus.emit('resize', id, c, r); return { ok: true };
+  }
   const p = ptys.get(id);
   if (!p || !(c >= 20 && c <= 500 && r >= 5 && r <= 200)) return { ok: false };
   if (c !== p.proc.cols || r !== p.proc.rows) try { p.proc.resize(c, r); } catch { return { ok: false }; }
@@ -155,7 +179,7 @@ function termResize(id, c, r) {
   if (win) win.webContents.send('pty:remoteSize', id, c, r);
   return { ok: true };
 }
-ipcMain.on('peerterm:resize', (_e, id, c, r) => { if (peerLink) peerLink.termResize(id, c, r).catch(() => { }); });
+ipcMain.on('peerterm:resize', (_e, id, c, r) => { if (panes.has(id)) return void termResize(id, c, r); if (peerLink) peerLink.termResize(id, c, r).catch(() => { }); });
 ipcMain.on('pty:kill', (_e, id) => { const p = ptys.get(id); if (p) try { p.proc.kill(); } catch { } });
 
 // ---------------- control of sessions running in Terminal.app ----------------
@@ -357,7 +381,8 @@ let peerLink = null;
 function initPhone() {
   peerLink = createPeer({ userData: app.getPath('userData'), selfKind: 'mac' }); peerLink.start();
   phone = createPhoneServer({
-    root: __dirname, userData: app.getPath('userData'), ptys, ptyBus, peer: peerLink, termSnapshot, termResize,
+    root: __dirname, userData: app.getPath('userData'), ptys: { get: id => ptys.get(id) || panes.proc(id) }, ptyBus, peer: peerLink, termSnapshot, termResize,
+    termOpen: id => panes.has(id) ? panes.open(id) : null, termClose: id => { if (panes.has(id)) panes.close(id); },
     getSnap: () => lastSnap,
     getHistory: () => scanHistory(),
     details: sid => sessionDetails(sid),
@@ -396,7 +421,7 @@ function recordSessions(snap) {
 }
 ipcMain.handle('restore:get', () => { if (restorePending === null) restorePending = readLastSessions() || { sessions: [] }; return restorePending; });
 ipcMain.handle('restore:done', () => { restoreAnswered = true; return true; });
-app.on('before-quit', () => { quitting = true; });
+app.on('before-quit', () => { quitting = true; panes.stopAll(); });
 
 // ---------------- this machine's memory (what Activity Monitor calls "Memory Used") ----------------
 // app memory (anonymous − purgeable) + wired + compressed, from vm_stat; pressure 1 normal / 2 warning / 4 critical
@@ -425,6 +450,13 @@ async function loop() {
       snap.usage = core.usage(); refreshUsage();
       snap.mem = hostMem;
       snap.ptys = [...ptys].map(([id, p]) => ({ id, pid: p.proc.pid, title: p.title, kind: p.kind, cwd: p.cwd }));
+      panes.refresh();
+      const byTty = new Map(panes.list().map(p => [p.tty, p]));
+      for (const s of snap.sessions) {
+        const p = !s.owner && s.tty && byTty.get(s.tty); if (!p) continue;
+        s.pane = p.id;
+        snap.ptys.push({ id: p.id, pid: p.pid, title: s.name, kind: 'tmux', cwd: s.cwd });
+      }
       // the window shows BOTH machines (the peer's sessions and terminals merged in); phone + peer keep the local snap
       const shown = peerLink ? peerLink.merge(snap) : snap;   // includes the peer's terminals (peer:… ids, onPeer)
       win.webContents.send('telemetry', shown);

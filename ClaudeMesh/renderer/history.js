@@ -84,7 +84,7 @@ $('#hAuto').checked = store.get('hAuto', false);
 // resume: live → select it; agent → attach; otherwise open a terminal running --resume
 async function resumeSession(sid) {
   const live = snap.sessions.find(s => s.sid === sid);
-  if (live) { select(sid); if (live.owner) { if (document.body.dataset.view === 'mesh') setView('split'); activate(live.owner); } return; }
+  if (live) { select(sid); if (termOf(live) && terms.has(termOf(live))) { if (document.body.dataset.view === 'mesh') setView('split'); activate(termOf(live)); } return; }
   const ag = (snap.agents || []).find(a => a.sessionId === sid);
   if (ag) return attachAgent(ag);
   const h = hist.find(x => x.sid === sid); if (!h) return;

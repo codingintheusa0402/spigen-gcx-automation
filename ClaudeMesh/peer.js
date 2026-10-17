@@ -70,7 +70,7 @@ function createPeer({ userData, selfKind }) {
     for (const s of last.sessions || []) {
       if (mine.has(s.sid)) continue;                 // same conversation resumed here — the local copy wins
       out.sessions.push({ ...s, hostKind: kind(), hostLabel: label(), onPeer: true, offline: !online,
-        owner: online && s.owner ? PREFIX + s.owner : null,
+        owner: online && (s.owner || s.pane) ? PREFIX + (s.owner || s.pane) : null, pane: null,
         health: online ? s.health : 'offline', tps: online ? s.tps : 0 });
     }
     if (online) out.ptys = [...(local.ptys || []), ...((last.ptys || []).map(p => ({ ...p, id: PREFIX + p.id, onPeer: true })))];
