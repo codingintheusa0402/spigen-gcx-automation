@@ -192,17 +192,19 @@ const asStr = s => '"' + String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"') +
 // Sessions hosted in a tmux pane (the mini keeps every Claude session in tmux gcx:*) have a tty but no
 // Terminal.app tab: type into the pane with send-keys instead. Looked up by tty on every call (panes come and go).
 const TMUX = ['/opt/homebrew/bin/tmux', '/usr/local/bin/tmux'].find(p => fs.existsSync(p)) || 'tmux';
+// launched from the Dock there is no locale, and tmux then mangles tabs and non-ASCII text (Korean prompts) into '_'
+const TMUX_ENV = { ...process.env, LANG: 'en_US.UTF-8', LC_CTYPE: 'en_US.UTF-8' };
 function tmuxPaneForTty(tty) {
   if (!tty) return null;
   try {
-    for (const l of execFileSync(TMUX, ['list-panes', '-a', '-F', '#{pane_id}\t#{pane_tty}'], { timeout: 5000 }).toString().split('\n')) {
-      const [id, t] = l.split('\t'); if (t === tty) return id;
+    for (const l of execFileSync(TMUX, ['list-panes', '-a', '-F', '#{pane_id}|#{pane_tty}'], { timeout: 5000, env: TMUX_ENV }).toString().split('\n')) {
+      const [id, t] = l.split('|'); if (t === tty) return id;
     }
   } catch { }
   return null;
 }
 function tmuxKeys(pane, ...args) {
-  try { execFileSync(TMUX, ['send-keys', '-t', pane, ...args], { timeout: 5000 }); return { ok: true, out: 'tmux' }; }
+  try { execFileSync(TMUX, ['send-keys', '-t', pane, ...args], { timeout: 5000, env: TMUX_ENV }); return { ok: true, out: 'tmux' }; }
   catch (e) { return { ok: false, err: String(e.message || e) }; }
 }
 // External session by tty: tmux pane if it has one, else the Terminal.app tab (osascript 'notfound' when neither).

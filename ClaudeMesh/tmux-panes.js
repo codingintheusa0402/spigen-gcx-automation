@@ -11,18 +11,21 @@ const { StringDecoder } = require('string_decoder');
 module.exports = function createPanes({ ptyBus }) {
   const BIN = ['/opt/homebrew/bin/tmux', '/usr/local/bin/tmux'].find(p => fs.existsSync(p)) || 'tmux';
   const DIR = path.join(os.tmpdir(), 'gcx-mesh-panes');
-  const tmux = args => new Promise(res => execFile(BIN, args, { timeout: 10000 }, (err, so) => res(err ? null : String(so))));
-  const tmuxSync = args => { try { return execFileSync(BIN, args, { timeout: 10000 }).toString(); } catch { return ''; } };
+  // an app started from the Dock has no locale: tmux then turns tabs (and any non-ASCII text) into '_' — always UTF-8
+  const env = { ...process.env, LANG: 'en_US.UTF-8', LC_CTYPE: 'en_US.UTF-8' };
+  const tmux = args => new Promise(res => execFile(BIN, args, { timeout: 10000, env }, (err, so) => res(err ? null : String(so))));
+  const tmuxSync = args => { try { return execFileSync(BIN, args, { timeout: 10000, env }).toString(); } catch { return ''; } };
 
   let panes = new Map();          // pane id (%N) -> { id, pid, tty, cols, rows, title }
   const streams = new Map();      // pane id -> { n, file, pos, dec, timer }
 
   async function refresh() {
-    const out = await tmux(['list-panes', '-a', '-F', '#{pane_id}\t#{pane_pid}\t#{pane_tty}\t#{pane_width}\t#{pane_height}\t#{session_name}:#{window_name}']);
+    const out = await tmux(['list-panes', '-a', '-F', '#{pane_id}|#{pane_pid}|#{pane_tty}|#{pane_width}|#{pane_height}|#{session_name}:#{window_name}']);
     if (out == null) { if (panes.size) gone(new Map()); return; }   // no tmux server
     const m = new Map();
     for (const l of out.split('\n')) {
-      const [id, pid, tty, w, h, title] = l.split('\t'); if (!id) continue;
+      const [id, pid, tty, w, h, ...rest] = l.split('|'); if (!id) continue;
+      const title = rest.join('|');
       const p = { id, pid: +pid, tty, cols: +w || 120, rows: +h || 32, title };
       const o = panes.get(id);
       if (o && (o.cols !== p.cols || o.rows !== p.rows)) ptyBus.emit('resize', id, p.cols, p.rows);
