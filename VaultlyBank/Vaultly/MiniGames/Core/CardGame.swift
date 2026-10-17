@@ -43,7 +43,7 @@ struct CardGame: ShiftGame {
 
     static func stakes(for level: TierLevel) -> [Decimal] {
         switch level {
-        case 0: return []                                     // 거지는 테이블에 못 앉는다
+        case 0: return [10_000, 50_000]
         case 1: return [50_000, 100_000]
         case 2: return [500_000, 2_000_000]
         case 3: return [10_000_000, 50_000_000]

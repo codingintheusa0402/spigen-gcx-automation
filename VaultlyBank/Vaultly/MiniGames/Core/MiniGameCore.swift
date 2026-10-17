@@ -57,26 +57,9 @@ enum JobKind: String, Codable, CaseIterable, Identifiable {
     }
     /// 오락: no 하루 체력 used, stake comes from the account, not a job.
     var isEntertainment: Bool { self == .cards }
-    /// Who can take this job (by tier level) — 단타 needs capital; 과외 needs an education; 상하차/전단지 are for anyone who needs cash.
-    var levels: ClosedRange<TierLevel> {
-        switch self {
-        case .convenience, .cafe, .serving, .flyers: return 0...2
-        case .parcel, .designatedDriver: return 0...1
-        case .tutoring: return 1...2
-        case .dayTrading: return 2...4
-        case .scooter: return 0...1
-        case .cards: return 1...4
-        }
-    }
-    func lockedReason(for level: TierLevel) -> String? {
-        if levels.contains(level) { return nil }
-        if level < levels.lowerBound {
-            if self == .dayTrading { return "투자금이 필요해요 (중산층부터)" }
-            if self == .cards { return "바이인할 돈이 필요해요 (서민부터)" }
-            return "\(TierNames.name(levels.lowerBound)) 이상"
-        }
-        return "이 계층은 이런 알바를 안 해요"
-    }
+    /// Every job and the card table are open to every tier (user decision 2026-10-17); kept for the hub's copy.
+    var levels: ClosedRange<TierLevel> { 0...4 }
+    func lockedReason(for level: TierLevel) -> String? { nil }
     /// Who pays (shown as the counterparty; App Store build fictionalizes brand names in Ledger.apply).
     var employer: String {
         switch self {

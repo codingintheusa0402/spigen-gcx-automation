@@ -119,10 +119,11 @@ struct DayTradingGame: ShiftGame {
     /// Stake choices offered by tier level (won).
     static func stakes(for level: TierLevel) -> [Decimal] {
         switch level {
+        case 0: return [100_000, 300_000]
+        case 1: return [300_000, 1_000_000]
         case 2: return [1_000_000, 5_000_000]
         case 3: return [10_000_000, 50_000_000]
-        case 4: return [100_000_000, 1_000_000_000]
-        default: return []
+        default: return [100_000_000, 1_000_000_000]
         }
     }
     static func leverageAllowed(for level: TierLevel) -> Bool { level >= 3 }   // 신용 3배는 부자부터

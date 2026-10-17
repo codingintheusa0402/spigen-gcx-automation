@@ -12,10 +12,10 @@ struct RootView: View {
     var body: some View {
         ZStack(alignment: .top) {
             TabView {
-                HomeView().tabItem { Label("홈", systemImage: "house.fill") }
+                RoomView().tabItem { Label("내 방", systemImage: "house.fill") }
+                HomeView().tabItem { Label("은행", systemImage: "building.columns.fill") }
                 InvestView().tabItem { Label("증권", systemImage: "chart.xyaxis.line") }
                 ProductsView().tabItem { Label("상품", systemImage: "chart.line.uptrend.xyaxis") }
-                ScheduleView().tabItem { Label("예약 알림", systemImage: "bell.badge") }
                 SettingsView().tabItem { Label("설정", systemImage: "gearshape.fill") }
             }
             if AppVariant.isStore { MockWatermark() }
@@ -109,6 +109,10 @@ struct OnboardingView: View {
 
     private func finish() {
         store.update { $0.ownerName = name.isEmpty ? $0.ownerName : name; $0.hasOnboarded = true }
+        // No scenario picked → every life starts as 서민 (a scenario sets its own tier first).
+        if store.lifestyle.tier == nil {
+            store.applyTier(.working, accountID: store.checkingAccounts.first?.id, resetBalance: true, backfillDays: 30)
+        }
         store.requestNotifications()
     }
 

@@ -2,12 +2,17 @@ import SwiftUI
 
 /// "엄마가 오후 4시에 ₩5,000,000 용돈을 보냄" 같은 예약 입금/출금 알림.
 struct ScheduleView: View {
+    var body: some View { NavigationStack { ScheduleContent() } }
+}
+
+/// The list itself — pushed from the 은행 home (bell button) and from 설정.
+struct ScheduleContent: View {
     @EnvironmentObject var store: BankStore
     @State private var editing: ScheduledEvent?
     @State private var creating = false
 
     var body: some View {
-        NavigationStack {
+        Group {
             List {
                 if !store.notificationsAuthorized {
                     Section {

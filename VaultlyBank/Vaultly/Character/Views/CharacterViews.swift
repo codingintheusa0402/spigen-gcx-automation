@@ -36,6 +36,7 @@ struct CharacterSpriteView: View {
     let look: CharacterLook
     let activity: String
     var scale: CGFloat = 2
+    var showProps = true          // false inside the 미니룸, which draws its own furniture
 
     var body: some View {
         let a = CharacterAssets.shared
@@ -52,7 +53,7 @@ struct CharacterSpriteView: View {
                     }
                 }()
                 let row = info.rows == 1 ? 0 : (act.row ?? 2)
-                let props = act.props ?? []
+                let props = showProps ? (act.props ?? []) : []
                 ZStack(alignment: .topLeading) {
                     ForEach(props.filter { $0 == "bed" || $0 == "scooter" }, id: \.self) { p in
                         pixel(a.prop(p)).offset(x: 16 * scale, y: (p == "bed" ? 22 : 20) * scale)

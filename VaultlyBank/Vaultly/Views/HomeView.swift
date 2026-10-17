@@ -3,7 +3,7 @@ import SwiftUI
 /// Value-based routes for the Home stack. Mixing view-based NavigationLinks with
 /// navigationDestination(for:) makes the view links re-push when the path changes, so everything is a value.
 enum HomeRoute: Hashable {
-    case history(UUID?), life, challenge, report, goals, jobs, job(JobKind), schedule
+    case history(UUID?), life, challenge, report, goals, jobs, job(JobKind), schedule, alerts
 }
 
 extension View {
@@ -18,6 +18,7 @@ extension View {
             case .jobs: JobsHubView()
             case .job(let kind): JobSessionView(kind: kind)
             case .schedule: DayScheduleView()
+            case .alerts: ScheduleContent()
             }
         }
         .navigationDestination(for: UUID.self) { AccountDetailView(accountID: $0) }
@@ -43,6 +44,8 @@ struct HomeView: View {
                             Image(systemName: store.settings.hideBalances ? "eye.slash" : "eye").font(.app(.title3)).foregroundStyle(.primary)
                         }
                         NavigationLink { TransferForm() } label: { Image(systemName: "paperplane").font(.app(.title3)).foregroundStyle(.primary) }
+                        NavigationLink(value: HomeRoute.alerts) { Image(systemName: "bell.badge").font(.app(.title3)).foregroundStyle(.primary) }
+                            .accessibilityIdentifier("home-alerts")
                     }
                     Card {
                         VStack(alignment: .leading, spacing: 10) {
@@ -184,6 +187,9 @@ struct HomeView: View {
                     Button { store.update { $0.hideBalances.toggle() } } label: {
                         Image(systemName: store.settings.hideBalances ? "eye.slash" : "eye")
                     }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink(value: HomeRoute.alerts) { Image(systemName: "bell.badge") }.accessibilityIdentifier("home-alerts")
                 }
             }
             .sheet(isPresented: $showAddAccount) { AddAccountSheet() }

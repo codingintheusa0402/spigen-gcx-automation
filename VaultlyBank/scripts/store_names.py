@@ -171,8 +171,8 @@ def dualize_quests(path="Vaultly/Models/QuestLibrary.swift"):
         personal = rest.split("#else\n", 1)[1].split("#endif\n", 1)[0]
         tail = rest.split("#endif\n", 1)[1]
         src = head + personal + tail
-    start = src.index("    static let all: [Quest] = [")
-    end = src.index("\n    ]\n", start) + len("\n    ]\n")
+    start = src.index("    // MARK: quests\n")
+    end = src.index("    // MARK: end quests\n") + len("    // MARK: end quests\n")
     block = src[start:end]
     store_block = STR.sub(lambda m: json.dumps(fix(json.loads(m.group(0))), ensure_ascii=False), block)
     out = src[:start] + "#if STORE\n" + store_block + "#else\n" + block + "#endif\n" + src[end:]

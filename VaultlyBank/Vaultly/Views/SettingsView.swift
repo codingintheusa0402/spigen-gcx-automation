@@ -58,6 +58,9 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    NavigationLink { ScheduleContent() } label: {
+                        HStack { Label("예약 알림", systemImage: "bell.badge"); Spacer(); Text("\(store.data.events.count)건").foregroundStyle(.secondary) }
+                    }
                     NavigationLink { LifeView() } label: {
                         HStack { Label("내 인생 (선택·승급)", systemImage: "figure.walk"); Spacer(); Text("만 \(store.age)세 · \(store.currentTier.title)").foregroundStyle(.secondary) }
                     }

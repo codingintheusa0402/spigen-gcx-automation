@@ -43,7 +43,7 @@ struct VaultlyApp: App {
                 .environmentObject(store)
                 .environmentObject(shop)
                 .environmentObject(ads)
-                .onAppear { ads.isPro = { [weak shop] in shop?.isPro ?? true }; store.catchUp() }
+                .onAppear { let shop = self.shop; ads.isPro = { shop.isPro }; store.catchUp() }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { store.catchUp() }
                 }

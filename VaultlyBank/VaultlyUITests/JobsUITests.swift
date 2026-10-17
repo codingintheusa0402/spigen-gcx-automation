@@ -27,7 +27,7 @@ final class JobsUITests: XCTestCase {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let allow = springboard.buttons.matching(NSPredicate(format: "label IN %@", ["Allow", "허용"])).firstMatch
         if allow.waitForExistence(timeout: 3) { allow.tap() }
-        XCTAssertTrue(app.staticTexts["내 계좌"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.openBank(timeout: 5))
     }
 
     private func openHub() {
@@ -67,8 +67,8 @@ final class JobsUITests: XCTestCase {
     func testBrokeTierRetailJobsAndDailyLimit() {
         launch(); onboard(); openHub()
         snap("jobs-hub-broke")
-        XCTAssertFalse(app.buttons["job-tutoring"].isEnabled, "과외 is locked for 거지")
-        XCTAssertFalse(app.buttons["job-dayTrading"].isEnabled, "단타 is locked for 거지")
+        XCTAssertTrue(app.buttons["job-tutoring"].isEnabled, "every job is open to every tier")
+        XCTAssertTrue(app.buttons["job-dayTrading"].isEnabled, "every job is open to every tier")
 
         shift("convenience") {
             for i in 0..<4 { tapIfExists("conv-item-\(i)") }
@@ -109,10 +109,10 @@ final class JobsUITests: XCTestCase {
 
     func testMiddleTierTutoringAndTrading() {
         launch(["-uitest-tier", "middle"])
-        XCTAssertTrue(app.staticTexts["내 계좌"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.openBank(timeout: 5))
         openHub()
         snap("jobs-hub-middle")
-        XCTAssertFalse(app.buttons["job-parcel"].isEnabled, "중산층 doesn't do 상하차")
+        XCTAssertTrue(app.buttons["job-parcel"].isEnabled, "every job is open to every tier")
         shift("tutoring") {
             for _ in 0..<3 { tapIfExists("tutor-opt-0"); usleep(300_000) }
         }

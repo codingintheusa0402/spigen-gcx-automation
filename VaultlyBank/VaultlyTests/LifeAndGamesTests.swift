@@ -186,10 +186,10 @@ final class LifeAndGamesTests: XCTestCase {
     }
 
     func testCardStakesByTier() {
-        XCTAssertTrue(CardGame.stakes(for: 0).isEmpty, "거지 can't buy in")
+        XCTAssertEqual(CardGame.stakes(for: 0), [10_000, 50_000], "every tier can buy in")
         XCTAssertEqual(CardGame.stakes(for: 1), [50_000, 100_000])
-        XCTAssertNotNil(JobKind.cards.lockedReason(for: 0))
-        XCTAssertNil(JobKind.cards.lockedReason(for: 2))
+        for level in 0...4 { XCTAssertNil(JobKind.cards.lockedReason(for: level)); XCTAssertNil(JobKind.dayTrading.lockedReason(for: level)) }
+        XCTAssertFalse(DayTradingGame.stakes(for: 0).isEmpty, "단타 open to 거지 too")
         XCTAssertTrue(JobKind.cards.isEntertainment)
         XCTAssertFalse(JobKind.scooter.isEntertainment)
     }

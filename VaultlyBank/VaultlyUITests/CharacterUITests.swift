@@ -11,7 +11,7 @@ final class CharacterUITests: XCTestCase {
             let app = XCUIApplication()
             app.launchArguments = ["-uitest-reset", "-uitest-tier", tier]
             app.launch()
-            XCTAssertTrue(app.staticTexts["내 계좌"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.openBank(timeout: 5))
             XCTAssertTrue(app.descendants(matching: .any)["character-card"].firstMatch.waitForExistence(timeout: 5), "character card for \(tier)")
             XCTAssertTrue(app.descendants(matching: .any)["character-sprite"].firstMatch.exists, "sprite drawn for \(tier)")
             XCTAssertFalse(app.staticTexts["character-activity"].label.isEmpty)

@@ -10,7 +10,7 @@ final class LifeFeaturesUITests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments = ["-uitest-reset"] + extra
         app.launch()
-        XCTAssertTrue(app.staticTexts["내 계좌"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.openBank(timeout: 8))
     }
     private func snap(_ name: String) {
         let a = XCTAttachment(screenshot: app.screenshot()); a.name = name; a.lifetime = .keepAlways; add(a)
@@ -136,7 +136,7 @@ final class LifeFeaturesUITests: XCTestCase {
         app.terminate()
         app.launchArguments = ["-uitest-reset", "-uitest-tier", "working", "-uitest-pro"]
         app.launch()
-        XCTAssertTrue(app.staticTexts["내 계좌"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.openBank(timeout: 8))
         if isStoreBuild {
             XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Pro 보너스'")).firstMatch.waitForExistence(timeout: 5), "Pro bonus deposit on home")
             snap("pro-bonus")
@@ -188,13 +188,13 @@ final class LifeFeaturesUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["job-grade"].waitForExistence(timeout: 5)); snap("cards-payslip"); app.buttons["job-done"].tap()
         closeAdIfShown(reward: false)
         XCTAssertTrue(app.buttons["job-convenience"].waitForExistence(timeout: 5))
-        // 거지 can't sit at the table
+        // 거지 can sit at the table too (every game is open to every tier)
         app.terminate()
         app.launchArguments = ["-uitest-reset", "-uitest-tier", "broke"]
         app.launch()
-        XCTAssertTrue(app.staticTexts["내 계좌"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.openBank(timeout: 8))
         scrollTo(app.buttons["tile-jobs"]); app.buttons["tile-jobs"].tap()
         scrollTo(app.buttons["job-cards"])
-        XCTAssertFalse(app.buttons["job-cards"].isEnabled, "블랙잭 locked for 거지")
+        XCTAssertTrue(app.buttons["job-cards"].isEnabled, "블랙잭 open to 거지")
     }
 }

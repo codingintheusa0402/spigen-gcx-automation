@@ -404,7 +404,7 @@ final class BankStore: ObservableObject {
 
     var game: GameState { data.game }
     var pendingQuest: Quest? { data.game.pendingQuestID.flatMap(QuestLibrary.quest) }
-    var currentTier: WealthTier { data.lifestyle.tier ?? .broke }
+    var currentTier: WealthTier { data.lifestyle.tier ?? .working }     // a life starts as 서민
 
     // MARK: 알바 (part-time job mini games)
 
@@ -518,7 +518,7 @@ final class BankStore: ObservableObject {
         if !delayed { answer.outcome = lines.joined(separator: " ") }
         d.game.answers.append(answer)
         d.game.pendingQuestID = nil; d.game.pendingSince = nil; d.game.pendingExpires = nil
-        QuestEngine.scheduleNext(from: simNow, tier: d.lifestyle.tier ?? .broke, age: d.game.age(at: simNow), netWorth: QuestEngine.netWorth(d), rng: &rng, data: &d)
+        QuestEngine.scheduleNext(from: simNow, tier: d.lifestyle.tier ?? .working, age: d.game.age(at: simNow), netWorth: QuestEngine.netWorth(d), rng: &rng, data: &d)
         undo = UndoPoint(answerID: answer.id, title: q.title, choice: opt.title, snapshot: before)
         data = d
         syncNotifications()

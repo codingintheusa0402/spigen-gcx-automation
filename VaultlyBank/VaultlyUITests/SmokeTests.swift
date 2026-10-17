@@ -38,11 +38,11 @@ final class SmokeTests: XCTestCase {
 
         let tabs = app.tabBars.firstMatch
         XCTAssertTrue(tabs.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["내 계좌"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.openBank(timeout: 5))
         XCTAssertFalse(app.staticTexts["SIM"].exists, "SIM badge was removed on user request")
         snap("01-home")
 
-        for (tab, expect) in [("증권", "내 투자"), ("상품", "금융 상품"), ("예약 알림", "예약 알림"), ("설정", "내 정보")] {
+        for (tab, expect) in [("증권", "내 투자"), ("상품", "금융 상품"), ("내 방", "미니룸"), ("설정", "내 정보")] {
             tabs.buttons[tab].tap()
             XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", expect)).firstMatch.waitForExistence(timeout: 5),
                           "tab \(tab) should show '\(expect)'")
@@ -60,7 +60,7 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(nameField.waitForExistence(timeout: 5))
         app.buttons["시작하기"].tap()
         allowNotificationsIfAsked()
-        XCTAssertTrue(app.staticTexts["내 계좌"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.openBank(timeout: 5))
         XCTAssertTrue(app.staticTexts["무지출 챌린지"].exists, "challenge tile on home")
         app.buttons["tile-challenge"].tap()
         let resist = app.buttons["resist-button"]
@@ -91,8 +91,8 @@ final class SmokeTests: XCTestCase {
         snap("onboarding-scenario")
         app.buttons["scenario-start"].tap()
         allowNotificationsIfAsked()
-        XCTAssertTrue(app.staticTexts["내 계좌"].waitForExistence(timeout: 8))
-        app.tabBars.firstMatch.buttons["예약 알림"].tap()
+        XCTAssertTrue(app.openBank(timeout: 8))
+        app.openBank(); app.buttons["home-alerts"].tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS '급여'")).firstMatch.waitForExistence(timeout: 5), "payday scenario schedules the salary")
         snap("scenario-events")
     }
@@ -101,7 +101,7 @@ final class SmokeTests: XCTestCase {
         app.terminate()
         app.launchArguments = ["-uitest-reset", "-uitest-quest", "ins_01"]
         app.launch()
-        XCTAssertTrue(app.staticTexts["내 계좌"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.openBank(timeout: 8))
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS '실손의료보험에 가입하시겠습니까'")).firstMatch.waitForExistence(timeout: 5), "quest card on home")
         snap("quest-card")
         app.buttons["quest-option-0"].tap()
@@ -137,7 +137,7 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(nameField.waitForExistence(timeout: 5))
         app.buttons["시작하기"].tap()
         allowNotificationsIfAsked()
-        XCTAssertTrue(app.staticTexts["내 계좌"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.openBank(timeout: 5))
         let firstAccount = app.buttons.matching(NSPredicate(format: "label CONTAINS '입출금통장' AND label CONTAINS '₩'")).firstMatch
         XCTAssertTrue(firstAccount.waitForExistence(timeout: 5), "an account tile with a ₩ balance should exist")
         firstAccount.tap()
@@ -156,10 +156,10 @@ extension SmokeTests {
         XCTAssertTrue(app.textFields["이름 (예: 홍길동)"].waitForExistence(timeout: 5))
         app.buttons["시작하기"].tap()
         allowNotificationsIfAsked()
-        app.tabBars.firstMatch.buttons["예약 알림"].tap()
+        app.openBank(); app.buttons["home-alerts"].tap()
         XCTAssertTrue(app.staticTexts["예약된 알림이 없습니다"].waitForExistence(timeout: 5))
         if isStoreBuild {   // no hand-made deposits in the Store build: the add button must be gone
-            XCTAssertEqual(app.navigationBars["예약 알림"].buttons.count, 0, "Store build must not offer manual scheduled deposits")
+            XCTAssertLessThanOrEqual(app.navigationBars["예약 알림"].buttons.count, 1, "Store build must not offer manual scheduled deposits (only the back button)")
             snap("schedule-list-store"); return
         }
 
@@ -186,7 +186,7 @@ extension SmokeTests {
         XCTAssertTrue(app.textFields["이름 (예: 홍길동)"].waitForExistence(timeout: 5))
         app.buttons["시작하기"].tap()
         allowNotificationsIfAsked()
-        XCTAssertTrue(app.staticTexts["총자산"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.openBank(timeout: 5))
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label ENDSWITH '원'")).firstMatch.exists, "TOSS theme writes amounts with 원 suffix")
         snap("toss-home")
         app.buttons["송금"].firstMatch.tap()

@@ -259,17 +259,17 @@ final class MiniGameTests: XCTestCase {
         XCTAssertEqual(a.price, b.price)
         a.buy(); a.sell()
         XCTAssertLessThan(a.equity, a.stakeValue, "a round trip at the same price costs fees + tax")
-        XCTAssertEqual(DayTradingGame.stakes(for: 1), [])
+        XCTAssertEqual(DayTradingGame.stakes(for: 1), [300_000, 1_000_000])
         XCTAssertFalse(DayTradingGame.leverageAllowed(for: 2))
     }
 
     // MARK: Shared rules
     func testEligibilityWagesAndDailyLimit() {
         XCTAssertNil(JobKind.convenience.lockedReason(for: 0))
-        XCTAssertNotNil(JobKind.dayTrading.lockedReason(for: 0))
-        XCTAssertNotNil(JobKind.tutoring.lockedReason(for: 0))
+        XCTAssertNil(JobKind.dayTrading.lockedReason(for: 0))   // every job open to every tier
+        XCTAssertNil(JobKind.tutoring.lockedReason(for: 0))
         XCTAssertNil(JobKind.tutoring.lockedReason(for: 2))
-        XCTAssertNotNil(JobKind.parcel.lockedReason(for: 4))
+        XCTAssertNil(JobKind.parcel.lockedReason(for: 4))
         XCTAssertEqual(wage(.convenience, .B), 41_280)
         XCTAssertEqual(wage(.convenience, .S), 53_660)          // 41,280 × 1.3 = 53,664 → 53,660
         XCTAssertEqual(roundWon(12_345), 12_350)
