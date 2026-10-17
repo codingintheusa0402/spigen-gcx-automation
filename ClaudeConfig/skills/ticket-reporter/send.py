@@ -209,6 +209,10 @@ def main() -> int:
                     help="attachment link 'name|url' -> link list (repeatable)")
     ap.add_argument("--webhook", default=DEFAULT_WEBHOOK)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--mention", action="append", default=[], metavar="EMAIL",
+                    help="real Google Chat @mention (alert) for this person, by email (repeatable; 'all' = everyone). "
+                         "Adds a plain-text line above the card — the only place Chat honours mentions. "
+                         "Needs ~/.config/gcx_chat_user_ids.json (see ClaudeConfig/lib/chat_mentions.py)")
     ap.add_argument("--ticket-id", help="records {ticketId, threadId} in the TicketQueue "
                      "sheet after a successful send, so a thread reply mentioning the app "
                      "later resolves back to this ticket. In --html mode this is normally "
@@ -257,6 +261,12 @@ def main() -> int:
             print("ERROR: empty report text", file=sys.stderr)
             return 2
         payload = {"text": text}
+
+    if args.mention:
+        # mentions must live in the plain "text" part; this is the one exception to the card-only rule
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "lib"))
+        from chat_mentions import add_mentions
+        payload = add_mentions(payload, args.mention)
 
     webhook = args.webhook
     if args.thread:
