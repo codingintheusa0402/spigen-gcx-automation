@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('api', {
   notify: (t, b) => ipcRenderer.invoke('notify', t, b),
   home: () => ipcRenderer.invoke('home'),
   clipRead: () => ipcRenderer.invoke('clip:read'),
+  clipWrite: text => ipcRenderer.send('clip:write', text),
   listCommands: cwd => ipcRenderer.invoke('cmds:list', cwd),
   pathForFile: f => webUtils.getPathForFile(f),
   history: () => ipcRenderer.invoke('hist:list'),

@@ -320,6 +320,7 @@ const PASTE_DIR = path.join(os.tmpdir(), 'claude-mesh-paste');
 const unxml = v => v.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
 // Electron 44 clipboard is async (W3C-style ClipboardItem). Finder copies expose
 // NSFilenamesPboardType (all files) and text/uri-list; screenshots expose image/png.
+ipcMain.on('clip:write', (_e, text) => { if (typeof text === 'string' && text.length <= 5e6) clipboard.writeText(text); });
 ipcMain.handle('clip:read', async () => {
   let items = [];
   try { items = await clipboard.read(); } catch { }

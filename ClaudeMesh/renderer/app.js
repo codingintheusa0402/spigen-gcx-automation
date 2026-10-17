@@ -316,6 +316,17 @@ function wireDrop(el, insert) {
 }
 
 // ---------------- terminals ----------------
+// OSC 52 = a program asking the terminal to set the clipboard. Claude Code copies its own mouse selections this
+// way ("sent N chars via OSC 52"). Only the window being used takes it: a session shared with the other machine
+// prints the same sequence into both windows, and copying on one Mac must not overwrite the other's clipboard.
+function wireOsc52(term) {
+  term.parser.registerOscHandler(52, data => {
+    const b64 = data.slice(data.indexOf(';') + 1);
+    if (!b64 || b64 === '?' || !document.hasFocus()) return true;
+    try { window.api.clipWrite(new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0)))); } catch { }
+    return true;
+  });
+}
 const termOpts = () => ({
   fontFamily: '"SF Mono", Menlo, monospace', fontSize: 12.5, lineHeight: 1.15, cursorBlink: !isSimple(), allowProposedApi: true,
   macOptionIsMeta: true, scrollback: 20000,
@@ -345,6 +356,7 @@ function mirrorTerm(p) {
   const term = new Terminal(termOpts());
   const fit = new FitAddon.FitAddon(); term.loadAddon(fit);
   term.open(el.querySelector('.xt'));
+  wireOsc52(term);
   // only real keystrokes go back: xterm's automatic replies to terminal queries (device attributes, cursor
   // position, focus, colour reports) are already answered by the host's own terminal, and would land as typed text
   const isReport = d => /^\x1b\[[?>=]?[\d;]*[cnRtIOy]$/.test(d) || /^\x1b\[[IO]$/.test(d) || d.startsWith('\x1b]') || d.startsWith('\x1bP');
@@ -446,6 +458,7 @@ async function newTerm(opts) {
   const fit = new FitAddon.FitAddon(); term.loadAddon(fit);
   const ser = new SerializeAddon.SerializeAddon(); term.loadAddon(ser);
   term.open(el.querySelector('.xt'));
+  wireOsc52(term);
   term.onData(d => window.api.pty.write(info.id, d));
   // ⌘V: Finder-copied files → their paths, screenshot/image → saved PNG path, else plain text.
   // (Ctrl+V still goes straight to Claude Code, which reads image clipboards itself.)
