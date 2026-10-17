@@ -200,7 +200,11 @@ def main():
         s, l = merged(p, inv), merged(p, lst)
         if mk in COVERED:
             stock = s['c'].get(mk, 0)
-            asin = l['ac'].get(mk) or s['ac'].get(mk)
+            # that country's ASIN; older snapshots without per-country ASINs fall back to a known one (EU ASINs are mostly shared)
+            asin = l['ac'].get(mk) or s['ac'].get(mk) or next(iter(p.get('asins') or []), None)
+            if not asin:
+                o = (lst or {}).get('by', {}).get(sku) or {}
+                asin = (o.get('a') or [None])[0]
             if stock <= 0 or mk not in l['on'] or not asin:
                 continue
         else:   # NA etc.: no stock / listing data — candidates only, master ASIN
