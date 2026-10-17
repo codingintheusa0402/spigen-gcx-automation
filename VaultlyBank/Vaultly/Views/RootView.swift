@@ -3,6 +3,8 @@ import LocalAuthentication
 
 struct RootView: View {
     @EnvironmentObject var store: BankStore
+    @EnvironmentObject var shop: StoreService
+    @EnvironmentObject var ads: AdService
     @Environment(\.scenePhase) private var scenePhase
     @State private var locked = false
     @State private var unlocking = false
@@ -27,8 +29,15 @@ struct RootView: View {
                     }
             }
             if locked { LockScreen(unlock: unlock).transition(.opacity) }
+            if let ad = ads.fake { FakeAdOverlay(ad: ad).zIndex(10) }
         }
-        .onAppear { if store.settings.appLock && store.settings.hasOnboarded { locked = true; unlock() } }
+        .onAppear {
+            if store.settings.appLock && store.settings.hasOnboarded { locked = true; unlock() }
+            if store.settings.hasOnboarded { ads.start() }
+            store.grantProBonusIfNeeded(isPro: shop.isPro)
+        }
+        .onChange(of: store.settings.hasOnboarded) { _, on in if on { ads.start() } }
+        .onChange(of: shop.isPro) { _, pro in store.grantProBonusIfNeeded(isPro: pro) }
         .onChange(of: scenePhase) { _, phase in
             guard store.settings.appLock, store.settings.hasOnboarded else { return }
             if phase == .background { locked = true }

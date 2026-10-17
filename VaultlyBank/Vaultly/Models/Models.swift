@@ -202,6 +202,8 @@ struct BankSettings: Codable, Equatable {
     var brokerName: String = ""
     var cardName: String = ""
     var capitalName: String = ""
+    var ageVerified: Bool = false          // 만 18세 확인 (블랙잭 테이블)
+    var proBonusGranted: Bool = false      // one-time Pro 보너스 게임 머니 credited
 
     var brand: Brand { Brand(settings: self) }
 
@@ -222,6 +224,8 @@ struct BankSettings: Codable, Equatable {
         brokerName = try c.decodeIfPresent(String.self, forKey: .brokerName) ?? brokerName
         cardName = try c.decodeIfPresent(String.self, forKey: .cardName) ?? cardName
         capitalName = try c.decodeIfPresent(String.self, forKey: .capitalName) ?? capitalName
+        ageVerified = try c.decodeIfPresent(Bool.self, forKey: .ageVerified) ?? ageVerified
+        proBonusGranted = try c.decodeIfPresent(Bool.self, forKey: .proBonusGranted) ?? proBonusGranted
     }
 }
 
@@ -266,6 +270,7 @@ struct BankData: Codable, Equatable {
     var achievements: [String: Date] = [:]
     var game = GameState()
     var jobs = JobsState()             // 알바 mini games: plays, bests, today's shifts
+    var life = LifeEventState()        // 교통사고·단속·구속·실직 and the current 부상/수감 status
 
     init() {}
 
@@ -284,6 +289,7 @@ struct BankData: Codable, Equatable {
         achievements = try c.decodeIfPresent([String: Date].self, forKey: .achievements) ?? [:]
         game = try c.decodeIfPresent(GameState.self, forKey: .game) ?? GameState()
         jobs = try c.decodeIfPresent(JobsState.self, forKey: .jobs) ?? JobsState()
+        life = try c.decodeIfPresent(LifeEventState.self, forKey: .life) ?? LifeEventState()
     }
 
     static func starter() -> BankData {

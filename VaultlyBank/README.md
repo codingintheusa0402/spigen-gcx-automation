@@ -46,6 +46,19 @@
 - **위젯 (`VaultlyWidget`)**: 홈 small/medium(잔액·총자산·다음 입금), 잠금화면 rectangular/circular/inline, 챌린지 위젯.
   App Group `group.com.kevinkim.vaultly`의 스냅샷 JSON으로 그림
 - **Live Activity**: 4시간 이내 예약 입금을 잠금화면·Dynamic Island에 "입금 예정 16:00" 카운트다운으로 표시
+- **알바 미니게임 + 오락**: 편의점·카페·택배 상하차·대리운전·서빙·전단지·과외·주식 단타에 더해
+  **배달 스쿠터 레이스**(🍜 픽업 → 🏠 배달, 건당 3,500원 + 팁, 3번 넘어지면 응급실 5만원)와
+  **블랙잭 (게임 머니)**(바이인의 10%씩 베팅, 딜러 17 스탠드, 3:2; 서민부터, 앱 안 만 18세 확인 후에만; 체력 소모 없음)
+- **오늘의 일정 · 공휴일**: `KoreanHolidays`(고정 공휴일 + 음력 설날·추석·부처님오신날 + 대체공휴일) — 캐릭터는 공휴일에 쉬고,
+  홈 캐릭터 카드의 📅로 그날의 시간표(30분 단위 병합)와 올해 공휴일·다음 공휴일 D-day를 봅니다
+- **인생 이벤트** (`LifeEventEngine`): 교통사고(치료비, 실손 없으면 더 비쌈, 2주 부상 → 알바 불가), 경찰 단속(범칙금·과태료),
+  구속(불법 선택으로 쌓인 `heat`가 있을 때만; 벌금 + 3~12개월 급여 중단), 실직(급여 3~6개월 중단 + 실업급여 4개월).
+  하루 1회 판정, 30일 쿨다운. 내 인생 화면의 "인생 이벤트" 카드에 기록
+- **되돌리기**: 마지막 선택을 결과 시트/선택의 기록에서 되돌리면 은행 전체가 선택 직전으로 복원되고 퀘스트가 다시 옵니다.
+  스토어 빌드에서는 보상형 광고 시청 후 (Pro는 바로)
+- **광고 (스토어 빌드만, `AdService`)**: AdMob 보상형(되돌리기) + 전면(알바 3회마다·선택 4회마다). ATT 추적 허용 요청·UMP 동의 포함.
+  개인 빌드에는 광고 코드가 켜지지 않고, UI 테스트는 네트워크 없는 가짜 광고(`ad-overlay`)를 봅니다.
+  Pro는 광고 제거 + 보너스 게임 머니 1,000만원. 출시 전 교체할 테스트 ID는 `AppStore/LISTING.md` 참고
 - **스토어 변형 (`Vaultly-Store` 스킴, `-D STORE`)**: 가상 브랜드만 사용(TOSS 테마 → 미니멀 다크/미니멀뱅크),
   앱 이름 "Vaultly 시뮬레이터", StoreKit 2 Pro(평생 9,900원 / 월 1,900원, `Vaultly.storekit` 로컬 테스트)로
   테마·시나리오·24x 이상 가속·공유 카드 잠금. 개인 빌드(`Vaultly` 스킴)는 모든 기능 무료
@@ -63,6 +76,11 @@ Xcode 15+, iOS 17+. 실기기(USB 연결) 설치는 `scripts/install_device.sh` 
 ```bash
 xcodebuild test -project Vaultly.xcodeproj -scheme Vaultly -destination 'platform=iOS Simulator,name=iPhone 15'
 ```
+
+### UI 테스트 런치 인자
+`-uitest-reset` (저장 초기화) · `-uitest-theme toss` · `-uitest-tier working` · `-uitest-quest ins_01` ·
+`-uitest-clock 2026-10-03T10:00:00` (가상 시각 고정) · `-uitest-lifeevent accident|police|jail|jobLoss` · `-uitest-pro` (스토어 빌드 Pro 흉내).
+`-uitest-*`가 하나라도 있으면 광고는 가짜 오버레이로 대체됩니다.
 
 ## 구조
 ```

@@ -14,7 +14,7 @@ struct ProPaywall: View {
                 Image(systemName: "crown.fill").font(.app(size: 44, .bold)).foregroundStyle(store.theme.accent).padding(.top, 20)
                 Text("Vaultly Pro").font(.app(.title, .bold))
                 VStack(alignment: .leading, spacing: 10) {
-                    ForEach([ProFeature.themes, .scenarios, .acceleration, .widgets, .challengeShare], id: \.rawValue) { f in
+                    ForEach([ProFeature.noAds, .bonusMoney, .themes, .scenarios, .acceleration, .widgets, .challengeShare], id: \.rawValue) { f in
                         Label(f.title, systemImage: "checkmark.circle.fill").foregroundStyle(.primary)
                     }
                 }

@@ -99,7 +99,7 @@ struct SettingsView: View {
                         Button { paywall = true } label: {
                             HStack { Label("Vaultly Pro", systemImage: "crown.fill"); Spacer(); Text(shop.isPro ? "사용 중" : "잠금 해제").foregroundStyle(.secondary) }
                         }
-                    } footer: { Text("이 앱은 뱅킹 시뮬레이터입니다. 실제 금융기관·결제와 연결되지 않으며 모든 금액은 가상입니다.") }
+                    } footer: { Text("Pro는 모든 광고를 없애고 보너스 게임 머니 1,000만원을 드립니다. 이 앱은 뱅킹 시뮬레이터입니다. 실제 금융기관·결제와 연결되지 않으며 모든 금액은 가상입니다.") }
                 }
 
                 Section("고객센터 · 앱 정보") {

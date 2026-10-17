@@ -107,6 +107,8 @@ enum LifestyleEngine {
             // 2b. life decisions (quests), their flows and delayed outcomes
             messages += QuestEngine.day(day, now: now, tier: tier, accountID: accountID, comps: comps, lastDay: lastDay, rng: &rng, data: &data)
             if data.game.isEnded { data.lifestyle.lastProcessed = max(processed, now); return messages }
+            // 2c. things that just happen: 교통사고 · 경찰 단속 · 구속 · 실직
+            messages += LifeEventEngine.day(day, now: now, tier: tier, accountID: accountID, rng: &rng, data: &data)
 
             // 3. 거지 debt spiral (end of day)
             if tier == .broke, let debtID = data.lifestyle.debtAccountID,

@@ -9,8 +9,10 @@ cat > "$HOOK" <<H
 #!/bin/bash
 remote_url="\$2"
 changed=0
+pushed=""
 while read -r lref lsha rref rsha; do
   [ "\$lsha" = "0000000000000000000000000000000000000000" ] && continue
+  pushed="\$lsha"
   if [ "\$rsha" = "0000000000000000000000000000000000000000" ]; then
     base=\$(git merge-base "\$lsha" origin/main 2>/dev/null || true)   # new branch: compare with main
   else
@@ -22,6 +24,12 @@ while read -r lref lsha rref rsha; do
 done
 [ \$changed -eq 0 ] && exit 0
 case "\$remote_url" in *codingintheusa0402*) ;; *) echo "⛔ Vaultly may only be pushed to codingintheusa0402 (not \$remote_url)"; exit 1;; esac
+# A fresh PASS report for exactly the commit being pushed counts (qa.sh writes the hash into REPORT.md) — no 30-minute re-run.
+latest="$ROOT/${REL#.}${REL:+/}build/qa/latest/REPORT.md"
+if [ -f "\$latest" ] && grep -q '^\*\*PASS\*\*' "\$latest" && [ -n "\$pushed" ]; then
+  short=\$(git rev-parse --short "\$pushed")
+  if head -1 "\$latest" | grep -q "· \$short\$"; then echo "✅ QA report for \$short is a PASS — skipping re-run"; exit 0; fi
+fi
 echo "Vaultly changed — running the QA gate (scripts/qa.sh)…"
 bash "$ROOT/${REL#.}${REL:+/}scripts/qa.sh" || { echo "⛔ QA failed — push refused. See $REL/build/qa/latest/REPORT.md"; exit 1; }
 H

@@ -35,7 +35,26 @@ struct JobsHubView: View {
                         .accessibilityIdentifier("jobs-energy")
                     }
                 }
-                ForEach(JobKind.allCases) { kind in
+                if store.jobsClosed {
+                    Card {
+                        HStack(spacing: 10) {
+                            Image(systemName: store.isJailed ? "lock.fill" : "bandage.fill").foregroundStyle(store.isJailed ? Color.red : Color.orange)
+                            Text(store.isJailed ? "구치소 수감 중 — 알바를 할 수 없어요" : "부상 회복 중 — 알바를 할 수 없어요").font(.app(.subheadline, .semibold))
+                                .accessibilityIdentifier("jobs-closed")
+                        }
+                    }
+                }
+                ForEach(JobKind.allCases.filter { !$0.isEntertainment }) { kind in
+                    JobRow(kind: kind)
+                }
+                HStack {
+                    Text("오락 (게임 머니)").font(.app(.headline, .semibold))
+                    Text("18+").font(.app(.caption2, .bold)).padding(.horizontal, 6).padding(.vertical, 2).background(Capsule().fill(Color.red.opacity(0.15))).foregroundStyle(.red)
+                    Spacer()
+                    Text("체력 소모 없음 · 바이인은 계좌에서").font(.app(.caption2)).foregroundStyle(.secondary)
+                }
+                .padding(.top, 6)
+                ForEach(JobKind.allCases.filter { $0.isEntertainment }) { kind in
                     JobRow(kind: kind)
                 }
             }
@@ -53,7 +72,8 @@ private struct JobRow: View {
 
     var body: some View {
         let locked = kind.lockedReason(for: store.currentTier.level)
-        let tired = store.shiftsLeftToday == 0
+        let tired = !kind.isEntertainment && store.shiftsLeftToday == 0
+        let closed = store.jobsClosed
         NavigationLink(value: HomeRoute.job(kind)) {
             HStack(spacing: 14) {
                 Text(kind.emoji).font(.system(size: 30))
@@ -72,14 +92,16 @@ private struct JobRow: View {
                 Spacer()
                 if locked != nil { Image(systemName: "lock.fill").foregroundStyle(.secondary) }
                 else if kind == .dayTrading { Text("투자금 필요").font(.app(.caption2, .semibold)).foregroundStyle(.orange) }
+                else if kind == .cards { Text("바이인 필요").font(.app(.caption2, .semibold)).foregroundStyle(.orange) }
+                else if kind == .scooter { Text("건당 \(Money.format(ScooterGame.feePerDelivery, code: store.currency))").font(.app(.subheadline, .semibold)).monospacedDigit() }
                 else { Text(Money.format(wage(kind, .B), code: store.currency)).font(.app(.subheadline, .semibold)).monospacedDigit() }
             }
             .padding(14)
             .background(RoundedRectangle(cornerRadius: store.theme.cornerRadius, style: .continuous).fill(store.theme.card))
-            .opacity(locked != nil || tired ? 0.55 : 1)
+            .opacity(locked != nil || tired || closed ? 0.55 : 1)
         }
         .buttonStyle(.plain)
-        .disabled(locked != nil || tired)
+        .disabled(locked != nil || tired || closed)
         .accessibilityIdentifier("job-\(kind.rawValue)")
     }
 }
@@ -87,6 +109,7 @@ private struct JobRow: View {
 /// One shift: intro → (stake for 단타) → the game → payslip. The money is booked once, when the shift ends.
 struct JobSessionView: View {
     @EnvironmentObject var store: BankStore
+    @EnvironmentObject var ads: AdService
     @Environment(\.dismiss) private var dismiss
     let kind: JobKind
 
@@ -94,6 +117,8 @@ struct JobSessionView: View {
     @State private var stage: Stage = .intro
     @State private var stake: Decimal = 0
     @State private var leverage: Double = 1
+    @State private var ageGate = false
+    private var needsStake: Bool { kind == .dayTrading || kind == .cards }
 
     var body: some View {
         Group {
@@ -107,6 +132,10 @@ struct JobSessionView: View {
         .navigationTitle(kind.title)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(stageIsPlaying)
+        .onAppear { if kind.isEntertainment && !store.settings.ageVerified { ageGate = true } }
+        .sheet(isPresented: $ageGate, onDismiss: { if kind.isEntertainment && !store.settings.ageVerified { dismiss() } }) {
+            AgeGateSheet(onConfirm: {})
+        }
     }
 
     private var stageIsPlaying: Bool { if case .playing = stage { return true } else { return false } }
@@ -127,10 +156,12 @@ struct JobSessionView: View {
         case .flyers: FlyerBoard(game: FlyerGame(seed: seed), onFinish: finish)
         case .tutoring: TutoringBoard(game: TutoringGame(seed: seed), onFinish: finish)
         case .dayTrading: TradingBoard(game: DayTradingGame(seed: seed, stake: stake, leverage: leverage), onFinish: finish)
+        case .scooter: ScooterBoard(game: ScooterGame(seed: seed), onFinish: finish)
+        case .cards: CardBoard(game: CardGame(seed: seed, stake: stake), onFinish: finish)
         }
     }
 
-    private var stakes: [Decimal] { DayTradingGame.stakes(for: store.currentTier.level) }
+    private var stakes: [Decimal] { kind == .cards ? CardGame.stakes(for: store.currentTier.level) : DayTradingGame.stakes(for: store.currentTier.level) }
     private var balance: Decimal { store.payAccount?.balance ?? 0 }
 
     private var intro: some View {
@@ -144,6 +175,13 @@ struct JobSessionView: View {
                         row("근무", kind.shiftLabel)
                         if kind == .dayTrading {
                             row("결과", "수익 또는 손실이 그대로 계좌에")
+                        } else if kind == .cards {
+                            row("베팅", "한 판에 바이인의 10%")
+                            row("블랙잭", "3:2 지급 · 딜러는 17에서 스탠드")
+                            row("결과", "딴 칩과 잃은 칩이 그대로 계좌에 (게임 머니)")
+                        } else if kind == .scooter {
+                            row("배달 1건", "\(Money.format(ScooterGame.feePerDelivery, code: store.currency)) + 팁 (A등급↑)")
+                            row("사고 3번", "응급실 \(Money.format(ScooterGame.erBill, code: store.currency)) 내 돈으로")
                         } else {
                             row("기본 급여 (B등급)", Money.format(wage(kind, .B), code: store.currency))
                             row("S등급", Money.format(wage(kind, .S), code: store.currency))
@@ -152,15 +190,16 @@ struct JobSessionView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                if kind == .dayTrading { stakePicker.padding(.horizontal, 16) }
+                if needsStake { stakePicker.padding(.horizontal, 16) }
                 Button {
                     stage = .playing(seed: UInt64.random(in: 1...UInt64.max))
                 } label: {
-                    Text(kind == .dayTrading ? "장 시작" : "출근하기").font(.app(.headline, .bold)).frame(maxWidth: .infinity).padding(.vertical, 16)
+                    Text(kind == .dayTrading ? "장 시작" : kind == .cards ? "테이블 앉기" : kind == .scooter ? "라이딩 시작" : "출근하기")
+                        .font(.app(.headline, .bold)).frame(maxWidth: .infinity).padding(.vertical, 16)
                         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(store.theme.accent))
                         .foregroundStyle(store.theme.onAccent)
                 }
-                .disabled(kind == .dayTrading && (stake <= 0 || stake > balance))
+                .disabled(needsStake && (stake <= 0 || stake > balance))
                 .padding(.horizontal, 16)
                 .accessibilityIdentifier("job-start")
             }
@@ -172,7 +211,7 @@ struct JobSessionView: View {
     private var stakePicker: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                Text("투자금").font(.app(.subheadline, .semibold))
+                Text(kind == .cards ? "바이인 (게임 머니)" : "투자금").font(.app(.subheadline, .semibold))
                 HStack {
                     ForEach(stakes, id: \.self) { s in
                         Button { stake = s } label: {
@@ -183,11 +222,11 @@ struct JobSessionView: View {
                         .disabled(s > balance)
                     }
                 }
-                if DayTradingGame.leverageAllowed(for: store.currentTier.level) {
+                if kind == .dayTrading, DayTradingGame.leverageAllowed(for: store.currentTier.level) {
                     Toggle("신용 3배 (−30%면 반대매매)", isOn: Binding(get: { leverage > 1 }, set: { leverage = $0 ? 3 : 1 }))
                         .font(.app(.caption))
                 }
-                Text("계좌 잔액 \(Money.format(balance, code: store.currency)) · 잃어도 투자금까지만 잃어요").font(.app(.caption2)).foregroundStyle(.secondary)
+                Text("계좌 잔액 \(Money.format(balance, code: store.currency)) · 잃어도 \(kind == .cards ? "바이인" : "투자금")까지만 잃어요").font(.app(.caption2)).foregroundStyle(.secondary)
             }
         }
     }
@@ -218,7 +257,7 @@ struct JobSessionView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                Button { dismiss() } label: {
+                Button { ads.maybeInterstitial(.afterShift); dismiss() } label: {
                     Text("확인").font(.app(.headline, .bold)).frame(maxWidth: .infinity).padding(.vertical, 16)
                         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(store.theme.accent))
                         .foregroundStyle(store.theme.onAccent)

@@ -10,7 +10,7 @@ import Foundation
 typealias TierLevel = Int
 
 enum JobKind: String, Codable, CaseIterable, Identifiable {
-    case convenience, cafe, parcel, designatedDriver, serving, flyers, tutoring, dayTrading
+    case convenience, cafe, parcel, designatedDriver, serving, flyers, tutoring, dayTrading, scooter, cards
     var id: String { rawValue }
 
     var title: String {
@@ -23,6 +23,8 @@ enum JobKind: String, Codable, CaseIterable, Identifiable {
         case .flyers: return "전단지 알바"
         case .tutoring: return "과외"
         case .dayTrading: return "주식 단타"
+        case .scooter: return "배달 스쿠터 레이스"
+        case .cards: return "블랙잭 (게임 머니)"
         }
     }
     var emoji: String {
@@ -35,6 +37,8 @@ enum JobKind: String, Codable, CaseIterable, Identifiable {
         case .flyers: return "📄"
         case .tutoring: return "📚"
         case .dayTrading: return "📈"
+        case .scooter: return "🛵"
+        case .cards: return "🃏"
         }
     }
     var pitch: String {
@@ -47,8 +51,12 @@ enum JobKind: String, Codable, CaseIterable, Identifiable {
         case .flyers: return "지나가는 사람에게 타이밍 맞춰 한 장씩. 바쁜 사람한텐 내밀지 말 것."
         case .tutoring: return "수학·영어·국어 빠른 퀴즈. 연속 정답이면 학부모 만족도 상승."
         case .dayTrading: return "1분 단타. 크게 벌 수도, 크게 잃을 수도 있다."
+        case .scooter: return "🍜에서 픽업해 🏠에 배달. 식기 전에, 넘어지지 말고. 3번 넘어지면 응급실행."
+        case .cards: return "하우스와 21 대결. 게임 머니로 바이인, 한 판에 바이인의 10%. 만 18세 이상."
         }
     }
+    /// 오락: no 하루 체력 used, stake comes from the account, not a job.
+    var isEntertainment: Bool { self == .cards }
     /// Who can take this job (by tier level) — 단타 needs capital; 과외 needs an education; 상하차/전단지 are for anyone who needs cash.
     var levels: ClosedRange<TierLevel> {
         switch self {
@@ -56,12 +64,16 @@ enum JobKind: String, Codable, CaseIterable, Identifiable {
         case .parcel, .designatedDriver: return 0...1
         case .tutoring: return 1...2
         case .dayTrading: return 2...4
+        case .scooter: return 0...1
+        case .cards: return 1...4
         }
     }
     func lockedReason(for level: TierLevel) -> String? {
         if levels.contains(level) { return nil }
         if level < levels.lowerBound {
-            return self == .dayTrading ? "투자금이 필요해요 (중산층부터)" : "\(TierNames.name(levels.lowerBound)) 이상"
+            if self == .dayTrading { return "투자금이 필요해요 (중산층부터)" }
+            if self == .cards { return "바이인할 돈이 필요해요 (서민부터)" }
+            return "\(TierNames.name(levels.lowerBound)) 이상"
         }
         return "이 계층은 이런 알바를 안 해요"
     }
@@ -76,6 +88,8 @@ enum JobKind: String, Codable, CaseIterable, Identifiable {
         case .flyers: return "전단지 일당"
         case .tutoring: return "과외비"
         case .dayTrading: return "주식 단타 손익"
+        case .scooter: return "배민커넥트 정산"
+        case .cards: return "하우스 (게임 머니)"
         }
     }
     /// What one shift pays at grade B (100%).
@@ -89,6 +103,8 @@ enum JobKind: String, Codable, CaseIterable, Identifiable {
         case .flyers: return MinimumWage.hourly * 3
         case .tutoring: return 70_000                              // 2시간 수업
         case .dayTrading: return 0                                 // P&L instead of a wage
+        case .scooter: return 0                                    // 건당 3,500원 + 팁 (ScooterGame.feePerDelivery)
+        case .cards: return 0                                      // chips won or lost
         }
     }
     var shiftLabel: String {
@@ -98,6 +114,8 @@ enum JobKind: String, Codable, CaseIterable, Identifiable {
         case .tutoring: return "2시간 수업"
         case .designatedDriver: return "콜 1건"
         case .dayTrading: return "1분 세션"
+        case .scooter: return "60초 라이딩"
+        case .cards: return "2분 세션"
         }
     }
 }
@@ -204,7 +222,7 @@ struct JobsState: Codable, Equatable {
 
     mutating func record(_ r: ShiftResult, day: String) {
         if day != shiftDay { shiftDay = day; shiftsToday = 0 }
-        shiftsToday += 1
+        if !r.kind.isEntertainment { shiftsToday += 1 }      // 오락 costs no 체력
         plays[r.kind.rawValue, default: 0] += 1
         best[r.kind.rawValue] = max(best[r.kind.rawValue] ?? 0, r.score)
         earned[r.kind.rawValue, default: 0] += r.payout

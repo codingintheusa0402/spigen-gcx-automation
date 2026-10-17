@@ -11,8 +11,11 @@ final class StoreService: ObservableObject {
     @Published private(set) var purchased: Set<String> = []
     @Published var lastError: String?
 
+    /// UI tests (`-uitest-pro`): behave as a Pro user in the Store build without StoreKit.
+    static var debugPro = false
+
     /// Pro is always on outside the store variant.
-    var isPro: Bool { !AppVariant.isStore || !purchased.isEmpty }
+    var isPro: Bool { !AppVariant.isStore || Self.debugPro || !purchased.isEmpty }
 
     private var updates: Task<Void, Never>?
 

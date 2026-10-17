@@ -39,17 +39,7 @@ for S in "${SCHEMES[@]}"; do
   mkdir -p "$RUN/$S"
   xcrun xcresulttool export attachments --path "$R" --output-path "$RUN/$S" >/dev/null 2>&1 || true
   shots=$(find "$RUN/$S" -name '*.png' -o -name '*.jpeg' 2>/dev/null | wc -l | tr -d ' ')
-  summary=$(xcrun xcresulttool get test-results summary --path "$R" 2>/dev/null | python3 -c "$(cat <<'PY'
-import sys, json
-try:
-    d = json.load(sys.stdin)
-    print(f"{d.get('passedTests', 0)} passed · {d.get('failedTests', 0)} failed · {d.get('skippedTests', 0)} skipped")
-    for f in d.get('testFailures', [])[:20]:
-        print(f"  - ❌ {f.get('testName')}: {(f.get('failureText') or '')[:200]}")
-except Exception:
-    print('no test summary (build failed?)')
-PY
-)")
+  summary=$(python3 scripts/qa_summary.py "$R")
   if [ $code -eq 0 ]; then echo "## ✅ $S" >> "$REPORT"; else echo "## ❌ $S (exit $code)" >> "$REPORT"; fail=1
     grep -E "error:|failed" "$RUN/$S.log" | head -20 | sed 's/^/    /' >> "$REPORT"; fi
   echo "$summary" >> "$REPORT"

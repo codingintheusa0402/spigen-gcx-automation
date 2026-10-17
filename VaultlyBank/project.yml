@@ -4,6 +4,13 @@ options:
   deploymentTarget:
     iOS: "17.0"
   xcodeVersion: "15.0"
+packages:
+  GoogleMobileAds:                      # AdMob (App Store build only uses it; see Services/AdService.swift)
+    url: https://github.com/googleads/swift-package-manager-google-mobile-ads.git
+    from: 13.11.0
+  GoogleUserMessagingPlatform:          # UMP consent form (GDPR); its module is `UserMessagingPlatform`
+    url: https://github.com/googleads/swift-package-manager-google-user-messaging-platform.git
+    from: 3.1.0
 configs:
   Debug: debug
   Release: release
@@ -16,6 +23,7 @@ settings:
     MARKETING_VERSION: "1.1.0"
     CURRENT_PROJECT_VERSION: "2"
     VAULTLY_DISPLAY_NAME: Vaultly
+    VAULTLY_ADMOB_APP_ID: ca-app-pub-3940256099942544~1458002511   # Google TEST app id — replace with the real one before submitting
   configs:
     Store:
       SWIFT_ACTIVE_COMPILATION_CONDITIONS: STORE
@@ -27,6 +35,10 @@ targets:
     sources: [Vaultly]
     dependencies:
       - target: VaultlyWidget
+      - package: GoogleMobileAds
+        product: GoogleMobileAds
+      - package: GoogleUserMessagingPlatform
+        product: GoogleUserMessagingPlatform
     entitlements:
       path: Vaultly/Vaultly.entitlements
       properties:
@@ -45,6 +57,59 @@ targets:
         UIAppFonts: [Pretendard-Regular.otf, Pretendard-Medium.otf, Pretendard-SemiBold.otf, Pretendard-Bold.otf, Pretendard-ExtraBold.otf]
         ITSAppUsesNonExemptEncryption: false
         LSApplicationCategoryType: public.app-category.simulation-games   # listed as Games > Simulation
+        NSUserTrackingUsageDescription: 허용하면 관심사에 맞는 광고가 표시됩니다. 거부해도 게임의 모든 기능을 똑같이 사용할 수 있습니다.
+        GADApplicationIdentifier: $(VAULTLY_ADMOB_APP_ID)
+        SKAdNetworkItems:    # Google's published list (developers.google.com/admob/ios/3p-skadnetworks), 50 ids
+          - SKAdNetworkIdentifier: 22mmun2rn5.skadnetwork
+          - SKAdNetworkIdentifier: 2fnua5tdw4.skadnetwork
+          - SKAdNetworkIdentifier: 2u9pt9hc89.skadnetwork
+          - SKAdNetworkIdentifier: 3qcr597p9d.skadnetwork
+          - SKAdNetworkIdentifier: 3qy4746246.skadnetwork
+          - SKAdNetworkIdentifier: 3rd42ekr43.skadnetwork
+          - SKAdNetworkIdentifier: 3sh42y64q3.skadnetwork
+          - SKAdNetworkIdentifier: 4468km3ulz.skadnetwork
+          - SKAdNetworkIdentifier: 44jx6755aq.skadnetwork
+          - SKAdNetworkIdentifier: 47vhws6wlr.skadnetwork
+          - SKAdNetworkIdentifier: 4dzt52r2t5.skadnetwork
+          - SKAdNetworkIdentifier: 4fzdc2evr5.skadnetwork
+          - SKAdNetworkIdentifier: 578prtvx9j.skadnetwork
+          - SKAdNetworkIdentifier: 7ug5zh24hu.skadnetwork
+          - SKAdNetworkIdentifier: 8c4e2ghe7u.skadnetwork
+          - SKAdNetworkIdentifier: 8s468mfl3y.skadnetwork
+          - SKAdNetworkIdentifier: 97r2b46745.skadnetwork
+          - SKAdNetworkIdentifier: 9t245vhmpl.skadnetwork
+          - SKAdNetworkIdentifier: a2p9lx4jpn.skadnetwork
+          - SKAdNetworkIdentifier: c3frkrj4fj.skadnetwork
+          - SKAdNetworkIdentifier: c6k4g5qg8m.skadnetwork
+          - SKAdNetworkIdentifier: cp8zw746q7.skadnetwork
+          - SKAdNetworkIdentifier: cstr6suwn9.skadnetwork
+          - SKAdNetworkIdentifier: e5fvkxwrpn.skadnetwork
+          - SKAdNetworkIdentifier: f38h382jlk.skadnetwork
+          - SKAdNetworkIdentifier: gta9lk7p23.skadnetwork
+          - SKAdNetworkIdentifier: hs6bdukanm.skadnetwork
+          - SKAdNetworkIdentifier: k674qkevps.skadnetwork
+          - SKAdNetworkIdentifier: kbd757ywx3.skadnetwork
+          - SKAdNetworkIdentifier: kbmxgpxpgc.skadnetwork
+          - SKAdNetworkIdentifier: klf5c3l5u5.skadnetwork
+          - SKAdNetworkIdentifier: ludvb6z3bs.skadnetwork
+          - SKAdNetworkIdentifier: mlmmfzh3r3.skadnetwork
+          - SKAdNetworkIdentifier: n38lu8286q.skadnetwork
+          - SKAdNetworkIdentifier: p78axxw29g.skadnetwork
+          - SKAdNetworkIdentifier: ppxm28t8ap.skadnetwork
+          - SKAdNetworkIdentifier: s39g8k73mm.skadnetwork
+          - SKAdNetworkIdentifier: su67r6k2v3.skadnetwork
+          - SKAdNetworkIdentifier: t38b2kh725.skadnetwork
+          - SKAdNetworkIdentifier: tl55sbb4fm.skadnetwork
+          - SKAdNetworkIdentifier: uw77j35x4d.skadnetwork
+          - SKAdNetworkIdentifier: v4nxqhlyqp.skadnetwork
+          - SKAdNetworkIdentifier: v72qych5uu.skadnetwork
+          - SKAdNetworkIdentifier: v9wttpbfk9.skadnetwork
+          - SKAdNetworkIdentifier: vutu7akeur.skadnetwork
+          - SKAdNetworkIdentifier: wg4vff78zm.skadnetwork
+          - SKAdNetworkIdentifier: wzmmz9fp6w.skadnetwork
+          - SKAdNetworkIdentifier: y5ghdn5j9k.skadnetwork
+          - SKAdNetworkIdentifier: yclnxrl5pm.skadnetwork
+          - SKAdNetworkIdentifier: ydx93a7ass.skadnetwork
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kevinkim.vaultly

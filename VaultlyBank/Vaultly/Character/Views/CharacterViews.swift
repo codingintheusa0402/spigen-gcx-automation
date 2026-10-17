@@ -90,10 +90,12 @@ extension BankStore {
         let week = UInt64(truncatingIfNeeded: DailyRoutine.weekIndex(now, calendar: cal))
         let seed = lifestyle.seed ^ (week &* 0x9E37_79B9_7F4A_7C15)
         let comps = cal.dateComponents([.hour, .minute, .weekday], from: now)
-        let workday = !(comps.weekday == 1 || comps.weekday == 7)
+        let workday = KoreanHolidays.isWorkday(now, calendar: cal)          // weekends and 공휴일 are days off
         let tier = CharacterTier(rawValue: currentTier.rawValue) ?? .broke
-        let slot = DailyRoutine.slot(tier: tier, hour: comps.hour ?? 12, minute: comps.minute ?? 0, workday: workday,
+        var slot = DailyRoutine.slot(tier: tier, hour: comps.hour ?? 12, minute: comps.minute ?? 0, workday: workday,
                                      variant: Int(lifestyle.seed % 6))
+        if data.life.isJailed(at: now) { slot = RoutineSlot(activity: "jail", label: "구치소 수감 중") }
+        else if data.life.isInjured(at: now) { slot = RoutineSlot(activity: "injured", label: "부상 회복 중") }
         return (CharacterLook.make(m, tier: currentTier.rawValue, seed: seed, activity: slot.activity), slot)
     }
 }
@@ -113,9 +115,21 @@ struct CharacterCard: View {
                         Text("\(store.currentTier.emoji) \(store.currentTier.title)의 하루").font(.app(.caption, .semibold)).foregroundStyle(.secondary)
                         Text(c.slot.label).font(.app(.headline, .bold)).accessibilityIdentifier("character-activity")
                         Text(store.now, format: .dateTime.hour().minute()).font(.system(.subheadline, design: .monospaced)).foregroundStyle(.secondary)
-                        Text("옷은 매주 바뀌어요").font(.app(.caption2)).foregroundStyle(.tertiary)
+                        if let h = KoreanHolidays.holiday(on: store.now) {
+                            Text("🎌 \(h.name) · 쉬는 날").font(.app(.caption2, .semibold)).foregroundStyle(.red)
+                        } else if KoreanHolidays.isWeekend(store.now) {
+                            Text("주말").font(.app(.caption2, .semibold)).foregroundStyle(.orange)
+                        } else {
+                            Text("옷은 매주 바뀌어요").font(.app(.caption2)).foregroundStyle(.tertiary)
+                        }
                     }
                     Spacer(minLength: 0)
+                    NavigationLink(value: HomeRoute.schedule) {
+                        Image(systemName: "calendar").font(.app(.title3)).foregroundStyle(store.theme.accent).padding(8)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("오늘의 일정")
+                    .accessibilityIdentifier("character-schedule")
                 }
             }
             .accessibilityElement(children: .contain)   // a container: children keep their own identifiers

@@ -3,7 +3,7 @@ import SwiftUI
 /// Value-based routes for the Home stack. Mixing view-based NavigationLinks with
 /// navigationDestination(for:) makes the view links re-push when the path changes, so everything is a value.
 enum HomeRoute: Hashable {
-    case history(UUID?), life, challenge, report, goals, jobs, job(JobKind)
+    case history(UUID?), life, challenge, report, goals, jobs, job(JobKind), schedule
 }
 
 extension View {
@@ -17,6 +17,7 @@ extension View {
             case .goals: GoalsView()
             case .jobs: JobsHubView()
             case .job(let kind): JobSessionView(kind: kind)
+            case .schedule: DayScheduleView()
             }
         }
         .navigationDestination(for: UUID.self) { AccountDetailView(accountID: $0) }
@@ -241,7 +242,7 @@ struct HomeView: View {
             NavigationLink(value: HomeRoute.jobs) {
                 quickTile(title: "오늘의 알바", symbol: "briefcase.fill", tint: .green,
                           value: store.shiftsLeftToday > 0 ? "\(store.shiftsLeftToday)탕 가능" : "오늘은 끝",
-                          sub: "편의점 · 카페 · 상하차 · 대리 · 과외 · 단타")
+                          sub: "편의점 · 카페 · 스쿠터 · 대리 · 과외 · 단타 · 블랙잭")
             }.buttonStyle(.plain).accessibilityIdentifier("tile-jobs")
         }
     }

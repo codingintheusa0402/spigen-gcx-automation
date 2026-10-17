@@ -55,6 +55,10 @@ final class JobsUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["job-grade"].waitForExistence(timeout: 5) || app.otherElements["job-grade"].exists, "payslip for \(kind)")
         snap("job-\(kind)-payslip")
         app.buttons["job-done"].tap()
+        if app.otherElements["ad-overlay"].waitForExistence(timeout: 1) {      // store build: interstitial every 3rd payslip
+            let close = app.buttons["ad-close"]
+            XCTAssertTrue(close.waitForExistence(timeout: 6)); close.tap()
+        }
         XCTAssertTrue(app.buttons["job-convenience"].waitForExistence(timeout: 5), "back on the hub")
     }
 

@@ -5,12 +5,18 @@ struct VaultlyApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store: BankStore
     @StateObject private var shop = StoreService()
+    @StateObject private var ads = AdService()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
         if CommandLine.arguments.contains("-uitest-reset") { Persistence.reset() }
+        if CommandLine.arguments.contains("-uitest-pro") { StoreService.debugPro = true }
         AppFont.installUIKitAppearance()
         let store = BankStore()
+        if let i = CommandLine.arguments.firstIndex(of: "-uitest-clock"), i + 1 < CommandLine.arguments.count {
+            let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"; f.locale = Locale(identifier: "en_US_POSIX")
+            if let d = f.date(from: CommandLine.arguments[i + 1]) { store.uitestSetClock(d) }
+        }
         if let i = CommandLine.arguments.firstIndex(of: "-uitest-theme"), i + 1 < CommandLine.arguments.count {
             let id = CommandLine.arguments[i + 1]
             store.update { $0.themeID = id }
@@ -23,6 +29,10 @@ struct VaultlyApp: App {
            let tier = WealthTier(rawValue: CommandLine.arguments[i + 1]) {
             store.uitestApplyTier(tier)
         }
+        if let i = CommandLine.arguments.firstIndex(of: "-uitest-lifeevent"), i + 1 < CommandLine.arguments.count,
+           let kind = LifeEventKind(rawValue: CommandLine.arguments[i + 1]) {
+            store.uitestForceLifeEvent(kind)
+        }
         _store = StateObject(wrappedValue: store)
         AppDelegate.store = store
     }
@@ -32,7 +42,8 @@ struct VaultlyApp: App {
             RootView()
                 .environmentObject(store)
                 .environmentObject(shop)
-                .onAppear { store.catchUp() }
+                .environmentObject(ads)
+                .onAppear { ads.isPro = { [weak shop] in shop?.isPro ?? true }; store.catchUp() }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { store.catchUp() }
                 }

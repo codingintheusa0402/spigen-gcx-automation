@@ -22,6 +22,9 @@ final class BankStore: ObservableObject {
     @Published var banner: BannerMessage?
     @Published var notificationsAuthorized = false
     @Published var questResult: QuestResult?       // last answered quest → OutcomeSheet (presented by Home/LifeView)
+    /// The bank exactly as it was before the latest quest answer — "다른 선택으로 되돌리기" (rewarded ad in the Store build).
+    struct UndoPoint { let answerID: UUID; let title: String; let choice: String; let snapshot: BankData }
+    @Published private(set) var undo: UndoPoint?
 
     private var timer: AnyCancellable?
 
@@ -445,7 +448,11 @@ final class BankStore: ObservableObject {
         guard let q = pendingQuest, q.options.indices.contains(optionIndex) else { return nil }
         let opt = q.options[optionIndex]
         let e = opt.effect
+        let before = data
         var d = data
+        if q.id.hasPrefix("illegal_") || (q.category == .temptation && (e.gamble?.loseFine ?? 0) > 0) {
+            d.life.heat += LifeEventEngine.heatPerIllegalChoice          // what eventually gets you arrested
+        }
         let simNow = d.clock.now()
         let cal = Calendar.current
         guard let accID = d.lifestyle.accountID ?? d.accounts.first(where: { $0.kind == .checking })?.id else { return nil }
@@ -512,6 +519,7 @@ final class BankStore: ObservableObject {
         d.game.answers.append(answer)
         d.game.pendingQuestID = nil; d.game.pendingSince = nil; d.game.pendingExpires = nil
         QuestEngine.scheduleNext(from: simNow, tier: d.lifestyle.tier ?? .broke, age: d.game.age(at: simNow), netWorth: QuestEngine.netWorth(d), rng: &rng, data: &d)
+        undo = UndoPoint(answerID: answer.id, title: q.title, choice: opt.title, snapshot: before)
         data = d
         syncNotifications()
         unlockAchievements(now: now)
@@ -538,6 +546,113 @@ final class BankStore: ObservableObject {
         if d.game.birthDate == nil { d.game.birthDate = Calendar.current.date(byAdding: .year, value: -d.game.startAge, to: d.clock.now()) }
         d.game.pendingQuestID = id; d.game.pendingSince = d.clock.now()
         d.game.pendingExpires = Calendar.current.date(byAdding: .day, value: GameState.questWindowDays, to: d.clock.now())
+        data = d
+    }
+
+    /// Only the latest answer can be undone, and only until the next one.
+    var canUndo: Bool {
+        guard let u = undo, !data.game.isEnded else { return false }
+        return data.game.answers.last?.id == u.answerID
+    }
+
+    /// Rewind the whole bank to the moment before the latest answer: the quest comes back, money and flows revert.
+    func undoLastAnswer() {
+        guard canUndo, let u = undo else { return }
+        data = u.snapshot
+        undo = nil
+        questResult = nil
+        syncNotifications()
+        WidgetBridge.publish(store: self)
+        banner = BannerMessage(title: "되돌렸어요", body: "\(String(u.title.prefix(30))) — 다시 선택할 수 있어요.", positive: true)
+    }
+
+    // MARK: Pro
+
+    static let proBonus: Decimal = 10_000_000
+
+    /// Store build: once, when Pro becomes active, credit the bonus game money.
+    func grantProBonusIfNeeded(isPro: Bool) {
+        guard AppVariant.isStore, isPro, !data.settings.proBonusGranted,
+              let acc = data.lifestyle.accountID ?? data.accounts.first(where: { $0.kind == .checking })?.id else { return }
+        var d = data
+        Ledger.apply(amount: Self.proBonus, to: acc, date: d.clock.now(), counterparty: "Vaultly Pro", memo: "Vaultly Pro 보너스",
+                     category: .transfer, tag: SpendingCategory.income.rawValue, data: &d)
+        d.settings.proBonusGranted = true
+        data = d
+        banner = BannerMessage(title: "👑 Vaultly Pro", body: "광고가 사라지고 보너스 게임 머니 \(Money.format(Self.proBonus, code: currency))이 입금됐어요.", positive: true)
+    }
+
+    // MARK: 인생 이벤트 · 오늘의 일정
+
+    var life: LifeEventState { data.life }
+    var isJailed: Bool { data.life.isJailed(at: now) }
+    var isInjured: Bool { data.life.isInjured(at: now) }
+    /// 알바/오락 closed while in jail or recovering from an accident.
+    var jobsClosed: Bool { isJailed || isInjured }
+
+    struct ScheduleEntry: Identifiable {
+        let start: String          // "06:30"
+        let label: String
+        let activityName: String
+        let isNow: Bool
+        var id: String { start }
+    }
+
+    static func activityName(_ a: String) -> String {
+        switch a {
+        case "sleep": return "취침"; case "commute": return "이동"; case "office": return "사무실"; case "store": return "매장"
+        case "eat": return "식사"; case "eat_store": return "편의점"; case "rest": return "휴식"; case "delivery": return "배달"
+        case "manual": return "일용직"; case "hospital": return "병원"; case "lab": return "연구소"; case "cafe": return "카페"
+        case "injured": return "회복"; case "jail": return "구치소"
+        default: return a
+        }
+    }
+
+    /// The character's timetable for `day` (half-hour resolution, merged), honouring 공휴일, 부상, 수감.
+    func schedule(for day: Date) -> [ScheduleEntry] {
+        let cal = Calendar.current
+        let now = self.now
+        let sameDay = cal.isDate(day, inSameDayAs: now)
+        let nowMin = cal.component(.hour, from: now) * 60 + cal.component(.minute, from: now)
+        var slots: [(Int, RoutineSlot)] = []
+        if data.life.isJailed(at: day) {
+            slots = [(360, RoutineSlot(activity: "jail", label: "기상 · 점호")), (420, RoutineSlot(activity: "eat", label: "아침 식사")),
+                     (480, RoutineSlot(activity: "manual", label: "작업")), (720, RoutineSlot(activity: "eat", label: "점심 식사")),
+                     (780, RoutineSlot(activity: "manual", label: "작업")), (1020, RoutineSlot(activity: "eat", label: "저녁 식사")),
+                     (1080, RoutineSlot(activity: "jail", label: "거실 · 운동")), (1260, RoutineSlot(activity: "sleep", label: "취침"))]
+        } else if data.life.isInjured(at: day) {
+            slots = [(480, RoutineSlot(activity: "injured", label: "병원 외래 · 물리치료")), (720, RoutineSlot(activity: "eat", label: "점심")),
+                     (780, RoutineSlot(activity: "injured", label: "집에서 회복")), (1380, RoutineSlot(activity: "sleep", label: "취침"))]
+        } else {
+            let tier = CharacterTier(rawValue: currentTier.rawValue) ?? .broke
+            let workday = KoreanHolidays.isWorkday(day, calendar: cal)
+            let variant = Int(data.lifestyle.seed % 6)
+            var last: RoutineSlot? = nil
+            for i in 0..<48 {
+                let slot = DailyRoutine.slot(tier: tier, hour: i / 2, minute: (i % 2) * 30, workday: workday, variant: variant)
+                if slot != last { slots.append((i * 30, slot)); last = slot }
+            }
+        }
+        return slots.enumerated().map { i, e in
+            let end = i + 1 < slots.count ? slots[i + 1].0 : 24 * 60
+            return ScheduleEntry(start: String(format: "%02d:%02d", e.0 / 60, e.0 % 60), label: e.1.label,
+                                 activityName: Self.activityName(e.1.activity), isNow: sameDay && nowMin >= e.0 && nowMin < end)
+        }
+    }
+
+    /// UI tests: pin simulated time (`-uitest-clock 2026-10-03T10:00:00`, local time).
+    func uitestSetClock(_ date: Date) {
+        var d = data
+        d.clock = SimClock(speed: 1, anchorReal: Date(), anchorVirtual: date)
+        d.lifestyle.lastProcessed = date
+        data = d
+    }
+
+    /// UI tests: make a life event fire on the next catch-up (`-uitest-lifeevent accident`).
+    func uitestForceLifeEvent(_ kind: LifeEventKind) {
+        var d = data
+        d.life.forced = kind
+        d.lifestyle.lastProcessed = min(d.lifestyle.lastProcessed, d.clock.now().addingTimeInterval(-6 * 3600))
         data = d
     }
 

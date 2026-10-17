@@ -55,7 +55,7 @@ struct QuestCard: View {
 
 struct OutcomeSheet: View {
     @EnvironmentObject var store: BankStore
-    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var ads: AdService
     let result: BankStore.QuestResult
     var body: some View {
         VStack(spacing: 16) {
@@ -68,8 +68,39 @@ struct OutcomeSheet: View {
             if !result.text.isEmpty { Text(result.text).font(.app(.subheadline)).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal) }
             if result.delayed { Text("\(result.delayMonths)개월 뒤 결과가 알림으로 옵니다.").font(.app(.caption)).foregroundStyle(.tertiary) }
             Spacer()
-            Button { dismiss() } label: { Text("확인").frame(maxWidth: .infinity).padding(.vertical, 6) }.buttonStyle(.borderedProminent).padding()
+            VStack(spacing: 8) {
+                if store.canUndo {
+                    UndoChoiceButton(prominent: false)
+                }
+                Button {
+                    store.questResult = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { ads.maybeInterstitial(.afterQuest) }
+                } label: { Text("확인").frame(maxWidth: .infinity).padding(.vertical, 6) }.buttonStyle(.borderedProminent)
+            }
+            .padding()
         }
+    }
+}
+
+/// "다른 선택으로 되돌리기": rewinds the latest answer. Store build without Pro → watch a rewarded ad first.
+/// The outcome sheet is closed before the ad so the ad (overlay or SDK) is on top.
+struct UndoChoiceButton: View {
+    @EnvironmentObject var store: BankStore
+    @EnvironmentObject var ads: AdService
+    var prominent = false
+
+    var body: some View {
+        Button {
+            store.questResult = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                ads.showRewarded { earned in if earned { store.undoLastAnswer() } }
+            }
+        } label: {
+            Label(ads.enabled ? "다른 선택으로 되돌리기 · 광고 보기" : "다른 선택으로 되돌리기", systemImage: ads.enabled ? "play.rectangle.fill" : "arrow.uturn.backward")
+                .font(.app(prominent ? .subheadline : .body, .semibold)).frame(maxWidth: .infinity).padding(.vertical, prominent ? 2 : 6)
+        }
+        .buttonStyle(.bordered)
+        .accessibilityIdentifier(prominent ? "timeline-undo" : "quest-undo")
     }
 }
 
@@ -85,6 +116,7 @@ struct LifeView: View {
                 if let q = store.pendingQuest { QuestCard(quest: q) }
                 ladder
                 flows
+                LifeEventTimelineCard()
                 timeline
             }
             .padding()
@@ -223,6 +255,7 @@ struct LifeView: View {
                         Text(a.title).font(.app(.subheadline, .semibold)).lineLimit(2)
                         Text("→ \(a.choice)").font(.app(.caption)).foregroundStyle(store.theme.accent)
                         if let o = a.outcome, !o.isEmpty { Text(o).font(.app(.caption)).foregroundStyle(.secondary) }
+                        if store.canUndo, a.id == store.game.answers.last?.id { UndoChoiceButton(prominent: true).padding(.top, 4) }
                     }
                     Divider()
                 }
