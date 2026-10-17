@@ -336,14 +336,23 @@ function stockFor_(p, snap) {
  * { ts, by: { KEY: { a: [asins], on: 'DE GB', off: 'IT' } } } (KEY as in the inventory snapshot).
  */
 function refreshListingsSnapshot() {
+  try { refreshListingsSnapshot_(); }
+  catch (e) {
+    if (!/→ 429/.test(e.message)) throw e;
+    Logger.log('SP-API quota hit — next run continues: %s', e.message.slice(0, 120));   // getReports refills 1 per 45 s
+  }
+}
+
+function refreshListingsSnapshot_() {
   var since = new Date(Date.now() - 20 * 3600 * 1000).toISOString();
   var window = new Date(Date.now() - 72 * 3600 * 1000).toISOString();
   var reps = [];   // one getReports call per region (quota: burst 10, then 1 per 45 s)
   ['EU', 'FE'].forEach(function (rg) {
-    var mkts = LISTING_MARKETS.filter(function (m) { return m[2] === rg; }).map(function (m) { return m[0]; });
-    reps = reps.concat(spapiRequest_(rg, 'get', '/reports/2021-06-30/reports', 'reportTypes=GET_MERCHANT_LISTINGS_ALL_DATA&marketplaceIds=' +
-      mkts.join(',') + '&pageSize=100&createdSince=' + encodeURIComponent(window)).reports || []);
+    // no marketplaceIds filter (max 10 per call; EU has 13) — matched per marketplace below
+    reps = reps.concat(spapiRequest_(rg, 'get', '/reports/2021-06-30/reports', 'reportTypes=GET_MERCHANT_LISTINGS_ALL_DATA' +
+      '&pageSize=100&createdSince=' + encodeURIComponent(window)).reports || []);
   });
+  if (!reps.length && PropertiesService.getScriptProperties().getProperty(LISTINGS_IDS_PROP)) Logger.log('no listings reports in 72 h');
   reps.sort(function (x, y) { return y.createdTime.localeCompare(x.createdTime); });
   var latest = [];
   LISTING_MARKETS.forEach(function (m) {
