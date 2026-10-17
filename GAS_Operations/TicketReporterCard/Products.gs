@@ -15,7 +15,7 @@
  * Why a snapshot: Amazon seller SKUs are the master SKU plus a channel suffix (ACS08008UKO,
  * ACS08008PAN, ACS08008EUP, ACS08008F, …JPP) or a legacy code (000CG20879PAN), so the inventory
  * API's exact sellerSkus filter can't find them, and paging every SKU in every marketplace takes
- * minutes. refreshInventorySnapshot() (hourly trigger) pulls two FBA reports instead —
+ * minutes. refreshInventorySnapshot() (hourly trigger) reads two FBA reports instead —
  * GET_AFN_INVENTORY_DATA_BY_COUNTRY (EU, per country) and GET_AFN_INVENTORY_DATA (JP) — and folds
  * them by master SKU (or ASIN for legacy codes) into the script cache + the InventorySnapshot tab
  * of the queue spreadsheet. A Chat reply must come back within ~30 s, so the command only reads it.
@@ -187,33 +187,35 @@ function deviceSet_(d) {
 /* ===================== Inventory snapshot ===================== */
 
 /**
- * Trigger target (hourly). Requests both FBA inventory reports, waits for them (≈1–2 min), and
- * stores { ts, by: { KEY: { c: {DE: n, …, JP: n}, a: [asins] } } } where KEY = master SKU
- * (seller SKU's leading AAA00000) or "ASIN:<asin>" for legacy seller SKUs. Also refreshes the
- * master index cache so Chat users never wait on the 15k-row sheet read.
+ * Trigger target (hourly). Never waits on Amazon: for each FBA inventory report type it folds the
+ * newest DONE report (normally the one the previous run requested) and then requests a fresh one
+ * for the next run, unless one is already queued. Stores { ts, by: { KEY: { c: {DE: n, …, JP: n},
+ * a: [asins] } } } where KEY = master SKU (seller SKU's leading AAA00000) or "ASIN:<asin>" for
+ * legacy seller SKUs, and refreshes the master index cache so Chat users never wait on the
+ * 15k-row sheet read. (A first version polled inside one run; the EU report took > 4.5 min.)
  */
 function refreshInventorySnapshot() {
-  var started = INVENTORY_REPORTS.map(function (r) {
-    var res = spapiRequest_(r.region, 'post', '/reports/2021-06-30/reports', null, { reportType: r.type, marketplaceIds: [r.marketplace] });
-    return { cfg: r, id: res.reportId };
+  var by = {}, times = [];
+  INVENTORY_REPORTS.forEach(function (cfg) {
+    var q = 'reportTypes=' + cfg.type + '&marketplaceIds=' + cfg.marketplace + '&pageSize=10';
+    var done = (spapiRequest_(cfg.region, 'get', '/reports/2021-06-30/reports', q + '&processingStatuses=DONE').reports || [])
+      .sort(function (x, y) { return y.createdTime.localeCompare(x.createdTime); })[0];
+    if (done) {
+      foldInventoryReport_(by, cfg, downloadReport_(cfg.region, done.reportDocumentId));
+      times.push(done.createdTime);
+    }
+    var queued = spapiRequest_(cfg.region, 'get', '/reports/2021-06-30/reports', q + '&processingStatuses=IN_QUEUE,IN_PROGRESS').reports || [];
+    if (!queued.length) {
+      try { spapiRequest_(cfg.region, 'post', '/reports/2021-06-30/reports', null, { reportType: cfg.type, marketplaceIds: [cfg.marketplace] }); }
+      catch (e) { Logger.log('report request skipped (next run retries): %s', e.message); }   // createReport quota ≈ 1/min
+    }
   });
-  var by = {}, done = 0, deadline = Date.now() + 4.5 * 60 * 1000;
-  while (done < started.length && Date.now() < deadline) {
-    Utilities.sleep(15000);
-    started.forEach(function (s) {
-      if (s.finished) return;
-      var st = spapiRequest_(s.cfg.region, 'get', '/reports/2021-06-30/reports/' + s.id);
-      if (st.processingStatus === 'DONE') {
-        foldInventoryReport_(by, s.cfg, downloadReport_(s.cfg.region, st.reportDocumentId));
-        s.finished = true; done++;
-      } else if (st.processingStatus === 'CANCELLED' || st.processingStatus === 'FATAL') {
-        throw new Error(s.cfg.type + ' ' + st.processingStatus);
-      }
-    });
+  if (times.length < INVENTORY_REPORTS.length) {
+    Logger.log('no finished report yet for every type — requested; snapshot left as is');
+    return;
   }
-  if (done < started.length) throw new Error('inventory reports not ready after 4.5 min');
 
-  var snap = { ts: new Date().toISOString(), by: by };
+  var snap = { ts: times.sort()[0], by: by };   // oldest of the two reports = how fresh the numbers are
   var json = JSON.stringify(snap);
   cachePutChunked_(INVENTORY_CACHE, json, 6 * 3600);
   var id = PropertiesService.getScriptProperties().getProperty(QUEUE_SHEET_PROP);
@@ -226,7 +228,7 @@ function refreshInventorySnapshot() {
     sh.getRange(1, 1, rows.length, 1).setValues(rows);
   }
   buildProductIndex_();
-  Logger.log('inventory snapshot: %s keys, %s chars', Object.keys(by).length, json.length);
+  Logger.log('inventory snapshot as of %s: %s keys, %s chars', snap.ts, Object.keys(by).length, json.length);
 }
 
 function foldInventoryReport_(by, cfg, rows) {
