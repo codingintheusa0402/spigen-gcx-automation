@@ -21,6 +21,7 @@ note, with a per-sender confirmer code appended automatically.
 | File | Purpose |
 |------|---------|
 | `Code.gs` | Event handlers (`onMessage`, `onCardClick`), card building, Zendesk API calls, Sheet-based thread↔ticket mapping |
+| `Products.gs` | `/products` + `/products-similar` lookup cards, hourly FBA inventory snapshot (`refreshInventorySnapshot`) |
 | `Config.gs` | Zendesk subdomain, Script Property keys, `TicketQueue` tab names, TCT log sheet ID/columns, `CONFIRMERS` dropdown list, `CONFIRMER_BY_EMAIL` map, the 43-item `REFERENCE_PHRASES` list |
 | `appsscript.json` | GAS manifest — add-on style Chat app (`addOns.chat`), scopes `spreadsheets` + `script.external_request` |
 
@@ -30,6 +31,7 @@ note, with a per-sender confirmer code appended automatically.
 |-----------------|---------|
 | `ZENDESK_EMAIL` | Zendesk API user |
 | `ZENDESK_API_TOKEN` | Zendesk API token (never in code) |
+| `LWA_CLIENT_ID` / `LWA_CLIENT_SECRET` / `LWA_REFRESH_TOKEN` (+ `_JP`) | SP-API creds — copied verbatim from the MCF_Tracking project's Script Properties (2026-10-17) |
 | `QUEUE_SHEET_ID` | file ID of the `TicketQueue` spreadsheet — `setupOnce()` creates it and stores the ID if unset |
 
 Tabs in the queue spreadsheet: `TicketQueue` (ticketId ↔ threadId + submission log),
@@ -126,6 +128,21 @@ already-running Claude Code `/loop` on the server — which checks `BtwQueue` ev
 monitor's normal cadence rather than instantly — worst case ~5 minutes during business hours.
 
 ---
+
+### 6. `/products <검색어>` and `/products-similar <검색어>` → product lookup
+`@Ticket Reporter /products ACS08008` (or an ASIN, or keywords like `iPhone 17 Pro Ultra Hybrid`) searches
+SKU_Master(먼데이보드) + ASIN_Master(먼데이보드) and returns up to 8 products (most FBA stock first) with an
+Amazon thumbnail (Catalog API, DE → UK) and FBA sellable stock per country. `/products-similar` takes the
+first match's 기종 and lists up to 11 other SKUs for the same device (multi-device values like
+`iPhone 18 Pro Max/17 Pro Max` match on any device), in-stock first.
+
+Stock comes from an **hourly snapshot**, not a live call: seller SKUs carry channel suffixes
+(`…UKO`, `…PAN`, `…EUP`, `…F`, `…JPP`) or legacy `000…` codes, so the inventory API's exact
+`sellerSkus` filter finds nothing. `refreshInventorySnapshot` (time trigger, every hour) folds the newest
+finished `GET_AFN_INVENTORY_DATA_BY_COUNTRY` (EU) and `GET_AFN_INVENTORY_DATA` (JP) reports by master SKU
+(or ASIN for legacy codes) into the script cache + the `InventorySnapshot` tab, then requests the next
+report — it never waits on Amazon. The MCF creds reach EU + JP only: **NA returns 403**, and the JP app
+has no Catalog role.
 
 ## Known hard limitation
 
