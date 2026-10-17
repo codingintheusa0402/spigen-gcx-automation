@@ -1,0 +1,41 @@
+import SwiftUI
+
+@main
+struct VaultlyApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @StateObject private var store: BankStore
+    @StateObject private var shop = StoreService()
+    @Environment(\.scenePhase) private var scenePhase
+
+    init() {
+        if CommandLine.arguments.contains("-uitest-reset") { Persistence.reset() }
+        AppFont.installUIKitAppearance()
+        let store = BankStore()
+        if let i = CommandLine.arguments.firstIndex(of: "-uitest-theme"), i + 1 < CommandLine.arguments.count {
+            let id = CommandLine.arguments[i + 1]
+            store.update { $0.themeID = id }
+        }
+        if let i = CommandLine.arguments.firstIndex(of: "-uitest-quest"), i + 1 < CommandLine.arguments.count {
+            store.update { $0.hasOnboarded = true }
+            store.forcePendingQuest(CommandLine.arguments[i + 1])
+        }
+        if let i = CommandLine.arguments.firstIndex(of: "-uitest-tier"), i + 1 < CommandLine.arguments.count,
+           let tier = WealthTier(rawValue: CommandLine.arguments[i + 1]) {
+            store.uitestApplyTier(tier)
+        }
+        _store = StateObject(wrappedValue: store)
+        AppDelegate.store = store
+    }
+
+    var body: some Scene {
+        WindowGroup {
+            RootView()
+                .environmentObject(store)
+                .environmentObject(shop)
+                .onAppear { store.catchUp() }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active { store.catchUp() }
+                }
+        }
+    }
+}

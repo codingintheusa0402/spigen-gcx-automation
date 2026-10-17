@@ -1,0 +1,45 @@
+{
+  "identifier" : "VAULTLY_STOREKIT",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "9900",
+      "familyShareable" : false,
+      "internalID" : "PRO_LIFETIME",
+      "localizations" : [
+        { "description" : "모든 테마·시나리오·가속·위젯을 평생 사용", "displayName" : "Vaultly Pro (평생)", "locale" : "ko_KR" }
+      ],
+      "productID" : "com.kevinkim.vaultly.pro",
+      "referenceName" : "Pro Lifetime",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : { "_applicationInternalID" : "0", "_developerTeamID" : "6Z44CDGL2Q", "_lastSynced" : 0, "_locale" : "ko_KR", "_storefront" : "KOR" },
+  "subscriptionGroups" : [
+    {
+      "id" : "PRO_GROUP",
+      "localizations" : [],
+      "name" : "Vaultly Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "1900",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "PRO_MONTHLY",
+          "introductoryOffer" : null,
+          "localizations" : [
+            { "description" : "모든 테마·시나리오·가속·위젯", "displayName" : "Vaultly Pro (월)", "locale" : "ko_KR" }
+          ],
+          "productID" : "com.kevinkim.vaultly.pro.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Pro Monthly",
+          "subscriptionGroupID" : "PRO_GROUP",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : { "major" : 3, "minor" : 0 }
+}

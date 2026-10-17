@@ -1,0 +1,130 @@
+name: Vaultly
+options:
+  bundleIdPrefix: com.kevinkim
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "15.0"
+configs:
+  Debug: debug
+  Release: release
+  Store: release          # App Store variant: fictional brands only, Pro gating, simulator wording
+settings:
+  base:
+    DEVELOPMENT_TEAM: 6Z44CDGL2Q
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.1.0"
+    CURRENT_PROJECT_VERSION: "2"
+    VAULTLY_DISPLAY_NAME: Vaultly
+  configs:
+    Store:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: STORE
+      VAULTLY_DISPLAY_NAME: Vaultly 시뮬레이터
+targets:
+  Vaultly:
+    type: application
+    platform: iOS
+    sources: [Vaultly]
+    dependencies:
+      - target: VaultlyWidget
+    entitlements:
+      path: Vaultly/Vaultly.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.kevinkim.vaultly]
+    info:
+      path: Vaultly/Info.plist
+      properties:
+        CFBundleDisplayName: $(VAULTLY_DISPLAY_NAME)
+        CFBundleShortVersionString: $(MARKETING_VERSION)   # XcodeGen otherwise writes 1.0 / 1
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UIBackgroundModes: []
+        NSSupportsLiveActivities: true
+        NSUserNotificationsUsageDescription: 예약한 가상 입금 알림을 보내기 위해 알림 권한이 필요합니다.
+        NSFaceIDUsageDescription: 앱 잠금을 해제하기 위해 Face ID를 사용합니다.
+        UIAppFonts: [Pretendard-Regular.otf, Pretendard-Medium.otf, Pretendard-SemiBold.otf, Pretendard-Bold.otf, Pretendard-ExtraBold.otf]
+        ITSAppUsesNonExemptEncryption: false
+        LSApplicationCategoryType: public.app-category.simulation-games   # listed as Games > Simulation
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kevinkim.vaultly
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+  VaultlyWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - VaultlyWidget
+      - Vaultly/Shared
+      - Vaultly/Theme/AppFont.swift
+      - path: Vaultly/Fonts
+        type: folder
+        buildPhase: resources
+    entitlements:
+      path: VaultlyWidget/VaultlyWidget.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.kevinkim.vaultly]
+    info:
+      path: VaultlyWidget/Info.plist
+      properties:
+        CFBundleDisplayName: Vaultly
+        CFBundleShortVersionString: $(MARKETING_VERSION)   # XcodeGen otherwise writes 1.0 / 1
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        UIAppFonts: [Pretendard-Regular.otf, Pretendard-Medium.otf, Pretendard-SemiBold.otf, Pretendard-Bold.otf, Pretendard-ExtraBold.otf]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kevinkim.vaultly.widget
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
+  VaultlyTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [VaultlyTests]
+    dependencies:
+      - target: Vaultly
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kevinkim.vaultly.tests
+        GENERATE_INFOPLIST_FILE: YES
+  VaultlyUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [VaultlyUITests]
+    dependencies:
+      - target: Vaultly
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kevinkim.vaultly.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Vaultly
+schemes:
+  Vaultly:
+    build:
+      targets:
+        Vaultly: all
+        VaultlyWidget: all
+        VaultlyTests: [test]
+        VaultlyUITests: [test]
+    run:
+      config: Debug
+      storeKitConfiguration: Vaultly/Vaultly.storekit
+    test:
+      config: Debug
+      targets: [VaultlyTests, VaultlyUITests]
+  Vaultly-Store:
+    build:
+      targets:
+        Vaultly: all
+        VaultlyWidget: all
+        VaultlyUITests: [test]
+    run:
+      config: Store
+      storeKitConfiguration: Vaultly/Vaultly.storekit
+    test:
+      config: Store              # the App Store build itself, walked through by the UI tests (scripts/qa.sh)
+      targets: [VaultlyUITests]
+    archive:
+      config: Store
