@@ -118,6 +118,7 @@ struct CharacterCard: View {
                     Spacer(minLength: 0)
                 }
             }
+            .accessibilityElement(children: .contain)   // a container: children keep their own identifiers
             .accessibilityIdentifier("character-card")
         }
     }

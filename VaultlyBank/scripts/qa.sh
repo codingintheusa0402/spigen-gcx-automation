@@ -10,7 +10,15 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 RUN="build/qa/$(date +%Y%m%d-%H%M%S)"; mkdir -p "$RUN"
 REPORT="$RUN/REPORT.md"
-DEST="${QA_DESTINATION:-platform=iOS Simulator,name=iPhone 16,OS=latest}"
+# simulator: $QA_DESTINATION, else the first available of iPhone 16 / 17 / 15 Pro / any iPhone (differs per Mac)
+pick_sim() {
+  local list; list=$(xcrun simctl list devices available 2>/dev/null)
+  for n in "iPhone 16" "iPhone 17" "iPhone 15 Pro" "iPhone[^(]*"; do
+    local hit; hit=$(echo "$list" | grep -E "^ +$n \(" | head -1 | sed -E 's/^ +(.*) \([0-9A-F-]{36}\).*/\1/')
+    [ -n "$hit" ] && { echo "$hit"; return; }
+  done
+}
+DEST="${QA_DESTINATION:-platform=iOS Simulator,name=$(pick_sim),OS=latest}"
 SCHEMES=("Vaultly" "Vaultly-Store"); [ "${1:-}" = "--fast" ] && SCHEMES=("Vaultly")
 fail=0
 echo "# Vaultly QA — $(date '+%Y-%m-%d %H:%M') · $(git rev-parse --short HEAD 2>/dev/null)" > "$REPORT"
@@ -31,12 +39,17 @@ for S in "${SCHEMES[@]}"; do
   mkdir -p "$RUN/$S"
   xcrun xcresulttool export attachments --path "$R" --output-path "$RUN/$S" >/dev/null 2>&1 || true
   shots=$(find "$RUN/$S" -name '*.png' -o -name '*.jpeg' 2>/dev/null | wc -l | tr -d ' ')
-  summary=$(xcrun xcresulttool get test-results summary --path "$R" 2>/dev/null | python3 -c '
+  summary=$(xcrun xcresulttool get test-results summary --path "$R" 2>/dev/null | python3 -c "$(cat <<'PY'
 import sys, json
 try:
-    d = json.load(sys.stdin); print(f"{d.get(\"passedTests\",0)} passed · {d.get(\"failedTests\",0)} failed · {d.get(\"skippedTests\",0)} skipped")
-    for f in d.get("testFailures", [])[:20]: print(f"  - ❌ {f.get(\"testName\")}: {f.get(\"failureText\",\"\")[:200]}")
-except Exception: print("no test summary (build failed?)")')
+    d = json.load(sys.stdin)
+    print(f"{d.get('passedTests', 0)} passed · {d.get('failedTests', 0)} failed · {d.get('skippedTests', 0)} skipped")
+    for f in d.get('testFailures', [])[:20]:
+        print(f"  - ❌ {f.get('testName')}: {(f.get('failureText') or '')[:200]}")
+except Exception:
+    print('no test summary (build failed?)')
+PY
+)")
   if [ $code -eq 0 ]; then echo "## ✅ $S" >> "$REPORT"; else echo "## ❌ $S (exit $code)" >> "$REPORT"; fail=1
     grep -E "error:|failed" "$RUN/$S.log" | head -20 | sed 's/^/    /' >> "$REPORT"; fi
   echo "$summary" >> "$REPORT"

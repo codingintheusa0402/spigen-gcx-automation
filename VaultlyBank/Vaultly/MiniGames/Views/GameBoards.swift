@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 // The eight job boards. Each owns its game state, draws it, forwards taps, and reports the result once.
 // The rules live in MiniGames/Core (unit-tested); nothing here decides an outcome.

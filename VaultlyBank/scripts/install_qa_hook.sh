@@ -2,7 +2,7 @@
 # Installs a git pre-push hook: any push containing Vaultly changes runs scripts/qa.sh (both builds) first and is
 # refused if it fails. Also refuses pushing Vaultly to any remote that isn't the personal codingintheusa0402 account.
 set -e
-ROOT=$(git rev-parse --show-toplevel); HOOK="$ROOT/.git/hooks/pre-push"
+ROOT=$(git rev-parse --show-toplevel); HOOKS=$(git rev-parse --git-path hooks); mkdir -p "$HOOKS"; HOOK="$HOOKS/pre-push"   # git-path: works in worktrees too
 REL=$(python3 -c "import os,sys;print(os.path.relpath(sys.argv[1],sys.argv[2]))" "$(cd "$(dirname "$0")/.." && pwd)" "$ROOT")
 PAT="^${REL}/"; [ "$REL" = "." ] && PAT="."      # Vaultly in its own repo: every change counts
 cat > "$HOOK" <<H

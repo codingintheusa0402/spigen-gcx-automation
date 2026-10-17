@@ -17,6 +17,10 @@ final class SmokeTests: XCTestCase {
         add(a)
     }
 
+    /// The App Store build (STORE flag) tiles a "모의 · 가상 자산" watermark over every screen and hides direct
+    /// balance editing and hand-made scheduled deposits — the tests below branch on it.
+    private var isStoreBuild: Bool { app.staticTexts["모의 · 가상 자산"].firstMatch.exists }
+
     private func allowNotificationsIfAsked() {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let allow = springboard.buttons.matching(NSPredicate(format: "label IN %@", ["Allow", "허용"])).firstMatch
@@ -44,6 +48,11 @@ final class SmokeTests: XCTestCase {
                           "tab \(tab) should show '\(expect)'")
             snap("tab-\(tab)")
         }
+        // the version row at the bottom of 설정 must show the real marketing version + build, not XcodeGen's 1.0 (1)
+        let version = app.staticTexts["1.1.0 (2)"]
+        for _ in 0..<8 where !version.exists { app.swipeUp() }
+        XCTAssertTrue(version.exists, "설정 shows version 1.1.0 (2)")
+        snap("settings-version")
     }
 
     func testChallengeLogAndReport() {
@@ -60,8 +69,9 @@ final class SmokeTests: XCTestCase {
         resist.tap()
         XCTAssertTrue(app.navigationBars["참았다!"].waitForExistence(timeout: 5))
         app.buttons["기록"].tap()
-        XCTAssertTrue(app.staticTexts["참은 돈 계좌에 입금됐어요"].waitForExistence(timeout: 5))
+        _ = app.staticTexts["참은 돈 계좌에 입금됐어요"].waitForExistence(timeout: 2)   // success overlay auto-dismisses after 1.2 s
         XCTAssertTrue(app.staticTexts["🔥 연속"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH '+'")).firstMatch.exists, "logged entry listed with its amount")
         snap("challenge-logged")
         let trophy = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH '🏆'")).firstMatch
         if trophy.exists { trophy.tap() }   // achievement banner overlays the back button
@@ -131,7 +141,12 @@ final class SmokeTests: XCTestCase {
         let firstAccount = app.buttons.matching(NSPredicate(format: "label CONTAINS '입출금통장' AND label CONTAINS '₩'")).firstMatch
         XCTAssertTrue(firstAccount.waitForExistence(timeout: 5), "an account tile with a ₩ balance should exist")
         firstAccount.tap()
-        XCTAssertTrue(app.buttons["잔액 설정"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["기간·분류별 보기"].waitForExistence(timeout: 5))
+        if isStoreBuild {
+            XCTAssertFalse(app.buttons["잔액 설정"].exists, "Store build must not offer manual balance editing")
+        } else {
+            XCTAssertTrue(app.buttons["잔액 설정"].exists)
+        }
         snap("account-detail")
     }
 }
@@ -143,6 +158,10 @@ extension SmokeTests {
         allowNotificationsIfAsked()
         app.tabBars.firstMatch.buttons["예약 알림"].tap()
         XCTAssertTrue(app.staticTexts["예약된 알림이 없습니다"].waitForExistence(timeout: 5))
+        if isStoreBuild {   // no hand-made deposits in the Store build: the add button must be gone
+            XCTAssertEqual(app.navigationBars["예약 알림"].buttons.count, 0, "Store build must not offer manual scheduled deposits")
+            snap("schedule-list-store"); return
+        }
 
         app.navigationBars["예약 알림"].buttons.element(boundBy: app.navigationBars["예약 알림"].buttons.count - 1).tap()
         XCTAssertTrue(app.navigationBars["알림 예약"].waitForExistence(timeout: 5))
