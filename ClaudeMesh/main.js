@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, Notification, shell, clipboard, scr
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
-const { execFile } = require('child_process');
+const { execFile, execFileSync } = require('child_process');
 const pty = require('node-pty');
 const { Collector } = require('./collector');
 const { EventEmitter } = require('events');
@@ -165,6 +165,40 @@ function osa(lines) {
 }
 const asStr = s => '"' + String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
 
+// Sessions hosted in a tmux pane (the mini keeps every Claude session in tmux gcx:*) have a tty but no
+// Terminal.app tab: type into the pane with send-keys instead. Looked up by tty on every call (panes come and go).
+const TMUX = ['/opt/homebrew/bin/tmux', '/usr/local/bin/tmux'].find(p => fs.existsSync(p)) || 'tmux';
+function tmuxPaneForTty(tty) {
+  if (!tty) return null;
+  try {
+    for (const l of execFileSync(TMUX, ['list-panes', '-a', '-F', '#{pane_id}\t#{pane_tty}'], { timeout: 5000 }).toString().split('\n')) {
+      const [id, t] = l.split('\t'); if (t === tty) return id;
+    }
+  } catch { }
+  return null;
+}
+function tmuxKeys(pane, ...args) {
+  try { execFileSync(TMUX, ['send-keys', '-t', pane, ...args], { timeout: 5000 }); return { ok: true, out: 'tmux' }; }
+  catch (e) { return { ok: false, err: String(e.message || e) }; }
+}
+// External session by tty: tmux pane if it has one, else the Terminal.app tab (osascript 'notfound' when neither).
+function extSend(tty, text) {
+  const clean = String(text).replace(/\r?\n/g, ' ');
+  const pane = tmuxPaneForTty(tty);
+  if (!pane) return osa(terminalTabScript(tty, [`do script ${asStr(clean)} in t`]));
+  const r = tmuxKeys(pane, '-l', clean);
+  if (r.ok) setTimeout(() => tmuxKeys(pane, 'Enter'), 60);          // Enter after the text settles, like ctlSend
+  return r;
+}
+function extInterrupt(tty) {
+  const pane = tmuxPaneForTty(tty);
+  return pane ? tmuxKeys(pane, 'Escape') : osa(terminalTabScript(tty, ['do script (ASCII character 27) in t']));
+}
+function extFocus(tty) {
+  if (tmuxPaneForTty(tty)) return { ok: true, out: 'tmux' };          // nothing to bring forward for a tmux pane
+  return osa(terminalTabScript(tty, ['set selected of t to true', 'set index of w to 1', 'activate']));
+}
+
 function terminalTabScript(tty, body) {
   return ['tell application "Terminal"',
     'repeat with w in windows', 'repeat with t in tabs of w',
@@ -173,14 +207,9 @@ function terminalTabScript(tty, body) {
 }
 
 // Typing into the external session: Terminal "do script" types the text then CR (= Enter).
-ipcMain.handle('ext:send', async (_e, tty, text) => {
-  const clean = String(text).replace(/\r?\n/g, ' ');
-  return osa(terminalTabScript(tty, [`do script ${asStr(clean)} in t`]));
-});
-ipcMain.handle('ext:interrupt', async (_e, tty) =>
-  osa(terminalTabScript(tty, ['do script (ASCII character 27) in t'])));
-ipcMain.handle('ext:focus', async (_e, tty) =>
-  osa(terminalTabScript(tty, ['set selected of t to true', 'set index of w to 1', 'activate'])));
+ipcMain.handle('ext:send', async (_e, tty, text) => extSend(tty, text));
+ipcMain.handle('ext:interrupt', async (_e, tty) => extInterrupt(tty));
+ipcMain.handle('ext:focus', async (_e, tty) => extFocus(tty));
 
 // Write to an in-app session (owned pty) by id
 function ctlSend(ptyId, text, submit) {
@@ -196,13 +225,13 @@ const liveSession = sid => lastSnap && lastSnap.sessions.find(s => s.sid === sid
 async function sendToSession(sid, text) {
   const s = liveSession(sid); if (!s) return { ok: false, err: 'session is not running' };
   if (s.owner) return ctlSend(s.owner, text, true);
-  if (s.tty && s.kind !== 'bg') return osa(terminalTabScript(s.tty, [`do script ${asStr(String(text).replace(/\r?\n/g, ' '))} in t`]));
+  if (s.tty && s.kind !== 'bg') return extSend(s.tty, text);
   return { ok: false, err: 'background session — view only' };
 }
 async function interruptSession(sid) {
   const s = liveSession(sid); if (!s) return { ok: false };
   if (s.owner) { const p = ptys.get(s.owner); if (p) p.proc.write('\x1b'); return { ok: true }; }
-  if (s.tty) return osa(terminalTabScript(s.tty, ['do script (ASCII character 27) in t']));
+  if (s.tty) return extInterrupt(s.tty);
   return { ok: false };
 }
 
