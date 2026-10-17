@@ -21,7 +21,8 @@ note, with a per-sender confirmer code appended automatically.
 | File | Purpose |
 |------|---------|
 | `Code.gs` | Event handlers (`onMessage`, `onCardClick`), card building, Zendesk API calls, Sheet-based thread↔ticket mapping |
-| `Products.gs` | `/products` + `/products-similar` lookup cards, hourly FBA inventory snapshot (`refreshInventorySnapshot`) |
+| `Products.gs` | `/products` + `/products-similar` cards, product index (+ `ProductIndex` tab), FBA / listings snapshots |
+| `ProductSearch.gs` | query parsing: identifiers, 기종 → devices, category / brand words, typo-tolerant matching, same-device search |
 | `Config.gs` | Zendesk subdomain, Script Property keys, `TicketQueue` tab names, TCT log sheet ID/columns, `CONFIRMERS` dropdown list, `CONFIRMER_BY_EMAIL` map, the 43-item `REFERENCE_PHRASES` list |
 | `appsscript.json` | GAS manifest — add-on style Chat app (`addOns.chat`), scopes `spreadsheets` + `script.external_request` |
 
@@ -130,14 +131,32 @@ monitor's normal cadence rather than instantly — worst case ~5 minutes during 
 ---
 
 ### 6. `/products <검색어>` and `/products-similar <검색어>` → product lookup
-`@Ticket Reporter /products ACS08008` searches SKU_Master(먼데이보드) + ASIN_Master(먼데이보드) with **exact
-matching** (2026-10-18): a SKU / ASIN / EAN must match exactly; free text is split into a device — the longest
-known 기종 named as whole words, so `iPhone 17 Pro` never pulls in 17 Pro Max or 11 Pro — and the rest, which
-must equal a model name (`Ultra Hybrid`) or appear as whole words. Up to 8 products, most FBA stock first,
-with an Amazon thumbnail (Catalog API, DE → UK) and FBA sellable stock per country.
-`/products-similar X` (also `/products -similar X` / `--similar`) lists every product for the same device —
-the device named in X (`/products -similar iPhone 17 Pro`), or the device of the exactly matched product
-(any of its devices when 기종 lists several, e.g. `iPhone 18 Pro Max/17 Pro Max`), in-stock first, top 11.
+Matching lives in `ProductSearch.gs` (designed from a pass over the full SKU master + ASIN master, 2026-10-18).
+
+| Input | Example | Result |
+|---|---|---|
+| SKU / seller SKU / several | `ACS08008`, `acs08008uko`, `ACS08008PAN, AGL08863JPP`, `000CG20879` | exact; channel suffixes and `amzn.gr.` stripped |
+| ASIN / Amazon URL / EAN·UPC | `B0BYMJ3M29`, `https://www.amazon.de/dp/B0…`, `8809971237574` | exact |
+| device [+ model] [+ colour] | `iPhone 17 Pro Ultra Hybrid Matte Black`, `아이폰 17 프로 울하` | exact model+colour tier when one exists, else every word must appear |
+| typos / forms | `ipone 17 pro`, `iphnoe`, `iPhone17Pro`, `galaxy s26+` = `s26 plus` | numbers must match exactly |
+
+`/products-similar X` (also `/products -similar X`, `--similar`) = everything for the same device:
+- `-similar iPhone 17 Pro` → all 328 compatible products; add **category words** to narrow: `case`,
+  `screen protector`/`SP`/`CP`/`glass` (보호필름), `camera`/`optik`, `SDA` (담당부서코드 A003), `band`,
+  `charger`, `cable`, `battery`, `mount`, `car`, `audio`, `wallet`; a brand (`caseology`, `cyrill`…) too.
+- `-similar ACS10066` → **same-kind substitutes** (a case → other cases for its device, in stock first); add
+  `all`/`전체` for every category. A 42 mm watch case's substitutes are 42 mm or size-free, never 46 mm.
+- The command may be on **any line**: a confirmer's thread reply like `1. 예상 답변 진행 / 비고: … /
+  /products-similar ACS…` gets the substitute card, and the rest is still filed as the thread's internal
+  note (command line removed) — both in one reply (`mergeReplies_`).
+
+기종 parsing (`deviceSet_`) handles multi-device values (`iPhone 18 Pro Max/17 Pro Max`, `Galaxy Watch
+Ultra2/Ultra`, `iPhone SE(2022/2020)/8/7`), slashes inside parentheses as alternatives (`iPad mini
+(2024/2021)`), and size/year qualifiers as optional (`ipad mini` = every year, `ipad mini 2024` narrows).
+The ASIN master's ASIN column is junk on ~⅓ of rows (`B`, monday ids) — only `B0…` values are used.
+
+Each card: thumbnail (Catalog API, DE → UK), ASINs, `🏷️` Seller Central listing state per country,
+`📦` FBA sellable stock per country.
 
 Stock comes from an **hourly snapshot**, not a live call: seller SKUs carry channel suffixes
 (`…UKO`, `…PAN`, `…EUP`, `…F`, `…JPP`) or legacy `000…` codes, so the inventory API's exact
