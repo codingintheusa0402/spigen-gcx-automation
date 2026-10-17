@@ -5,6 +5,7 @@ LOG="$HOME/Vaultly-install.log"
 cd "$(dirname "$0")/.."
 {
   echo "=== $(date) start"
+  [ $# -eq 0 ] && set -- 00008140-001804AE3C91401C   # default: Kevin's iPhone 16 Pro (open -a Terminal passes no args)
   ./scripts/install_device.sh "$@"
   echo "=== $(date) exit=$?"
 } > "$LOG" 2>&1
