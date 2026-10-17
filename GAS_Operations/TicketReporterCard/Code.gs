@@ -69,6 +69,17 @@ function onMessage(event) {
     return handleBtwQuestion_(trimmed.replace(/^\/btw\s*/i, ''), event);
   }
 
+  // `/products <검색어>` / `/products-similar <검색어>` — SKU master + ASIN master + SP-API FBA
+  // inventory lookup card (사용자 지시 2026-10-17, see Products.gs). Checked before the thread
+  // mapping and the ticket-number regex: a SKU/ASIN query is never a ticket reference, even
+  // when typed inside a mapped report thread. "-similar" first, since /products\b matches it too.
+  if (/^\/products-similar\b/i.test(trimmed)) {
+    return handleProductsCommand_(trimmed.replace(/^\/products-similar\s*/i, ''), true);
+  }
+  if (/^\/products\b/i.test(trimmed)) {
+    return handleProductsCommand_(trimmed.replace(/^\/products\s*/i, ''), false);
+  }
+
   // Thread-reply direct-post path: a reply inside a thread the monitor already mapped to a
   // ticket (see lookupTicketByThread_) is treated as the internal-note content itself — no
   // card round-trip needed. This is how a human replies under an auto-sent static report and
