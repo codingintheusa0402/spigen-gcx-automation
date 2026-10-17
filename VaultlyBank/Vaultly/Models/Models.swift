@@ -265,6 +265,7 @@ struct BankData: Codable, Equatable {
     var goals: [SavingsGoal] = []
     var achievements: [String: Date] = [:]
     var game = GameState()
+    var jobs = JobsState()             // 알바 mini games: plays, bests, today's shifts
 
     init() {}
 
@@ -282,6 +283,7 @@ struct BankData: Codable, Equatable {
         goals = try c.decodeIfPresent([SavingsGoal].self, forKey: .goals) ?? []
         achievements = try c.decodeIfPresent([String: Date].self, forKey: .achievements) ?? [:]
         game = try c.decodeIfPresent(GameState.self, forKey: .game) ?? GameState()
+        jobs = try c.decodeIfPresent(JobsState.self, forKey: .jobs) ?? JobsState()
     }
 
     static func starter() -> BankData {

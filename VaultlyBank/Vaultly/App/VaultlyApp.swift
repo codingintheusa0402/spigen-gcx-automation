@@ -19,6 +19,10 @@ struct VaultlyApp: App {
             store.update { $0.hasOnboarded = true }
             store.forcePendingQuest(CommandLine.arguments[i + 1])
         }
+        if let i = CommandLine.arguments.firstIndex(of: "-uitest-tier"), i + 1 < CommandLine.arguments.count,
+           let tier = WealthTier(rawValue: CommandLine.arguments[i + 1]) {
+            store.uitestApplyTier(tier)
+        }
         _store = StateObject(wrappedValue: store)
         AppDelegate.store = store
     }

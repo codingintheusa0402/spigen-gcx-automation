@@ -299,6 +299,15 @@ final class BankStore: ObservableObject {
         data = d
     }
 
+    /// UI tests only (`-uitest-tier middle`): skip onboarding, unlock the tier and live it on the first checking account.
+    func uitestApplyTier(_ tier: WealthTier) {
+        var d = data
+        if !d.game.unlockedTiers.contains(tier) { d.game.unlockedTiers.append(tier) }
+        d.settings.hasOnboarded = true
+        data = d
+        applyTier(tier, accountID: checkingAccounts.first?.id, resetBalance: true, backfillDays: 0)
+    }
+
     // MARK: 무지출 챌린지
 
     var challenge: ChallengeState { data.challenge }
@@ -393,6 +402,31 @@ final class BankStore: ObservableObject {
     var game: GameState { data.game }
     var pendingQuest: Quest? { data.game.pendingQuestID.flatMap(QuestLibrary.quest) }
     var currentTier: WealthTier { data.lifestyle.tier ?? .broke }
+
+    // MARK: 알바 (part-time job mini games)
+
+    var jobs: JobsState { data.jobs }
+    var jobsDayKey: String { JobsState.dayKey(now) }
+    var shiftsLeftToday: Int { data.jobs.shiftsLeft(on: jobsDayKey) }
+    /// Where shift pay lands: the life-game account, else the first checking account.
+    var payAccount: Account? {
+        data.lifestyle.accountID.flatMap(account) ?? checkingAccounts.first
+    }
+
+    /// A shift ended: pay the wage (or charge damage / a trading loss) and count the shift for today.
+    func recordShift(_ r: ShiftResult) {
+        var d = data
+        let now = d.clock.now()
+        if r.payout != 0, let acc = d.lifestyle.accountID ?? d.accounts.first(where: { $0.kind == .checking })?.id {
+            Ledger.apply(amount: r.payout, to: acc, date: now, counterparty: r.kind.employer,
+                         memo: r.payout > 0 ? "\(r.kind.title) · \(r.kind.shiftLabel)" : "\(r.kind.title) · 손실",
+                         category: .transfer, data: &d)
+        }
+        d.jobs.record(r, day: JobsState.dayKey(now))
+        data = d
+        banner = BannerMessage(title: r.payout >= 0 ? "\(r.kind.emoji) \(r.kind.title) 정산" : "\(r.kind.emoji) \(r.kind.title) 손실",
+                               body: Money.format(r.payout, code: currency, signed: true), positive: r.payout >= 0)
+    }
     var netWorth: Decimal { QuestEngine.netWorth(data) }
     var age: Int { data.game.age(at: now) }
 

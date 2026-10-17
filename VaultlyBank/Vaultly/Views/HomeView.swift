@@ -3,7 +3,7 @@ import SwiftUI
 /// Value-based routes for the Home stack. Mixing view-based NavigationLinks with
 /// navigationDestination(for:) makes the view links re-push when the path changes, so everything is a value.
 enum HomeRoute: Hashable {
-    case history(UUID?), life, challenge, report, goals
+    case history(UUID?), life, challenge, report, goals, jobs, job(JobKind)
 }
 
 extension View {
@@ -15,6 +15,8 @@ extension View {
             case .challenge: ChallengeView()
             case .report: ReportView()
             case .goals: GoalsView()
+            case .jobs: JobsHubView()
+            case .job(let kind): JobSessionView(kind: kind)
             }
         }
         .navigationDestination(for: UUID.self) { AccountDetailView(accountID: $0) }
@@ -221,7 +223,8 @@ struct HomeView: View {
         let streak = store.challenge.streak(now: now)
         let saved = store.challenge.total(inMonthOf: now)
         let report = store.report(for: now)
-        return HStack(spacing: 12) {
+        return VStack(spacing: 12) {
+          HStack(spacing: 12) {
             NavigationLink(value: HomeRoute.challenge) {
                 quickTile(title: "무지출 챌린지", symbol: "flame.fill", tint: .orange,
                           value: Money.format(saved, code: store.currency),
@@ -232,6 +235,12 @@ struct HomeView: View {
                           value: Money.format(report.spent, code: store.currency),
                           sub: report.changeRatio.map { String(format: "지난달 대비 %@%.0f%%", $0 >= 0 ? "+" : "", $0 * 100) } ?? "리포트 보기")
             }.buttonStyle(.plain).accessibilityIdentifier("tile-report")
+          }
+            NavigationLink(value: HomeRoute.jobs) {
+                quickTile(title: "오늘의 알바", symbol: "briefcase.fill", tint: .green,
+                          value: store.shiftsLeftToday > 0 ? "\(store.shiftsLeftToday)탕 가능" : "오늘은 끝",
+                          sub: "편의점 · 카페 · 상하차 · 대리 · 과외 · 단타")
+            }.buttonStyle(.plain).accessibilityIdentifier("tile-jobs")
         }
     }
 
