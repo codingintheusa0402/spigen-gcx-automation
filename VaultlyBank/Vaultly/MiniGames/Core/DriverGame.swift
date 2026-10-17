@@ -10,6 +10,9 @@ struct DriverGame: ShiftGame {
     static let routeLength: Double = 2_400          // metres to the customer's apartment
     static let repairPerScrape: Decimal = 60_000
     static let maxScrapes = 3
+    /// Half-width of the collision box across the road. Lanes are 0.66 apart, so anything under 0.33 left a
+    /// safe strip between two lanes where nothing could ever hit you — 0.5 closes it.
+    static let hitHalfWidth = 0.5
 
     private(set) var timeLeft: Double = 90           // the customer won't wait longer than this
     /// Car position across the road, −1 (left edge) … 1 (right edge). Lanes are centred at −0.66, 0, 0.66.
@@ -56,14 +59,14 @@ struct DriverGame: ShiftGame {
             let lane = rng.pick([-0.66, 0, 0.66])
             obstacles.append(Obstacle(id: nextID, kind: rng.pick([.car, .car, .taxi, .cone, .pothole]), x: lane, y: 140))
             nextID += 1
-            if rng.chance(0.25) {   // sometimes two lanes are blocked at once
+            if rng.chance(0.25 + 0.3 * min(1, distance / Self.routeLength)) {   // two lanes blocked more often as you get closer
                 let other = rng.pick([-0.66, 0, 0.66].filter { $0 != lane })
                 obstacles.append(Obstacle(id: nextID, kind: .car, x: other, y: 140)); nextID += 1
             }
             spawnIn = max(0.9, 2.2 - distance / Self.routeLength * 1.1) * rng.range(0.8, 1.2)
         }
         // Collision: car occupies y ∈ [−2, 2] and |Δx| < 0.33
-        if hitCooldown == 0, let hit = obstacles.first(where: { abs($0.y) < 2.5 && abs($0.x - x) < 0.33 }) {
+        if hitCooldown == 0, let hit = obstacles.first(where: { abs($0.y) < 2.5 && abs($0.x - x) < Self.hitHalfWidth }) {
             if hit.kind == .pothole {
                 discomfort += 1.5
                 lastEvent = "쿵! 손님이 깼어요"

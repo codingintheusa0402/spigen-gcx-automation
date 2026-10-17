@@ -132,7 +132,7 @@ struct SavingsGoal: Identifiable, Codable, Equatable {
 // MARK: - Achievements
 
 enum AchievementID: String, CaseIterable, Identifiable {
-    case firstResist, streak7, streak30, saved100k, saved1m, firstGoal, firstProduct, firstTrade, millionaire, billionaire, timeTraveler
+    case firstResist, streak7, streak30, saved100k, saved1m, firstGoal, firstProduct, millionaire, billionaire, timeTraveler   // firstTrade retired with 증권
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -143,7 +143,6 @@ enum AchievementID: String, CaseIterable, Identifiable {
         case .saved1m: return "100만 원 참음"
         case .firstGoal: return "목표 달성"
         case .firstProduct: return "첫 금융상품"
-        case .firstTrade: return "첫 매매"
         case .millionaire: return "천만장자"
         case .billionaire: return "억만장자"
         case .timeTraveler: return "시간 여행자"
@@ -158,7 +157,6 @@ enum AchievementID: String, CaseIterable, Identifiable {
         case .saved1m: return "참은 돈이 1,000,000원을 넘었어요"
         case .firstGoal: return "저축 목표를 처음 달성했어요"
         case .firstProduct: return "적금·예금·대출 상품에 처음 가입했어요"
-        case .firstTrade: return "모의 주식을 처음 매매했어요"
         case .millionaire: return "총자산 10,000,000원 돌파"
         case .billionaire: return "총자산 1,000,000,000원 돌파"
         case .timeTraveler: return "시간 흐름을 24배 이상으로 올렸어요"
@@ -171,7 +169,6 @@ enum AchievementID: String, CaseIterable, Identifiable {
         case .saved100k, .saved1m: return "banknote.fill"
         case .firstGoal: return "target"
         case .firstProduct: return "doc.text.fill"
-        case .firstTrade: return "chart.line.uptrend.xyaxis"
         case .millionaire, .billionaire: return "crown.fill"
         case .timeTraveler: return "clock.arrow.2.circlepath"
         }
@@ -195,7 +192,6 @@ enum AchievementEngine {
         check(.saved1m, c.totalSaved >= 1_000_000)
         check(.firstGoal, data.goals.contains { $0.reachedAt != nil })
         check(.firstProduct, data.accounts.contains { $0.kind.isProduct && $0.terms != nil })
-        check(.firstTrade, !data.portfolio.trades.isEmpty)
         check(.millionaire, totalAssets >= 10_000_000)
         check(.billionaire, totalAssets >= 1_000_000_000)
         check(.timeTraveler, data.clock.speed >= 24)

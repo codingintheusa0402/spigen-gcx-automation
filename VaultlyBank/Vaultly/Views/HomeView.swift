@@ -210,8 +210,6 @@ struct HomeView: View {
             HStack(spacing: 4) {
                 Text("은행").font(.app(.caption)).foregroundStyle(on.opacity(0.75))
                 MoneyText(amount: store.bankAssets, font: .app(.caption, .semibold)).foregroundStyle(on)
-                Text("· 투자").font(.app(.caption)).foregroundStyle(on.opacity(0.75))
-                MoneyText(amount: store.portfolio.investedKRW + store.portfolio.cashKRWTotal, font: .app(.caption, .semibold)).foregroundStyle(on)
             }
             if store.totalDebt > 0 {
                 HStack(spacing: 4) {

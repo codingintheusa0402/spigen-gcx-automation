@@ -4,13 +4,15 @@ import Foundation
 /// they go cold. Three lanes, cars and buses to dodge; three crashes is an accident that ends the shift at the ER.
 struct ScooterGame: ShiftGame {
     enum MarkerKind: String { case car = "🚗", bus = "🚌", dog = "🐕", pickup = "🍜", drop = "🏠" }
-    struct Marker: Equatable { let id: Int; let kind: MarkerKind; let x: Double; var y: Double }
+    struct Marker: Equatable { let id: Int; let kind: MarkerKind; var x: Double; var y: Double; var drift: Double = 0 }
 
     let kind = JobKind.scooter
     static let feePerDelivery: Decimal = 3_500
     static let erBill: Decimal = 50_000
     static let maxCrashes = 3
     static let shiftSeconds: Double = 60
+    /// Collision half-width across the road (lanes 0.66 apart). 0.5 leaves no safe strip between lanes.
+    static let hitHalfWidth = 0.5
 
     private(set) var timeLeft = ScooterGame.shiftSeconds
     private(set) var x: Double = 0                   // −1 … 1 across the road, lanes at −0.66 / 0 / 0.66
@@ -45,10 +47,13 @@ struct ScooterGame: ShiftGame {
         vx += ax * dt
         x = min(1, max(-1, x + vx * dt))
         if abs(x) >= 1 { vx = 0 }
-        speed = boost ? 54 : 36
+        speed = (boost ? 54 : 36) + elapsed * 0.35            // traffic gets faster through the shift
         let dy = speed * dt
         distance += dy
-        for i in markers.indices { markers[i].y -= dy }
+        for i in markers.indices {
+            markers[i].y -= dy
+            if markers[i].kind == .dog { markers[i].x = max(-0.9, min(0.9, markers[i].x + markers[i].drift * dt)) }   // dogs wander
+        }
         markers.removeAll { $0.y < -6 }
         if carrying > 0 { carryingSince += dt }
         spawnIn -= dt
@@ -57,14 +62,14 @@ struct ScooterGame: ShiftGame {
             let kind: MarkerKind
             if carrying == 0 { kind = rng.chance(0.45) ? .pickup : rng.pick([.car, .car, .bus, .dog]) }
             else { kind = rng.chance(0.35) ? .drop : (rng.chance(0.15) ? .pickup : rng.pick([.car, .car, .bus, .dog])) }
-            markers.append(Marker(id: nextID, kind: kind, x: lane, y: 150)); nextID += 1
-            if kind != .pickup, kind != .drop, rng.chance(0.3) {
+            markers.append(Marker(id: nextID, kind: kind, x: lane, y: 150, drift: kind == .dog ? (rng.chance(0.5) ? 0.35 : -0.35) : 0)); nextID += 1
+            if kind != .pickup, kind != .drop, rng.chance(0.3 + 0.25 * elapsed / Self.shiftSeconds) {   // more double blocks later
                 let other = rng.pick([-0.66, 0, 0.66].filter { $0 != lane })
                 markers.append(Marker(id: nextID, kind: .car, x: other, y: 150)); nextID += 1
             }
-            spawnIn = (boost ? 0.75 : 1.1) * rng.range(0.8, 1.25)
+            spawnIn = (boost ? 0.7 : 1.0) * rng.range(0.75, 1.2) * max(0.6, 1 - elapsed / 120)
         }
-        if hitCooldown == 0, let i = markers.firstIndex(where: { abs($0.y) < 2.5 && abs($0.x - x) < 0.33 }) {
+        if hitCooldown == 0, let i = markers.firstIndex(where: { abs($0.y) < 2.5 && abs($0.x - x) < Self.hitHalfWidth }) {
             let m = markers[i]
             switch m.kind {
             case .pickup:

@@ -76,6 +76,6 @@ Build the `Vaultly-Store` scheme (config `Store`, `-D STORE`). Never submit the 
 | Quest pushes | `[인생 게임] 새로운 선택 · …` |
 | Interruption level | `.active` (personal build keeps `.timeSensitive`) |
 | Watermark | `MockWatermark` over every screen, `MockChip` on 총자산, widget "모의" |
-| Direct balance editing | hidden + guarded: 잔액 설정/채우기, 예수금·환율, 종목 추가, 현재가 직접 설정, hand-made scheduled deposits |
+| Direct balance editing | hidden + guarded: 잔액 설정/채우기, hand-made scheduled deposits (증권/모의 투자 removed entirely 2026-10-18) |
 | Ads | AdMob rewarded (되돌리기) + interstitials, ATT prompt, UMP consent; Pro = no ads + 보너스 게임 머니 |
 | 블랙잭 | game-money table behind the in-app 18+ confirmation; chips are never sold |

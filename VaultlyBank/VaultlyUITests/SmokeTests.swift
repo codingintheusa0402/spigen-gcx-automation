@@ -42,7 +42,7 @@ final class SmokeTests: XCTestCase {
         XCTAssertFalse(app.staticTexts["SIM"].exists, "SIM badge was removed on user request")
         snap("01-home")
 
-        for (tab, expect) in [("증권", "내 투자"), ("상품", "금융 상품"), ("내 방", "미니룸"), ("설정", "내 정보")] {
+        for (tab, expect) in [("상품", "금융 상품"), ("내 방", "미니룸"), ("설정", "내 정보")] {
             tabs.buttons[tab].tap()
             XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", expect)).firstMatch.waitForExistence(timeout: 5),
                           "tab \(tab) should show '\(expect)'")
@@ -197,9 +197,6 @@ extension SmokeTests {
         XCTAssertTrue(app.buttons["보내기"].waitForExistence(timeout: 5), "TOSS account detail shows 채우기/보내기")
         snap("toss-account")
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.tabBars.firstMatch.buttons["증권"].tap()
-        XCTAssertTrue(app.staticTexts["기본계좌"].waitForExistence(timeout: 5))
-        snap("toss-invest")
         app.tabBars.firstMatch.buttons["설정"].tap()
         snap("toss-settings")
     }

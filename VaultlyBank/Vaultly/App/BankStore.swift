@@ -50,8 +50,7 @@ final class BankStore: ObservableObject {
     var bankAssets: Decimal {
         data.accounts.reduce(0) { $0 + ($1.kind == .loan ? -$1.balance : $1.balance) }
     }
-    var totalAssets: Decimal { bankAssets + data.portfolio.investedKRW + data.portfolio.cashKRWTotal }
-    var portfolio: Portfolio { data.portfolio }
+    var totalAssets: Decimal { bankAssets }          // 증권(모의 투자) was removed 2026-10-18; the portfolio is no longer counted
     var totalDebt: Decimal { data.accounts.filter { $0.kind == .loan }.reduce(0) { $0 + $1.balance } }
 
     func account(_ id: UUID) -> Account? { data.accounts.first { $0.id == id } }
@@ -72,7 +71,6 @@ final class BankStore: ObservableObject {
         let now = d.clock.now()
         let fired = ScheduleEngine.processDue(now: now, data: &d)
         InterestEngine.accrue(now: now, data: &d, taxRate: d.settings.interestTaxRate)
-        MarketSimulator.tick(now: now, portfolio: &d.portfolio)
         let lifeMessages = LifestyleEngine.process(now: now, data: &d)
         // Fast-forward can create tens of thousands of rows; keep the ledger bounded.
         if d.transactions.count > 4000 {
@@ -718,52 +716,6 @@ final class BankStore: ObservableObject {
         }
         data = d
         syncNotifications()
-    }
-
-    // MARK: Mock trading
-
-    func updatePortfolio(_ change: (inout Portfolio) -> Void) {
-        var p = data.portfolio; change(&p); data.portfolio = p
-    }
-
-    func addHolding(_ h: Holding) {
-        guard !AppVariant.isStore else { return }   // store build: holdings come only from buying with in-game cash
-        updatePortfolio { $0.holdings.append(h) }
-    }
-
-    func removeHolding(_ id: UUID) {
-        updatePortfolio { $0.holdings.removeAll { $0.id == id }; $0.trades.removeAll { $0.holdingID == id } }
-    }
-
-    func setPrice(_ price: Decimal, of id: UUID) {
-        guard !AppVariant.isStore else { return }
-        updatePortfolio { p in
-            if let i = p.holdings.firstIndex(where: { $0.id == id }) { p.holdings[i].price = price }
-        }
-    }
-
-    /// Dry-run order. Buys draw from mock cash in the holding's currency; sells add to it.
-    func trade(holdingID: UUID, buy: Bool, shares: Decimal, price: Decimal) -> Bool {
-        guard shares > 0, price > 0 else { return false }
-        var p = data.portfolio
-        guard let i = p.holdings.firstIndex(where: { $0.id == holdingID }) else { return false }
-        let total = (shares * price).rounded(scale: 2)
-        var h = p.holdings[i]
-        if buy {
-            if h.market == .domestic { guard p.cashKRW >= total else { return false }; p.cashKRW -= total }
-            else { guard p.cashUSD >= total else { return false }; p.cashUSD -= total }
-            h.avgCost = ((h.cost + total) / (h.shares + shares)).rounded(scale: 2)
-            h.shares += shares
-        } else {
-            guard h.shares >= shares else { return false }
-            if h.market == .domestic { p.cashKRW += total } else { p.cashUSD += total }
-            h.shares -= shares
-        }
-        h.price = price
-        p.holdings[i] = h
-        p.trades.append(TradeRecord(holdingID: holdingID, date: now, isBuy: buy, shares: shares, price: price))
-        data.portfolio = p
-        return true
     }
 
     // MARK: Products

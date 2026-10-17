@@ -416,26 +416,4 @@ final class EngineTests: XCTestCase {
         XCTAssertEqual(salaries.count, 13, "one salary per month from Jan 2026 to Jan 2027")
     }
 
-    // MARK: Trading
-
-    func testTradeUpdatesCashAndAvgCost() {
-        var p = Portfolio()
-        p.cashKRW = 1_000_000
-        p.holdings = [Holding(symbol: "A", name: "A", market: .domestic, shares: 10, avgCost: 100, price: 100)]
-        // emulate BankStore.trade logic through a store on the main actor
-        let exp = expectation(description: "trade")
-        Task { @MainActor in
-            let store = BankStore()
-            store.updatePortfolio { $0 = p }
-            let id = store.portfolio.holdings[0].id
-            XCTAssertTrue(store.trade(holdingID: id, buy: true, shares: 10, price: 200))
-            XCTAssertEqual(store.portfolio.cashKRW, 1_000_000 - 2_000)
-            XCTAssertEqual(store.portfolio.holdings[0].avgCost, 150)
-            XCTAssertFalse(store.trade(holdingID: id, buy: true, shares: 100_000, price: 200)) // insufficient cash
-            XCTAssertTrue(store.trade(holdingID: id, buy: false, shares: 5, price: 300))
-            XCTAssertEqual(store.portfolio.holdings[0].shares, 15)
-            exp.fulfill()
-        }
-        wait(for: [exp], timeout: 5)
-    }
 }

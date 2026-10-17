@@ -220,16 +220,29 @@ final class MiniGameTests: XCTestCase {
 
     func testTutoringMathAnswersAreCorrect() {
         var rng = GameRNG(seed: 11)
-        for _ in 0..<200 {
+        for _ in 0..<300 {
             let q = TutoringGame.math(&rng, hard: true)
             let ans = Int(q.options[q.answer])!
-            if q.prompt.contains("×") {
-                let n = q.prompt.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
-                XCTAssertEqual(n[0] * n[1], ans)
-            } else {
-                let n = q.prompt.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }   // a, b, c
-                XCTAssertEqual(n[0] * ans + n[1], n[2], q.prompt)
+            let n = q.prompt.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+            if q.prompt.contains("×") { XCTAssertEqual(n[0] * n[1], ans, q.prompt) }
+            else if q.prompt.contains("+") && !q.prompt.contains("x") { XCTAssertEqual(n[0] + n[1], ans, q.prompt) }
+            else if q.prompt.contains("−") { XCTAssertEqual(n[0] - n[1], ans, q.prompt) }
+            else if q.prompt.contains("%") { XCTAssertEqual(n[0] * n[1] / 100, ans, q.prompt) }
+            else if q.prompt.contains("x") { XCTAssertEqual(n[0] * ans + n[1], n[2], q.prompt) }          // a·x + b = c
+            else {                                                                                       // 수열: 등차 or 등비
+                XCTAssertEqual(n.count, 4, q.prompt)
+                let d = n[1] - n[0]
+                let expected = (n[2] - n[1] == d) ? n[3] + d : n[3] * (n[1] / n[0])
+                XCTAssertEqual(expected, ans, q.prompt)
             }
+        }
+    }
+
+    func testTutoringNeverRepeatsAPromptInOneSession() {
+        for s in seeds {
+            let g = TutoringGame(seed: s)
+            let prompts = g.questions.map { $0.prompt + " | " + $0.options.sorted().joined(separator: ",") }   // 맞춤법 shares a prompt; the options differ
+            XCTAssertEqual(Set(prompts).count, prompts.count, "repeated question in seed \(s): \(prompts)")
         }
     }
 

@@ -7,7 +7,6 @@ struct SettingsView: View {
     @EnvironmentObject var shop: StoreService
     @State private var confirmReset = false
     @State private var showWealth = false
-    @State private var editCash = false
     @State private var paywall = false
 
     var body: some View {
@@ -47,7 +46,6 @@ struct SettingsView: View {
 
                 Section {
                     nameField("은행", symbol: "building.columns", keyPath: \.bankName, placeholder: store.theme.bankName)
-                    nameField("증권사", symbol: "chart.xyaxis.line", keyPath: \.brokerName, placeholder: store.theme.brokerName)
                     nameField("카드사", symbol: "creditcard", keyPath: \.cardName, placeholder: Brand.defaultCard)
                     nameField("캐피탈", symbol: "percent", keyPath: \.capitalName, placeholder: Brand.defaultCapital)
                     Button("기본값으로 되돌리기") {
@@ -85,12 +83,6 @@ struct SettingsView: View {
                             Text(TimeSpeed.allCases.first { $0.rawValue == store.clock.speed }?.short ?? "\(Int(store.clock.speed))x").foregroundStyle(.secondary)
                         }
                     }
-                    Toggle(isOn: Binding(get: { store.portfolio.simulatePrices }, set: { v in store.updatePortfolio { $0.simulatePrices = v; $0.lastTick = Date() } })) {
-                        Label("시세 자동 변동", systemImage: "waveform.path.ecg")
-                    }
-                    if !AppVariant.isStore {
-                        Button { editCash = true } label: { Label("예수금 · 환율 설정", systemImage: "dollarsign.circle") }
-                    }
                     Picker(selection: Binding(get: { store.settings.interestTaxRate }, set: { v in store.update { $0.interestTaxRate = v } })) {
                         Text("15.4% (일반)").tag(0.154); Text("9.5% (세금우대)").tag(0.095); Text("비과세").tag(0.0)
                     } label: { Label("이자소득세", systemImage: "percent") }
@@ -120,7 +112,6 @@ struct SettingsView: View {
             }
             .navigationTitle("설정")
             .sheet(isPresented: $showWealth) { WealthView() }
-            .sheet(isPresented: $editCash) { CashEditorSheet() }
             .sheet(isPresented: $paywall) { ProPaywall() }
             .confirmationDialog("모든 계좌·거래·예약을 삭제하고 처음 상태로 되돌릴까요?", isPresented: $confirmReset, titleVisibility: .visible) {
                 Button("초기화", role: .destructive) { store.resetAll() }
@@ -249,7 +240,7 @@ struct InfoPage: View {
     static let faq: [(String, String)] = [
         ("잔액이 실제 돈인가요?", "아닙니다. 모든 금액은 기기 안에서만 계산되는 모의 데이터입니다."),
         ("알림이 오지 않아요", "설정 > 보안·알림에서 입금 알림을 허용했는지, iOS 설정의 알림 권한이 켜져 있는지 확인하세요. 시간 가속 중에는 잠금화면 알림 대신 앱 내 배너로 표시됩니다."),
-        ("은행 이름을 바꾸고 싶어요", "설정 > 금융사 이름에서 은행·증권사·카드사·캐피탈 이름을 직접 입력할 수 있습니다."),
+        ("은행 이름을 바꾸고 싶어요", "설정 > 금융사 이름에서 은행·카드사·캐피탈 이름을 직접 입력할 수 있습니다."),
         ("데이터를 처음부터 다시 시작하려면?", "설정 > 시뮬레이션 > 모든 데이터 초기화를 누르세요."),
     ]
     static let terms: [(String, String)] = [

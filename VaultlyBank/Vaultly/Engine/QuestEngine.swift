@@ -4,7 +4,7 @@ import Foundation
 /// and ends the game at the end of the lifespan. Pure functions over BankData so it is testable.
 enum QuestEngine {
     static func netWorth(_ d: BankData) -> Decimal {
-        d.accounts.reduce(Decimal(0)) { $0 + ($1.kind == .loan ? -$1.balance : $1.balance) } + d.portfolio.investedKRW + d.portfolio.cashKRWTotal
+        d.accounts.reduce(Decimal(0)) { $0 + ($1.kind == .loan ? -$1.balance : $1.balance) }     // 증권 removed: bank accounts only
     }
 
     static func eligible(_ q: Quest, tier: WealthTier, age: Int, game: GameState, netWorth: Decimal) -> Bool {

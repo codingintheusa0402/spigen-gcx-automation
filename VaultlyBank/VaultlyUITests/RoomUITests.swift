@@ -42,6 +42,24 @@ final class RoomUITests: XCTestCase {
         XCTAssertFalse(prop("piano").exists, "furniture past the current progress stays hidden")
     }
 
+    func testOnboardingLetsYouStartAsBrokeOrWorking() {
+        launch([])
+        XCTAssertTrue(app.textFields["이름 (예: 홍길동)"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["start-working"].isSelected, "서민 is the default")
+        app.buttons["start-broke"].tap()
+        XCTAssertTrue(app.buttons["start-broke"].isSelected)
+        snap("onboarding-start-choice")
+        app.buttons["시작하기"].tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let allow = springboard.buttons.matching(NSPredicate(format: "label IN %@", ["Allow", "허용"])).firstMatch
+        if allow.waitForExistence(timeout: 3) { allow.tap() }
+        XCTAssertTrue(app.otherElements["room-scene"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["room-name"].label.contains("고시원"), "chose 거지 → 고시원")
+        XCTAssertTrue(prop("mattress").exists)
+        XCTAssertTrue(prop("bills").exists, "거지 starts in debt")
+        snap("room-after-broke-start")
+    }
+
     func testRoomIsTheOpeningScreenAndMenuNavigates() {
         launch([])
         let nameField = app.textFields["이름 (예: 홍길동)"]
@@ -52,6 +70,7 @@ final class RoomUITests: XCTestCase {
         if allow.waitForExistence(timeout: 3) { allow.tap() }
         XCTAssertTrue(app.navigationBars["미니룸"].waitForExistence(timeout: 8), "the app opens on the 미니룸")
         XCTAssertTrue(app.otherElements["room-scene"].exists)
+        XCTAssertTrue(app.staticTexts["room-name"].label.contains("원룸"), "default start is 서민")
         snap("room-opening")
         app.buttons["room-menu-life"].tap()
         XCTAssertTrue(app.navigationBars["내 인생"].waitForExistence(timeout: 5))
