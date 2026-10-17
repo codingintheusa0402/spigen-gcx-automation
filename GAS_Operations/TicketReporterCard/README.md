@@ -144,6 +144,14 @@ finished `GET_AFN_INVENTORY_DATA_BY_COUNTRY` (EU) and `GET_AFN_INVENTORY_DATA` (
 report — it never waits on Amazon. The MCF creds reach EU + JP only: **NA returns 403**, and the JP app
 has no Catalog role.
 
+ASINs the masters lack are filled in, in order, from the FBA snapshot, then a **Seller Central listings
+snapshot** (`refreshListingsSnapshot`, every 6 h; requests `GET_MERCHANT_LISTINGS_ALL_DATA` once a day for
+DE GB FR IT ES NL SE PL BE IE TR AE SA + JP — everything in Manage All Inventory, incl. inactive / zero-stock /
+FBM, shown as `🏷️ 활성 … · 비활성 …`), then a live Catalog lookup by the SKU master's EAN/UPC (marked
+`EAN/UPC 카탈로그 매칭` — e.g. CYRILL items listed by another account). An ASIN query unknown to the masters is
+resolved through those snapshots too. The `ListingsSnapshot` tab holds the durable copy. Note: the product
+index is rebuilt by the hourly trigger; a cold-cache first query takes ~24 s (Chat's limit is 30 s).
+
 ## Known hard limitation
 
 `chat.bot` is **not** a user-consentable OAuth scope in Apps Script's authorization flow
