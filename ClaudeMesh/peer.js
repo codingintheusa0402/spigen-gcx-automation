@@ -13,11 +13,12 @@ const path = require('path');
 const http = require('http');
 
 const POLL_MS = 4000, OFFLINE_KEEP_MS = 7 * 24 * 3600 * 1000;
+const MISSES_OFFLINE = 3;                   // one slow/failed poll is a hiccup; three in a row (~12 s) is offline
 const PREFIX = 'peer:';                     // terminal ids of the peer's panes, as seen by the phone
 
 function createPeer({ userData, selfKind }) {
   const file = path.join(userData, 'peer.json');
-  let cfg = null, last = null, lastOk = 0, online = false, timer = null;
+  let cfg = null, last = null, lastOk = 0, online = false, timer = null, misses = 0;
 
   function loadCfg() {
     try { const c = JSON.parse(fs.readFileSync(file, 'utf8')); cfg = c && c.url && c.token ? c : null; } catch { cfg = null; }
@@ -46,17 +47,20 @@ function createPeer({ userData, selfKind }) {
   }
 
   async function poll() {
-    if (!loadCfg()) { online = false; return; }
+    if (!loadCfg()) { online = false; misses = 0; return; }
+    let ok = false;
     try {
       const r = await request('GET', '/api/local-snapshot', { timeout: 3500 });
-      if (r.status === 200 && r.json && Array.isArray(r.json.sessions)) { last = r.json; lastOk = Date.now(); online = true; }
-      else online = false;
-    } catch { online = false; }
+      if (r.status === 200 && r.json && Array.isArray(r.json.sessions)) { last = r.json; lastOk = Date.now(); ok = true; }
+    } catch { }
+    if (ok) { misses = 0; online = true; } else if (++misses >= MISSES_OFFLINE) online = false;
   }
   function start() { if (!timer) { poll(); timer = setInterval(poll, POLL_MS); } }
 
   const remoteSids = () => new Set(((last && last.sessions) || []).map(s => s.sid));
-  const owns = sid => online && remoteSids().has(sid);
+  // a conversation live on BOTH machines is listed twice; the peer's copy carries sid "peer:<sid>"
+  const unprefix = sid => typeof sid === 'string' && sid.startsWith(PREFIX) ? sid.slice(PREFIX.length) : sid;
+  const owns = sid => online && remoteSids().has(unprefix(sid));
   const ownsTerm = id => typeof id === 'string' && id.startsWith(PREFIX);
 
   // local snapshot + the peer's sessions (marked remote; offline ones greyed) — never mutates `local`
@@ -68,8 +72,11 @@ function createPeer({ userData, selfKind }) {
     if (!last || !cfg || (!online && Date.now() - lastOk > OFFLINE_KEEP_MS)) return out;
     const mine = new Set(out.sessions.map(s => s.sid));
     for (const s of last.sessions || []) {
-      if (mine.has(s.sid)) continue;                 // same conversation resumed here — the local copy wins
-      out.sessions.push({ ...s, hostKind: kind(), hostLabel: label(), onPeer: true, offline: !online,
+      // live here too: while the peer is online both copies are shown (each machine's terminal is its own);
+      // an offline peer's last-seen copy of a conversation that now runs here is just stale — hide it
+      const both = mine.has(s.sid);
+      if (both && !online) continue;
+      out.sessions.push({ ...s, ...(both ? { sid: PREFIX + s.sid, remoteSid: s.sid } : {}), hostKind: kind(), hostLabel: label(), onPeer: true, offline: !online,
         owner: online && (s.owner || s.pane) ? PREFIX + (s.owner || s.pane) : null, pane: null,
         health: online ? s.health : 'offline', tps: online ? s.tps : 0 });
     }
@@ -81,7 +88,10 @@ function createPeer({ userData, selfKind }) {
     start, merge, owns, ownsTerm, online: () => online, label,
     configured: () => !!loadCfg(),
     // forward a JSON API call for a peer session
-    forward: (method, p, body, query) => request(method, p, { body, query }).then(r => r.json),
+    forward: (method, p, body, query) => request(method, p, {
+      body: body && body.sid ? { ...body, sid: unprefix(body.sid) } : body,
+      query: query && query.sid ? { ...query, sid: unprefix(query.sid) } : query,
+    }).then(r => r.json),
     // pipe the peer's terminal SSE stream for terminal `id` (with the peer: prefix) into `res`
     async pipeTerm(id, res, onClose) {
       const up = await request('GET', '/api/term/' + encodeURIComponent(id.slice(PREFIX.length)), { stream: true, timeout: 0 });

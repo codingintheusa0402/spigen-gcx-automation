@@ -55,7 +55,7 @@ contextBridge.exposeInMainWorld('api', {
   gasDue: { list: () => ipcRenderer.invoke('gasDue:list'), set: (id, i, iso) => ipcRenderer.invoke('gasDue:set', id, i, iso) },
   restore: { get: () => ipcRenderer.invoke('restore:get'), done: () => ipcRenderer.invoke('restore:done') },
   details: sid => ipcRenderer.invoke('sess:details', sid),
-  peer: { send: (sid, text) => ipcRenderer.invoke('peer:send', sid, text), interrupt: sid => ipcRenderer.invoke('peer:interrupt', sid), upload: paths => ipcRenderer.invoke('peer:upload', paths) },
+  peer: { send: (sid, text) => ipcRenderer.invoke('peer:send', sid, text), interrupt: sid => ipcRenderer.invoke('peer:interrupt', sid), upload: paths => ipcRenderer.invoke('peer:upload', paths), resume: sid => ipcRenderer.invoke('peer:resume', sid) },
   rename: (sid, name) => ipcRenderer.invoke('hist:rename', sid, name),
   stopSession: pid => ipcRenderer.invoke('session:stop', pid),
   agents: {

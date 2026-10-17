@@ -72,14 +72,15 @@ def tests_sc(actor):
     Seller Central and correctly reports SESSION_EXPIRED (browser + proxy + login detection work)."""
     problems = []
     try:
-        run = run_and_wait(actor, {})
+        # Apify's own test account has no saved Login-mode sessions; don't let ours make this a real scrape.
+        run = run_and_wait(actor, {'useSavedSessions': False, 'saveSessions': False})
         if run['status'] != 'SUCCEEDED':
             problems.append(f"Prefill run (Apify's daily test input) ended {run['status']}: {run.get('statusMessage')}")
     except Exception as e:
         problems.append(f'Prefill run failed to start: {e}')
     try:
         run = run_and_wait(actor, {'marketplaces': ['US'], 'sessionUS': 'session-id=000-0000000-0000000; at-main=HEALTHCHECK',
-                                   'maxPagesPerMarketplace': 1})
+                                   'maxPagesPerMarketplace': 1, 'useSavedSessions': False, 'saveSessions': False})
         health = kv_record(run['defaultKeyValueStoreId'], 'SESSION_HEALTH') or {}
         status = ((health.get('marketplaces') or {}).get('US') or {}).get('status')
         if run['status'] != 'SUCCEEDED' or status != 'SESSION_EXPIRED':

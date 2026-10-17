@@ -39,7 +39,7 @@ function renderHistory() {
   const rowHtml = (h, g) => {
     const live = liveSids.has(h.sid), ag = agentSids.has(h.sid), pinned = pins.has(h.sid);
     return `<div class="hrow ${live ? 'live' : ''} ${pinned ? 'pinned' : ''}${live ? doneCls(h.sid) : ''}" draggable="true" data-group="${g}" data-hsid="${h.sid}" title="${esc(histTitle(h))}\n${esc(h.cwd)}${h.last ? '\nlast: ' + esc(h.last) : ''}\n(drag to reorder)">
-      <div class="n"><span class="t">${esc(histTitle(h))}</span>${live ? '<span class="tag">live</span>' : ag ? '<span class="tag">agent</span>' : ''}<span class="pin ${pinned ? 'on' : ''}" data-pin="${h.sid}" title="${pinned ? 'Unpin' : 'Pin'}">📌</span><span class="more" data-hmore="${h.sid}">⋯</span><span class="rm" data-hrm="${h.sid}" title="${live ? 'Stop and remove from Running' : 'Remove from list'}">×</span></div>
+      <div class="n"><span class="t">${esc(histTitle(h))}</span>${h.onPeer ? `<span class="tag peer">${esc(h.hostLabel)}</span>` : ''}${live ? '<span class="tag">live</span>' : ag ? '<span class="tag">agent</span>' : ''}<span class="pin ${pinned ? 'on' : ''}" data-pin="${h.sid}" title="${pinned ? 'Unpin' : 'Pin'}">📌</span><span class="more" data-hmore="${h.sid}">⋯</span><span class="rm" data-hrm="${h.sid}" title="${live ? 'Stop and remove from Running' : 'Remove from list'}">×</span></div>
       <div class="m">${esc(projName(h.cwd))}${h.branch && h.branch !== 'HEAD' ? ' · ' + esc(h.branch) : ''} · ${agoT(h.mtime)} · ${h.size > 1e6 ? (h.size / 1e6).toFixed(1) + 'MB' : Math.round(h.size / 1e3) + 'kB'}</div></div>`;
   };
   let html = '';
@@ -88,6 +88,10 @@ async function resumeSession(sid) {
   const ag = (snap.agents || []).find(a => a.sessionId === sid);
   if (ag) return attachAgent(ag);
   const h = hist.find(x => x.sid === sid); if (!h) return;
+  if (h.onPeer) {                       // its transcript is only on the other machine: resume it there (its terminal shows up here)
+    const r = await window.api.peer.resume(sid);
+    return toast(r && r.ok ? `Resuming on ${h.hostLabel}: ${histTitle(h).slice(0, 40)}` : `Couldn't resume on ${h.hostLabel}${r && r.err ? ': ' + r.err : ''}`);
+  }
   const id = await newTerm({ kind: 'claude', cwd: h.cwd, flags: `${RESUME_FLAGS} --resume ${sid}`, title: histTitle(h).slice(0, 40) });
   autoTrust.set(id, { until: Date.now() + 20000, buf: '' });
   toast('Resuming ' + histTitle(h).slice(0, 50));
@@ -127,6 +131,10 @@ function openSessMenu(sid, x, y, agent) {
     ['Show logs', () => showAgentLogs(ag)],
     ['Rename…', () => renameSession(ag.sessionId, ag.name)],
     ['Stop agent', () => stopAgent(ag), true],
+  ] : h && h.onPeer && !live ? [            // only on the other machine: it is resumed (and renamed …) over there
+    [`Resume on ${h.hostLabel}`, () => resumeSession(sid)],
+    histHidden.has(sid) ? ['Show in list again', () => { histHidden.delete(sid); saveHidden(); renderHistory(); }]
+      : ['Remove from list', () => { histHidden.add(sid); saveHidden(); renderHistory(); toast('Removed from list'); }, true],
   ] : [
     [live ? 'Go to live session' : 'Resume here', () => resumeSession(sid)],
     ['Rename…', () => renameSession(sid, h ? histTitle(h) : live && live.name)],

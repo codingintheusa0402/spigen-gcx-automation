@@ -281,7 +281,18 @@ const core = createCore({ userData: app.getPath('userData'), getToken: keychainT
 const { commandsFor, sessionDetails, renameTranscript, convertToAgent, refreshAgents, refreshUsage } = core;
 const scanHistory = () => core.listHistory();
 ipcMain.handle('cmds:list', (_e, cwd) => commandsFor(cwd));
-ipcMain.handle('hist:list', () => scanHistory());
+// the history list shows both machines: our transcripts, plus the peer's that haven't been synced here yet
+// (tagged with its name; resuming one starts it over there, where its transcript is)
+ipcMain.handle('hist:list', async () => {
+  const local = await scanHistory();
+  if (!peerLink || !peerLink.online()) return local;
+  const theirs = await peerLink.forward('GET', '/api/history').catch(() => null);
+  if (!Array.isArray(theirs)) return local;
+  const mine = new Set(local.map(h => h.sid)), label = peerLink.label();
+  const extra = theirs.filter(h => h && h.sid && !mine.has(h.sid)).map(h => ({ ...h, file: null, onPeer: true, hostLabel: label }));
+  return [...local, ...extra].sort((a, b) => b.mtime - a.mtime);
+});
+ipcMain.handle('peer:resume', (_e, sid) => peerLink ? peerLink.forward('POST', '/api/resume', { sid }).catch(e => ({ ok: false, err: String(e.message || e) })) : { ok: false, err: 'no peer' });
 ipcMain.handle('hist:rename', (_e, sid, name) => renameTranscript(sid, name));
 ipcMain.handle('sess:details', (_e, sid) => !liveSession(sid) && peerLink && peerLink.owns(sid)
   ? peerLink.forward('GET', '/api/details', undefined, { sid }).catch(e => ({ ok: false, err: String(e.message || e) })) : sessionDetails(sid));
