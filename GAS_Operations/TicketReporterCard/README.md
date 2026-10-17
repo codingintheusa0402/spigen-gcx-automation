@@ -130,11 +130,14 @@ monitor's normal cadence rather than instantly — worst case ~5 minutes during 
 ---
 
 ### 6. `/products <검색어>` and `/products-similar <검색어>` → product lookup
-`@Ticket Reporter /products ACS08008` (or an ASIN, or keywords like `iPhone 17 Pro Ultra Hybrid`) searches
-SKU_Master(먼데이보드) + ASIN_Master(먼데이보드) and returns up to 8 products (most FBA stock first) with an
-Amazon thumbnail (Catalog API, DE → UK) and FBA sellable stock per country. `/products-similar` takes the
-first match's 기종 and lists up to 11 other SKUs for the same device (multi-device values like
-`iPhone 18 Pro Max/17 Pro Max` match on any device), in-stock first.
+`@Ticket Reporter /products ACS08008` searches SKU_Master(먼데이보드) + ASIN_Master(먼데이보드) with **exact
+matching** (2026-10-18): a SKU / ASIN / EAN must match exactly; free text is split into a device — the longest
+known 기종 named as whole words, so `iPhone 17 Pro` never pulls in 17 Pro Max or 11 Pro — and the rest, which
+must equal a model name (`Ultra Hybrid`) or appear as whole words. Up to 8 products, most FBA stock first,
+with an Amazon thumbnail (Catalog API, DE → UK) and FBA sellable stock per country.
+`/products-similar X` (also `/products -similar X` / `--similar`) lists every product for the same device —
+the device named in X (`/products -similar iPhone 17 Pro`), or the device of the exactly matched product
+(any of its devices when 기종 lists several, e.g. `iPhone 18 Pro Max/17 Pro Max`), in-stock first, top 11.
 
 Stock comes from an **hourly snapshot**, not a live call: seller SKUs carry channel suffixes
 (`…UKO`, `…PAN`, `…EUP`, `…F`, `…JPP`) or legacy `000…` codes, so the inventory API's exact
