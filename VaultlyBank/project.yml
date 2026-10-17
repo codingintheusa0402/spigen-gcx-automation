@@ -35,6 +35,8 @@ targets:
       path: Vaultly/Info.plist
       properties:
         CFBundleDisplayName: $(VAULTLY_DISPLAY_NAME)
+        CFBundleShortVersionString: $(MARKETING_VERSION)   # XcodeGen otherwise writes 1.0 / 1
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UIBackgroundModes: []
         NSSupportsLiveActivities: true
@@ -67,6 +69,8 @@ targets:
       path: VaultlyWidget/Info.plist
       properties:
         CFBundleDisplayName: Vaultly
+        CFBundleShortVersionString: $(MARKETING_VERSION)   # XcodeGen otherwise writes 1.0 / 1
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
         UIAppFonts: [Pretendard-Regular.otf, Pretendard-Medium.otf, Pretendard-SemiBold.otf, Pretendard-Bold.otf, Pretendard-ExtraBold.otf]
