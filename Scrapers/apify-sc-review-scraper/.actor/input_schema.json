@@ -2,8 +2,24 @@
   "title": "Amazon Seller Central Review Scraper input",
   "type": "object",
   "schemaVersion": 1,
-  "description": "1) Pick marketplaces  2) Paste a Seller Central session for each region you picked  3) Start. One row per review: ASIN, Created Date, Has Photo, Reviewer, Review Ratings, Review Title, Review Text, Country, Review Link, Image URL, Review ID, Order ID, Product Rating, Ratings Count.",
+  "description": "Step 1 (once): Mode = Login → sign in yourself in the Live View tab; the session is saved per region. Step 2: Mode = Scrape → reviews out. Sessions are checked at the start of every run; when one expires, run Login mode again. One row per review: ASIN, Created Date, Has Photo, Reviewer, Review Ratings, Review Title, Review Text, Country, Review Link, Image URL, Review ID, Order ID, Product Rating, Ratings Count.",
   "properties": {
+    "mode": {
+      "title": "Mode",
+      "type": "string",
+      "editor": "select",
+      "enum": [
+        "scrape",
+        "login"
+      ],
+      "enumTitles": [
+        "🔎 Scrape reviews (uses your saved or pasted sessions)",
+        "🔐 Login — sign in once in Live View and save the session"
+      ],
+      "default": "scrape",
+      "prefill": "scrape",
+      "description": "First time? Choose <b>Login</b>, pick your marketplaces, start, then open the run's <b>Live View</b> tab and sign in to Seller Central yourself (email, password, 2-step code). The session is saved privately in your Apify account. After that, run in <b>Scrape</b> mode — no copying cookies."
+    },
     "marketplaces": {
       "title": "Marketplaces",
       "type": "array",
@@ -39,35 +55,43 @@
         "US"
       ]
     },
+    "loginTimeoutMinutes": {
+      "title": "Login mode: minutes to sign in (per region)",
+      "type": "integer",
+      "default": 10,
+      "minimum": 2,
+      "maximum": 30,
+      "description": "How long Login mode waits for you to finish signing in to each region before moving on."
+    },
     "sessionUS": {
       "title": "🇺🇸 US session",
       "type": "string",
       "editor": "textarea",
       "isSecret": true,
-      "description": "Paste your logged-in Seller Central session for 🇺🇸 US (<code>sellercentral.amazon.com</code>). Easiest: install the free <b>Cookie-Editor</b> browser extension → open <code>https://sellercentral.amazon.com/brand-customer-reviews/</code> while logged in → Cookie-Editor → <b>Export → JSON</b> → paste here. A raw <code>Cookie:</code> request header copied from DevTools also works. ⚠️ Sessions expire — copy a fresh one before each scheduled run (at least every few days). Stored encrypted; never logged.",
-      "sectionCaption": "Login sessions (one per region)",
-      "sectionDescription": "Paste only the regions you selected above. One session = one Seller Central login."
+      "description": "<b>Optional — not needed if you used Login mode.</b> Fallback: Paste your logged-in Seller Central session for 🇺🇸 US (<code>sellercentral.amazon.com</code>). Easiest: install the free <b>Cookie-Editor</b> browser extension → open <code>https://sellercentral.amazon.com/brand-customer-reviews/</code> while logged in → Cookie-Editor → <b>Export → JSON</b> → paste here. A raw <code>Cookie:</code> request header copied from DevTools also works. ⚠️ Sessions expire — copy a fresh one before each scheduled run (at least every few days). Stored encrypted; never logged.",
+      "sectionCaption": "Cookie fallback (optional)",
+      "sectionDescription": "Only if you prefer not to use Login mode. A pasted session takes priority over a saved one for that region."
     },
     "sessionEU": {
       "title": "🇪🇺 Europe session",
       "type": "string",
       "editor": "textarea",
       "isSecret": true,
-      "description": "Paste your logged-in Seller Central session for 🇪🇺 Europe (<code>sellercentral-europe.amazon.com</code>). Easiest: install the free <b>Cookie-Editor</b> browser extension → open <code>https://sellercentral-europe.amazon.com/brand-customer-reviews/</code> while logged in → Cookie-Editor → <b>Export → JSON</b> → paste here. A raw <code>Cookie:</code> request header copied from DevTools also works. One Europe session covers DE, IT, FR, ES and UK. ⚠️ Sessions expire — copy a fresh one before each scheduled run (at least every few days). Stored encrypted; never logged."
+      "description": "<b>Optional — not needed if you used Login mode.</b> Fallback: Paste your logged-in Seller Central session for 🇪🇺 Europe (<code>sellercentral-europe.amazon.com</code>). Easiest: install the free <b>Cookie-Editor</b> browser extension → open <code>https://sellercentral-europe.amazon.com/brand-customer-reviews/</code> while logged in → Cookie-Editor → <b>Export → JSON</b> → paste here. A raw <code>Cookie:</code> request header copied from DevTools also works. One Europe session covers DE, IT, FR, ES and UK. ⚠️ Sessions expire — copy a fresh one before each scheduled run (at least every few days). Stored encrypted; never logged."
     },
     "sessionJP": {
       "title": "🇯🇵 Japan session",
       "type": "string",
       "editor": "textarea",
       "isSecret": true,
-      "description": "Paste your logged-in Seller Central session for 🇯🇵 Japan (<code>sellercentral.amazon.co.jp</code>). Easiest: install the free <b>Cookie-Editor</b> browser extension → open <code>https://sellercentral.amazon.co.jp/brand-customer-reviews/</code> while logged in → Cookie-Editor → <b>Export → JSON</b> → paste here. A raw <code>Cookie:</code> request header copied from DevTools also works. ⚠️ Sessions expire — copy a fresh one before each scheduled run (at least every few days). Stored encrypted; never logged."
+      "description": "<b>Optional — not needed if you used Login mode.</b> Fallback: Paste your logged-in Seller Central session for 🇯🇵 Japan (<code>sellercentral.amazon.co.jp</code>). Easiest: install the free <b>Cookie-Editor</b> browser extension → open <code>https://sellercentral.amazon.co.jp/brand-customer-reviews/</code> while logged in → Cookie-Editor → <b>Export → JSON</b> → paste here. A raw <code>Cookie:</code> request header copied from DevTools also works. ⚠️ Sessions expire — copy a fresh one before each scheduled run (at least every few days). Stored encrypted; never logged."
     },
     "sessionIN": {
       "title": "🇮🇳 India session",
       "type": "string",
       "editor": "textarea",
       "isSecret": true,
-      "description": "Paste your logged-in Seller Central session for 🇮🇳 India (<code>sellercentral.amazon.in</code>). Easiest: install the free <b>Cookie-Editor</b> browser extension → open <code>https://sellercentral.amazon.in/brand-customer-reviews/</code> while logged in → Cookie-Editor → <b>Export → JSON</b> → paste here. A raw <code>Cookie:</code> request header copied from DevTools also works. ⚠️ Sessions expire — copy a fresh one before each scheduled run (at least every few days). Stored encrypted; never logged."
+      "description": "<b>Optional — not needed if you used Login mode.</b> Fallback: Paste your logged-in Seller Central session for 🇮🇳 India (<code>sellercentral.amazon.in</code>). Easiest: install the free <b>Cookie-Editor</b> browser extension → open <code>https://sellercentral.amazon.in/brand-customer-reviews/</code> while logged in → Cookie-Editor → <b>Export → JSON</b> → paste here. A raw <code>Cookie:</code> request header copied from DevTools also works. ⚠️ Sessions expire — copy a fresh one before each scheduled run (at least every few days). Stored encrypted; never logged."
     },
     "maxPagesPerMarketplace": {
       "title": "Max pages per marketplace",
@@ -204,13 +228,33 @@
         "HIGH — slowest, safest for big/frequent runs"
       ],
       "default": "MEDIUM",
-      "description": "Delays and scrolling between pages, like the SC scraper's DETECTION_AVOIDANCE."
+      "description": "Delays and scrolling between pages. Every page load also retries with backoff (8s → 25s → 60s) on throttling or robot checks, and regions are scraped one after another."
     },
     "returnRefreshedSessions": {
       "title": "Save refreshed sessions",
       "type": "boolean",
       "default": false,
       "description": "Amazon rotates session cookies while you browse. When on, the refreshed cookies are saved to this run's key-value store (record REFRESHED_SESSIONS, private to your account) so you can paste them into the next run and keep sessions alive longer."
+    },
+    "useSavedSessions": {
+      "title": "Use sessions saved by Login mode",
+      "type": "boolean",
+      "default": true,
+      "description": "Scrape mode reuses the sessions you saved with Login mode (when that region's paste field is empty).",
+      "sectionCaption": "Saved sessions"
+    },
+    "saveSessions": {
+      "title": "Keep saved sessions fresh",
+      "type": "boolean",
+      "default": true,
+      "description": "After a successful region, the refreshed cookies (Amazon rotates them while you browse) are saved back, so sessions last longer. Pasted sessions are saved this way too, so next time you don't need to paste."
+    },
+    "sessionStoreName": {
+      "title": "Session store name",
+      "type": "string",
+      "editor": "textfield",
+      "default": "sc-review-sessions",
+      "description": "Named key-value store in YOUR Apify account that holds saved sessions (one record per region: SESSION_US, SESSION_EU …). Use a different name per brand / seller account. Delete the store to forget all sessions."
     }
   },
   "required": [

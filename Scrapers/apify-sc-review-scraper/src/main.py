@@ -1,12 +1,18 @@
 """Amazon Seller Central Brand Customer Reviews scraper (Apify Actor).
 
-Port of the GCX SC_Review_Scraper (scrape_sc_reviews.py) for Apify: instead of logging in with a
-password + OTP, the user pastes their own Seller Central login session (cookies) per region.
+Port of the GCX SC_Review_Scraper (scrape_sc_reviews.py) for Apify. The actor never sees a password unless
+the user types it into the browser themselves:
+  · Login mode — the user signs in in a real browser shown in the run's Live View tab (login.py); the session is
+    saved per region in their own named key-value store and reused by later runs until it expires.
+  · Cookie fallback — paste a Cookie-Editor JSON export / Cookie header into the secret session fields.
+Every scrape run first checks each region's session and stops that region with a clear "run Login mode again"
+message if it has expired. Pages are visited one region at a time, at a human pace, with retries + backoff.
 Output columns (same order as the GCX SC scraper / Caspi fetch, English headers):
   ASIN | Created Date | Has Photo | Reviewer | Review Ratings | Review Title | Review Text | Country |
   Review Link | Image URL | Review ID | Order ID | Product Rating | Ratings Count
 """
 import asyncio
+import json
 import random
 import re
 from datetime import datetime, timezone
@@ -15,6 +21,7 @@ from urllib.parse import parse_qs, urlparse
 from apify import Actor
 from playwright.async_api import async_playwright
 
+from . import login, session_store
 from .sessions import fingerprint, parse_session
 
 # ── Marketplace registry (same as scrape_sc_reviews.py _DOMAINS) ─────────────────────────────
@@ -203,6 +210,39 @@ class SessionExpired(Exception):
     pass
 
 
+class Blocked(Exception):
+    """Amazon answered with a robot check / throttling page — slow down, don't hammer."""
+
+
+RETRY_STATUS = {429, 500, 502, 503, 504}
+BACKOFF = (8, 25, 60)   # seconds before retry 1, 2, 3 (+ jitter)
+
+
+async def polite_goto(page, url: str, what: str, timeout=45000):
+    """page.goto with retries and exponential backoff on network errors, throttling (429/5xx) and robot checks.
+    Sign-in redirects are NOT retried — they mean the session expired."""
+    last = None
+    for attempt in range(len(BACKOFF) + 1):
+        try:
+            resp = await page.goto(url, wait_until='domcontentloaded', timeout=timeout)
+            if on_login_page(page.url):
+                return resp
+            status = resp.status if resp else 0
+            robot = 'validateCaptcha' in page.url or 'errors/validateCaptcha' in (await page.content())[:20000]
+            if status not in RETRY_STATUS and not robot:
+                return resp
+            last = f'HTTP {status}' + (' robot check' if robot else '')
+        except Exception as e:
+            last = f'{e.__class__.__name__}: {str(e)[:100]}'
+        if attempt < len(BACKOFF):
+            wait = BACKOFF[attempt] * random.uniform(0.8, 1.3)
+            Actor.log.warning(f'[{what}] {last} — waiting {wait:.0f}s before retry {attempt + 1}/{len(BACKOFF)}')
+            await asyncio.sleep(wait)
+    if last and 'robot' in last:
+        raise Blocked(f'{what}: Amazon showed a robot check {len(BACKOFF) + 1} times — try again later with Pace = HIGH')
+    raise RuntimeError(f'{what}: {last} after {len(BACKOFF) + 1} attempts')
+
+
 class Scraper:
     def __init__(self, inp: dict, ctx):
         self.inp, self.ctx = inp, ctx
@@ -223,9 +263,9 @@ class Scraper:
 
     # ── account / marketplace selection ──────────────────────────────────────────────────
     async def open_region(self, page, region: str, url: str):
-        await page.goto(url, wait_until='domcontentloaded', timeout=45000)
+        await polite_goto(page, url, region)
         if on_login_page(page.url):
-            raise SessionExpired(f'{region}: Seller Central redirected to sign-in — the pasted session is expired or incomplete')
+            raise SessionExpired(f'{region}: Seller Central redirected to sign-in — the session has expired')
         await self.resolve_account_picker(page, region)
         if on_login_page(page.url):
             raise SessionExpired(f'{region}: session expired while selecting the account')
@@ -263,9 +303,9 @@ class Scraper:
     async def switch_eu_marketplace(self, page, market: str) -> str:
         """Two-level account switcher on SC Europe → returns mons_sel_* params for that country."""
         m = MARKETS[market]
-        await page.goto('https://sellercentral-europe.amazon.com/home', wait_until='domcontentloaded', timeout=45000)
+        await polite_goto(page, 'https://sellercentral-europe.amazon.com/home', f'EU/{market}')
         if on_login_page(page.url):
-            raise SessionExpired('EU: Seller Central redirected to sign-in — the pasted EU session is expired')
+            raise SessionExpired('EU: Seller Central redirected to sign-in — the EU session has expired')
         await page.wait_for_selector('.dropdown-account-switcher-header', timeout=20000)
         try:
             btn = await page.wait_for_selector('#modal button.modal-close', timeout=2500, state='visible')
@@ -315,11 +355,11 @@ class Scraper:
                 break
             url = base + params + (f'&pageNumber={p}' if p > 1 else '')
             try:
-                await page.goto(url, wait_until='domcontentloaded', timeout=45000)
+                await polite_goto(page, url, f'{market} p{p}')
                 if on_login_page(page.url):
                     raise SessionExpired(f'{market}: session expired on page {p}')
                 await page.wait_for_selector('.reviewContainer[data-testid]', timeout=20000)
-            except SessionExpired:
+            except (SessionExpired, Blocked):
                 raise
             except Exception as e:
                 if on_login_page(page.url):
@@ -365,7 +405,7 @@ class Scraper:
             bad = stale_ids(rows)
             if bad:  # reload once, as the SC scraper does
                 await asyncio.sleep(random.uniform(1.0, 2.5))
-                await page.goto(url, wait_until='domcontentloaded', timeout=45000)
+                await polite_goto(page, url, f'{market} p{p} reload')
                 try:
                     await page.wait_for_selector('.reviewContainer[data-testid]', timeout=20000)
                     await page.wait_for_function(CONTENT_READY_JS, timeout=10000)
@@ -399,9 +439,17 @@ class Scraper:
         want = {r[IDX['Review ID']] for r in rows}
         while pid < total and pid < 400:
             qs = f'?pageId={pid}&pageSize=50&sortByType=REVIEW_CREATED_DATE&isAscending=false&includeDone=false'
-            data = await page.evaluate(ORDER_ID_FETCH_JS, api + qs + (f'&{mons}' if mons else ''))
+            data = None
+            for attempt in range(len(BACKOFF) + 1):
+                data = await page.evaluate(ORDER_ID_FETCH_JS, api + qs + (f'&{mons}' if mons else ''))
+                err = data.get('__error', '') if isinstance(data, dict) else 'bad response'
+                if not err or not any(c in err for c in ('429', '500', '502', '503', '504', 'parse')):
+                    break
+                if attempt < len(BACKOFF):
+                    await asyncio.sleep(BACKOFF[attempt] * random.uniform(0.8, 1.3))
             if not isinstance(data, dict) or data.get('__error'):
-                Actor.log.warning(f'[{region}] order ID API: {data.get("__error") if isinstance(data, dict) else data}')
+                Actor.log.warning(f'[{region}] order ID API: {data.get("__error") if isinstance(data, dict) else data}'
+                                  ' — Order IDs left empty for the rest')
                 break
             total = data.get('totalPageCount', 1)
             for rev in data.get('reviews', []):
@@ -410,7 +458,7 @@ class Scraper:
             pid += 1
             if want <= set(order):
                 break
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(random.uniform(0.8, 2.0))   # polite: ~1 API call a second at most
         matched = 0
         for r in rows:
             oid = order.get(r[IDX['Review ID']], '')
@@ -422,7 +470,7 @@ class Scraper:
     async def add_images(self, page, market, rows):
         host = MARKETS[market]['amazon']
         try:
-            await page.goto(f'https://{host}/', wait_until='domcontentloaded', timeout=45000)
+            await polite_goto(page, f'https://{host}/', f'{market} storefront')
         except Exception as e:
             Actor.log.warning(f'[{market}] storefront unreachable for images ({e})')
             return
@@ -483,14 +531,17 @@ class Scraper:
                     await Actor.set_status_message(f'{market}: {n} reviews · total {self.pushed}')
                 except SessionExpired as e:
                     raise e
+                except Blocked as e:
+                    Actor.log.error(str(e))
+                    self.health[market] = {'status': 'BLOCKED', 'message': str(e)}
+                    break   # don't keep knocking — the other markets of this region would hit the same wall
                 except Exception as e:
                     Actor.log.exception(f'[{market}] failed')
                     self.health[market] = {'status': 'ERROR', 'message': str(e)[:500]}
         except SessionExpired as e:
             Actor.log.error(str(e))
             for market in markets:
-                self.health.setdefault(market, {'status': 'SESSION_EXPIRED',
-                                                'message': f'{e}. Copy a fresh session for {region} and run again.'})
+                self.health.setdefault(market, {'status': 'SESSION_EXPIRED', 'message': expired_help(region, str(e))})
         except Exception as e:
             Actor.log.exception(f'[{region}] failed')
             for market in markets:
@@ -499,82 +550,157 @@ class Scraper:
             await page.close()
 
 
+def expired_help(region: str, why: str = '') -> str:
+    return (f'{why + ". " if why else ""}The {region} session has expired. Run the actor once in **Login mode** with '
+            f'{region} selected and sign in again in the Live View tab (or paste a fresh {region} cookie export).')
+
+
+async def launch(headless=True):
+    pw = await async_playwright().start()
+    browser = await pw.chromium.launch(headless=headless, args=['--disable-blink-features=AutomationControlled'])
+    ctx = await browser.new_context(locale='en-US', viewport=login.VIEW,
+                                    user_agent=('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                                                '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'))
+
+    class _B:   # closes the browser AND the playwright driver together
+        async def close(self):
+            await browser.close()
+            await pw.stop()
+    return _B(), ctx
+
+
+def group_markets(markets):
+    by_region: dict[str, list[str]] = {}
+    for m in (EU_ORDER + [x for x in MARKETS if x not in EU_ORDER]):
+        if m in markets:
+            by_region.setdefault(MARKETS[m]['region'], []).append(m)
+    return by_region
+
+
+async def preflight(ctx, region: str) -> str | None:
+    """Is this region's session alive? Returns None if yes, else a reason. One light page view."""
+    page = await ctx.new_page()
+    try:
+        await polite_goto(page, f"https://{REGIONS[region]['host']}/brand-customer-reviews/", f'{region} check')
+        return 'Seller Central redirected to sign-in' if on_login_page(page.url) else None
+    except Blocked as e:
+        return f'blocked: {e}'
+    except Exception as e:
+        return f'check failed: {str(e)[:160]}'
+    finally:
+        await page.close()
+
+
 async def main() -> None:
     async with Actor:
         inp = await Actor.get_input() or {}
+        mode = str(inp.get('mode') or 'scrape').lower()
         markets = [m.upper() for m in (inp.get('marketplaces') or ['US'])]
         unknown = [m for m in markets if m not in MARKETS]
         if unknown:
             await Actor.exit(status_message=f'⚠️ Unknown marketplace(s): {unknown}. Use {list(MARKETS)}')
             return
-        by_region: dict[str, list[str]] = {}
-        for m in (EU_ORDER + [x for x in MARKETS if x not in EU_ORDER]):
-            if m in markets:
-                by_region.setdefault(MARKETS[m]['region'], []).append(m)
+        by_region = group_markets(markets)
 
-        cookies, missing = [], []
-        for region in by_region:
+        # ── Login mode: user signs in in Live View, sessions saved per region ──
+        if mode == 'login':
+            results = await login.run(inp, {r: REGIONS[r]['host'] for r in by_region}, launch)
+            await Actor.exit(status_message=login.summary(results))
+            return
+
+        # ── Scrape mode: sessions from the paste fields first, else the ones saved by Login mode ──
+        cookies, missing, source = [], [], {}
+        use_saved = inp.get('useSavedSessions', True)
+        for region in list(by_region):
             raw = inp.get(f'session{region}') or ''
             try:
                 parsed = parse_session(raw, REGIONS[region]['host'])
             except Exception as e:
                 await Actor.exit(status_message=f'⚠️ {region} session could not be read ({e}). Paste the Cookie-Editor JSON export or the Cookie header.')
                 return
+            if parsed:
+                source[region] = 'pasted'
+            elif use_saved:
+                rec = await session_store.load(inp, region)
+                if rec:
+                    parsed = rec['cookies']
+                    source[region] = f"saved {rec.get('savedAt', '?')[:16].replace('T', ' ')} UTC via {rec.get('source', '?')}"
             if not parsed:
                 missing.append(region)
                 continue
-            Actor.log.info(f'[{region}] session loaded: {fingerprint(parsed)}')
+            Actor.log.info(f'[{region}] session ({source[region]}): {fingerprint(parsed)}')
             cookies += parsed
         if inp.get('fetchImages') and inp.get('storefrontSession'):
             store = parse_session(inp['storefrontSession'], 'www.amazon.com')
             Actor.log.info(f'[storefront] session loaded: {fingerprint(store)}')
             cookies += store
         if not cookies:
-            # Nothing to authenticate with (e.g. a first look at the actor, or Apify's automated
-            # daily test run on the prefilled input) — explain the setup instead of failing.
-            msg = ('No Seller Central session pasted. Paste a session for each region you selected '
-                   '(see "How to copy your login session" in the README), then start again.')
+            # Nothing to authenticate with (e.g. a first look at the actor, or Apify's automated daily test run
+            # on the prefilled input) — explain the setup instead of failing.
+            msg = ('No Seller Central session yet. Easiest: run once with Mode = "Login" and sign in in the Live View '
+                   'tab — or paste a cookie export per region (see README), then start again.')
             Actor.log.warning(msg)
             await Actor.set_value('SESSION_HEALTH', {'finishedAt': datetime.now(timezone.utc).isoformat(), 'reviews': 0,
                                                      'marketplaces': {m: {'status': 'NO_SESSION'} for m in markets}})
             await Actor.exit(status_message=msg)
             return
+        health: dict = {}
         for region in missing:
-            Actor.log.error(f'No session pasted for {region} — skipping {by_region.pop(region)}')
+            ms = by_region.pop(region)
+            Actor.log.error(f'No session for {region} — skipping {ms}. Run Login mode for {region} or paste its session.')
+            health.update({m: {'status': 'NO_SESSION', 'message': f'No session for {region}: run Login mode or paste one'}
+                           for m in ms})
 
-        Actor.log.info('Reminder: Seller Central sessions expire. Refresh (re-copy) them before each scheduled '
-                       'run or at least every few days so runs stay healthy.')
-        health: dict = {m: {'status': 'NO_SESSION', 'message': 'No session pasted for this region'}
-                        for r in missing for m in [x for x in markets if MARKETS[x]['region'] == r]}
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True, args=['--disable-blink-features=AutomationControlled'])
-            ctx = await browser.new_context(locale='en-US', viewport={'width': 1440, 'height': 900},
-                                            user_agent=('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                                                        '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'))
-            if cookies:
-                await ctx.add_cookies(cookies)
+        browser, ctx = await launch()
+        try:
+            await ctx.add_cookies(cookies)
+            # ── Session check first: an expired region stops with a clear message, healthy ones continue ──
+            for region in list(by_region):
+                why = await preflight(ctx, region)
+                if why:
+                    ms = by_region.pop(region)
+                    status = 'BLOCKED' if why.startswith('blocked') else 'SESSION_EXPIRED' if 'sign-in' in why else 'ERROR'
+                    msg = expired_help(region, why) if status == 'SESSION_EXPIRED' else why
+                    Actor.log.error(f'[{region}] {msg}')
+                    health.update({m: {'status': status, 'message': msg} for m in ms})
+                else:
+                    Actor.log.info(f'[{region}] session OK')
+                await asyncio.sleep(random.uniform(1.5, 3.5))
+            if not by_region:
+                await Actor.set_value('SESSION_HEALTH', {'finishedAt': datetime.now(timezone.utc).isoformat(),
+                                                         'reviews': 0, 'marketplaces': health})
+                need = sorted({MARKETS[m]['region'] for m, h in health.items() if h['status'] in ('SESSION_EXPIRED', 'NO_SESSION')})
+                await Actor.exit(status_message=(f'⛔ Stopped: no usable session. Run the actor in Login mode for '
+                                                 f'{", ".join(need)} and sign in again, then re-run.' if need else
+                                                 f'⛔ Stopped: {json.dumps({m: h["status"] for m, h in health.items()})}'))
+                return
+            Actor.log.info('Sessions are checked at the start of every run. When one expires, run Login mode '
+                           'for that region again (takes a minute).')
             s = Scraper(inp, ctx)
-            await asyncio.gather(*(s.run_region(r, ms) for r, ms in by_region.items()))
+            for region, ms in by_region.items():   # one region at a time — polite, and kinder to the session
+                await s.run_region(region, ms)
             health.update(s.health)
+            # Keep sessions alive: Amazon rotates cookies while you browse — save the fresh ones for next time
+            fresh = await ctx.cookies()
+            if inp.get('saveSessions', True):
+                for region in by_region:
+                    if all(health.get(m, {}).get('status') == 'OK' for m in by_region[region]):
+                        n = await session_store.save(inp, region, fresh, 'refreshed')
+                        Actor.log.info(f'[{region}] refreshed session saved for next runs ({n} cookies)')
             if inp.get('returnRefreshedSessions'):
-                fresh = await ctx.cookies()
-                root = {'US': 'amazon.com', 'EU': 'amazon.com', 'JP': 'amazon.co.jp', 'IN': 'amazon.in'}
-                await Actor.set_value('REFRESHED_SESSIONS', {
-                    r: [c for c in fresh if c['domain'].lstrip('.') in (REGIONS[r]['host'], root[r])]
-                    for r in by_region})
-                Actor.log.info('Refreshed sessions saved to the key-value store record REFRESHED_SESSIONS '
-                               '(private to your account) — paste them into the session fields for the next run.')
+                await Actor.set_value('REFRESHED_SESSIONS', {r: session_store.region_cookies(fresh, r) for r in by_region})
+                Actor.log.info('Refreshed sessions also saved to this run\'s key-value store record REFRESHED_SESSIONS.')
+        finally:
             await browser.close()
 
-        report = {'finishedAt': datetime.now(timezone.utc).isoformat(), 'reviews': s.pushed if cookies else 0,
-                  'marketplaces': health}
+        report = {'finishedAt': datetime.now(timezone.utc).isoformat(), 'reviews': s.pushed, 'marketplaces': health}
         await Actor.set_value('SESSION_HEALTH', report)
         bad = {m: h['status'] for m, h in health.items() if h['status'] != 'OK'}
         Actor.log.info(f'Session health: {health}')
         if bad and len(bad) == len(markets):
-            # User-side problem (expired/missing session) — report clearly, don't count as an actor failure.
-            await Actor.exit(status_message=f'⚠️ No marketplace scraped: {bad}. Refresh your sessions and run again '
-                                            f'(details: key-value store record SESSION_HEALTH).')
+            await Actor.exit(status_message=f'⚠️ No marketplace scraped: {bad}. See SESSION_HEALTH — run Login mode '
+                                            f'for expired regions.')
             return
-        msg = f'{report["reviews"]} reviews' + (f' · needs attention: {bad}' if bad else ' · all sessions healthy')
+        msg = f'{report["reviews"]} reviews' + (f' · needs attention: {bad} (run Login mode for expired regions)'
+                                                 if bad else ' · all sessions healthy')
         await Actor.exit(status_message=msg)
