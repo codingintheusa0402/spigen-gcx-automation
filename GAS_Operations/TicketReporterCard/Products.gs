@@ -32,7 +32,9 @@ var SKU_MASTER_ID = '1JijzoYw9aDW-9Jx_OJOBByMVCX8-0OtNxb-0Y82EZJI';   // SKU_Mas
 var ASIN_MASTER_ID = '1fx9K4r2T9SeZK076zy9kMHoLzAKDgmlRp-C2VtnTKVo';  // ASIN_Master(먼데이보드) › Data
 var PRODUCTS_MAX = 8;            // product rows per card (/products)
 var SIMILAR_MAX = 12;            // product rows per card (/products-similar, incl. the base product)
-var PRODUCT_INDEX_CACHE = 'PRODUCT_INDEX_V3';   // V2: + ean / upc, V3: + dept
+var PRODUCT_INDEX_CACHE = 'PRODUCT_INDEX_V4';   // V2: + ean / upc, V3: + dept, V4: + group / devs
+var PRODUCT_INDEX_TAB = 'ProductIndex';          // durable copy, so a cold cache never re-reads the 15k-row masters in a Chat call
+var SKU_KEY_RE = /^([A-Z]{3}\d{5}|\d{3}[A-Z]{2}\d{5}|[A-Z]\d{2}[A-Z]{2}\d{5})/;   // master SKU at the start of a seller SKU (incl. legacy 000AA00000)
 var INVENTORY_CACHE = 'INVENTORY_SNAPSHOT_V1';
 var INVENTORY_TAB = 'InventorySnapshot';
 var LISTINGS_CACHE = 'LISTINGS_SNAPSHOT_V1';
@@ -72,33 +74,36 @@ function handleProductsCommand_(query, similar) {
   var lsnap = loadSnapshot_(LISTINGS_CACHE, LISTINGS_TAB);
   if (!lsnap) notes.push('Seller Central 리스팅 스냅샷이 아직 없습니다 (refreshListingsSnapshot 미실행)');
   var stockOf = function (p) { return stockFor_(p, snap).sum; };
-  var matches = searchProducts_(index, query, stockOf);
-  if (!matches.length && /^B0[A-Z0-9]{8}$/i.test(query)) matches = productsForAsin_(index, query.toUpperCase(), [snap, lsnap]);
-  var title, subtitle, list, total;
+  var title, subtitle, list, total, sim = {};
 
   if (!similar) {
+    var ids = parseIdentifiers_(query);
+    var matches = ids ? productsForIds_(index, ids) : searchProducts_(index, query, stockOf);
+    matches = [].concat.apply([], matches.map(function (p) {   // an ASIN the masters don't know → whichever SKU carries it in the snapshots
+      return p.stub && !p.sku ? (productsForAsin_(index, p.asins[0], [snap, lsnap]).length ? productsForAsin_(index, p.asins[0], [snap, lsnap]) : [p]) : [p];
+    }));
     total = matches.length;
     list = matches.slice(0, PRODUCTS_MAX);
-    if (!list.length && /^[A-Z]{3}\d{5}$/i.test(query)) list = [{ sku: query.toUpperCase(), asins: [] }];  // not in the masters — FBA may still know it
-    if (!list.length && /^B0[A-Z0-9]{8}$/i.test(query)) list = [{ sku: '', asins: [query.toUpperCase()] }];
     title = '🔎 ' + query;
     subtitle = '마스터 일치 ' + total + '건' + (total > list.length ? ' · 상위 ' + list.length + '건 표시 (재고순)' : '');
   } else {
-    var sim = similarProducts_(index, query, matches, stockOf);
+    sim = similarProducts_(index, query, stockOf);
     if (sim.error) return chatCreate_({ text: sim.error });
     if (!sim.same.length && !sim.base) {
-      return chatCreate_({ text: '⚠️ ' + sim.label + (sim.cat ? ' · ' + sim.cat.label : '') + ' 에 해당하는 제품이 SKU master / ASIN master 에 없습니다.' +
-        (sim.cat && sim.cat.key === 'sda' ? ' (SDA = 담당부서코드 A003 제품 중 기종이 ' + sim.label + ' 로 등록된 것)' : '') });
+      var catLabel = sim.cats.map(function (c) { return c.label; }).concat(sim.brand ? [sim.brand] : []).join(' · ');
+      return chatCreate_({ text: '⚠️ ' + sim.label + (catLabel ? ' · ' + catLabel : '') + ' 에 해당하는 제품이 SKU master / ASIN master 에 없습니다.' +
+        (sim.cats.some(function (c) { return c.key === 'sda'; }) ? ' (SDA = 담당부서코드 A003 제품 중 기종이 ' + sim.label + ' 로 등록된 것)' : '') });
     }
     total = sim.same.length;
     list = (sim.base ? [sim.base] : []).concat(sim.same.slice(0, SIMILAR_MAX - (sim.base ? 1 : 0)));
     var shown = list.length - (sim.base ? 1 : 0);
-    title = '📱 ' + sim.label + ' 호환 ' + (sim.cat ? sim.cat.label : '제품');
+    title = '📱 ' + sim.label + ' 호환 ' + (sim.cats.length ? sim.cats.map(function (c) { return c.label; }).join(' · ') : '제품') + (sim.brand ? ' · ' + sim.brand : '');
     subtitle = (sim.base ? '기준 ' + sim.base.sku + ' · ' : '') + '같은 기종 ' + total + '건' + (total > shown ? ' · 재고 있는 순 상위 ' + shown + '건' : '');
   }
 
   if (!list.length) {
-    return chatCreate_({ text: '⚠️ "' + query + '" 와 일치하는 제품이 SKU master / ASIN master 에 없습니다.' });
+    return chatCreate_({ text: '⚠️ "' + query + '" 와 정확히 일치하는 제품이 SKU master / ASIN master 에 없습니다. ' +
+      'SKU·ASIN·EAN, 또는 기종 + 모델명 (예: iPhone 17 Pro Ultra Hybrid) 으로 입력해 주세요.' });
   }
 
   // ASINs the masters lack: FBA stock → Seller Central listings → catalog by EAN/UPC (each step only adds)
@@ -127,39 +132,38 @@ function handleProductsCommand_(query, similar) {
   try { thumbs = fetchThumbnails_(list); }
   catch (e) { notes.push('이미지 조회 실패: ' + e.message); }
 
-  return chatCreate_({ cardsV2: [buildProductsCard_(title, subtitle, list, inv, lst, thumbs, similar, snap, lsnap, notes, Date.now() - t0)] });
+  return chatCreate_({ cardsV2: [buildProductsCard_(title, subtitle, list, inv, lst, thumbs, similar && !!sim.base, snap, lsnap, notes, Date.now() - t0)] });
 }
 
 /* ===================== Master index ===================== */
 
 /** [{sku, asins[], model, device, nameKo, nameEn, brand, color, category, status}] from both masters, cached 6 h. */
 function loadProductIndex_() {
-  var cached = cacheGetChunked_(PRODUCT_INDEX_CACHE);
-  if (cached) return JSON.parse(cached);
-  return buildProductIndex_();
+  return loadSnapshot_(PRODUCT_INDEX_CACHE, PRODUCT_INDEX_TAB) || buildProductIndex_();
 }
 
 function buildProductIndex_() {
   var bySku = {};
-  readColumns_(SKU_MASTER_ID, ['name', '모델명', '자재내역(KO)', '자재내역(EN)', '브랜드', '기종', '색상', '대분류', '품목상태', 'EAN바코드', 'UPC바코드', '담당부서코드']).forEach(function (r) {
+  readColumns_(SKU_MASTER_ID, ['name', '모델명', '자재내역(KO)', '자재내역(EN)', '브랜드', '기종', '색상', '대분류', '품목상태', 'EAN바코드', 'UPC바코드', '담당부서코드', '자재 그룹 내역']).forEach(function (r) {
     var sku = String(r[0] || '').trim().toUpperCase();
-    if (sku) bySku[sku] = { sku: sku, asins: [], model: r[1], nameKo: r[2], nameEn: r[3], brand: r[4], device: r[5], color: r[6], category: r[7], status: r[8], ean: r[9], upc: r[10], dept: r[11] };
+    if (sku) bySku[sku] = { sku: sku, asins: [], model: r[1], nameKo: r[2], nameEn: r[3], brand: r[4], device: r[5], color: r[6], category: r[7], status: r[8], ean: r[9], upc: r[10], dept: r[11], group: r[12] };
   });
-  readColumns_(ASIN_MASTER_ID, ['SKU', 'ASIN', '모델명', '자재내역', '자재내역(EN)', '브랜드', '기종명', '색상명', '대분류']).forEach(function (r) {
+  readColumns_(ASIN_MASTER_ID, ['SKU', 'ASIN', '모델명', '자재내역', '자재내역(EN)', '브랜드', '기종명', '색상명', '대분류', '자재그룹명']).forEach(function (r) {
     var sku = String(r[0] || '').trim().toUpperCase();
     var asin = String(r[1] || '').trim().toUpperCase();
     if (!sku) return;
     var p = bySku[sku];
-    if (!p) p = bySku[sku] = { sku: sku, asins: [], model: r[2], nameKo: r[3], nameEn: r[4], brand: r[5], device: r[6], color: r[7], category: r[8], status: '' };
+    if (!p) p = bySku[sku] = { sku: sku, asins: [], model: r[2], nameKo: r[3], nameEn: r[4], brand: r[5], device: r[6], color: r[7], category: r[8], status: '', group: r[9] };
     if (/^B0[A-Z0-9]{8}$/.test(asin) && p.asins.indexOf(asin) < 0) p.asins.push(asin);
     if (!isRealDevice_(p.device) && isRealDevice_(r[6])) p.device = r[6];
   });
   var index = Object.keys(bySku).map(function (k) {
     var p = bySku[k];
-    ['model', 'nameKo', 'nameEn', 'brand', 'device', 'color', 'category', 'status', 'ean', 'upc', 'dept'].forEach(function (f) { p[f] = String(p[f] || '').trim(); });
+    ['model', 'nameKo', 'nameEn', 'brand', 'device', 'color', 'category', 'status', 'ean', 'upc', 'dept', 'group'].forEach(function (f) { p[f] = String(p[f] || '').trim(); });
+    p.devs = deviceSet_(p.device);
     return p;
   });
-  cachePutChunked_(PRODUCT_INDEX_CACHE, JSON.stringify(index), 6 * 3600);
+  saveSnapshot_(PRODUCT_INDEX_CACHE, PRODUCT_INDEX_TAB, index);
   return index;
 }
 
@@ -224,8 +228,8 @@ function foldInventoryReport_(by, cfg, rows) {
     var row = rows[r];
     if (iCond >= 0 && row[iCond] !== 'SELLABLE') continue;
     var sku = String(row[iSku] || '').trim().toUpperCase(), asin = String(row[iAsin] || '').trim();
-    var m = sku.match(/^[A-Z]{3}\d{5}/);
-    var key = m ? m[0] : (asin ? 'ASIN:' + asin : null);
+    var m = sku.match(SKU_KEY_RE);
+    var key = m ? m[1] : (asin ? 'ASIN:' + asin : null);
     if (!key) continue;
     var country = cfg.country || row[iCountry];
     var o = by[key] = by[key] || { c: {}, a: [] };
@@ -319,7 +323,7 @@ function refreshListingsSnapshot_() {
       catch (e) { Logger.log('%s listings request skipped (next run retries): %s', m[1], e.message); }
     }
   });
-  var ids = latest.map(function (l) { return l.rep.reportId; }).sort().join(',');
+  var ids = 'v2:' + latest.map(function (l) { return l.rep.reportId; }).sort().join(',');   // v2: legacy SKU keys
   var props = PropertiesService.getScriptProperties();
   if (!latest.length || ids === props.getProperty(LISTINGS_IDS_PROP)) {
     Logger.log('listings: nothing new (%s markets with a finished report)', latest.length);
@@ -351,8 +355,8 @@ function foldListingsReport_(by, code, text) {
     var sku = String(c[iSku] || '').trim().toUpperCase().replace(/^AMZN\.GR\./, '');   // Grade & Resell copies
     var asin = iAsin >= 0 ? c[iAsin] : (c[iPidType] === '1' ? c[iPid] : '');
     asin = String(asin || '').trim().toUpperCase();
-    var m = sku.match(/^[A-Z]{3}\d{5}/);
-    var key = m ? m[0] : (/^B0[A-Z0-9]{8}$/.test(asin) ? 'ASIN:' + asin : null);
+    var m = sku.match(SKU_KEY_RE);
+    var key = m ? m[1] : (/^B0[A-Z0-9]{8}$/.test(asin) ? 'ASIN:' + asin : null);
     if (!key) continue;
     var o = by[key] = by[key] || { a: [], on: '', off: '' };
     if (/^B0[A-Z0-9]{8}$/.test(asin) && o.a.indexOf(asin) < 0) o.a.push(asin);
