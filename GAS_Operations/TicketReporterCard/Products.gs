@@ -32,7 +32,7 @@ var SKU_MASTER_ID = '1JijzoYw9aDW-9Jx_OJOBByMVCX8-0OtNxb-0Y82EZJI';   // SKU_Mas
 var ASIN_MASTER_ID = '1fx9K4r2T9SeZK076zy9kMHoLzAKDgmlRp-C2VtnTKVo';  // ASIN_Master(먼데이보드) › Data
 var PRODUCTS_MAX = 8;            // product rows per card (/products)
 var SIMILAR_MAX = 12;            // product rows per card (/products-similar, incl. the base product)
-var PRODUCT_INDEX_CACHE = 'PRODUCT_INDEX_V2';   // V2: + ean / upc
+var PRODUCT_INDEX_CACHE = 'PRODUCT_INDEX_V3';   // V2: + ean / upc, V3: + dept
 var INVENTORY_CACHE = 'INVENTORY_SNAPSHOT_V1';
 var INVENTORY_TAB = 'InventorySnapshot';
 var LISTINGS_CACHE = 'LISTINGS_SNAPSHOT_V1';
@@ -86,10 +86,14 @@ function handleProductsCommand_(query, similar) {
   } else {
     var sim = similarProducts_(index, query, matches, stockOf);
     if (sim.error) return chatCreate_({ text: sim.error });
+    if (!sim.same.length && !sim.base) {
+      return chatCreate_({ text: '⚠️ ' + sim.label + (sim.cat ? ' · ' + sim.cat.label : '') + ' 에 해당하는 제품이 SKU master / ASIN master 에 없습니다.' +
+        (sim.cat && sim.cat.key === 'sda' ? ' (SDA = 담당부서코드 A003 제품 중 기종이 ' + sim.label + ' 로 등록된 것)' : '') });
+    }
     total = sim.same.length;
     list = (sim.base ? [sim.base] : []).concat(sim.same.slice(0, SIMILAR_MAX - (sim.base ? 1 : 0)));
     var shown = list.length - (sim.base ? 1 : 0);
-    title = '📱 ' + sim.label + ' 호환 제품';
+    title = '📱 ' + sim.label + ' 호환 ' + (sim.cat ? sim.cat.label : '제품');
     subtitle = (sim.base ? '기준 ' + sim.base.sku + ' · ' : '') + '같은 기종 ' + total + '건' + (total > shown ? ' · 재고 있는 순 상위 ' + shown + '건' : '');
   }
 
@@ -137,9 +141,9 @@ function loadProductIndex_() {
 
 function buildProductIndex_() {
   var bySku = {};
-  readColumns_(SKU_MASTER_ID, ['name', '모델명', '자재내역(KO)', '자재내역(EN)', '브랜드', '기종', '색상', '대분류', '품목상태', 'EAN바코드', 'UPC바코드']).forEach(function (r) {
+  readColumns_(SKU_MASTER_ID, ['name', '모델명', '자재내역(KO)', '자재내역(EN)', '브랜드', '기종', '색상', '대분류', '품목상태', 'EAN바코드', 'UPC바코드', '담당부서코드']).forEach(function (r) {
     var sku = String(r[0] || '').trim().toUpperCase();
-    if (sku) bySku[sku] = { sku: sku, asins: [], model: r[1], nameKo: r[2], nameEn: r[3], brand: r[4], device: r[5], color: r[6], category: r[7], status: r[8], ean: r[9], upc: r[10] };
+    if (sku) bySku[sku] = { sku: sku, asins: [], model: r[1], nameKo: r[2], nameEn: r[3], brand: r[4], device: r[5], color: r[6], category: r[7], status: r[8], ean: r[9], upc: r[10], dept: r[11] };
   });
   readColumns_(ASIN_MASTER_ID, ['SKU', 'ASIN', '모델명', '자재내역', '자재내역(EN)', '브랜드', '기종명', '색상명', '대분류']).forEach(function (r) {
     var sku = String(r[0] || '').trim().toUpperCase();
@@ -152,7 +156,7 @@ function buildProductIndex_() {
   });
   var index = Object.keys(bySku).map(function (k) {
     var p = bySku[k];
-    ['model', 'nameKo', 'nameEn', 'brand', 'device', 'color', 'category', 'status', 'ean', 'upc'].forEach(function (f) { p[f] = String(p[f] || '').trim(); });
+    ['model', 'nameKo', 'nameEn', 'brand', 'device', 'color', 'category', 'status', 'ean', 'upc', 'dept'].forEach(function (f) { p[f] = String(p[f] || '').trim(); });
     return p;
   });
   cachePutChunked_(PRODUCT_INDEX_CACHE, JSON.stringify(index), 6 * 3600);
@@ -175,30 +179,127 @@ function readColumns_(spreadsheetId, headers) {
 }
 
 /**
- * Exact matching (사용자 지시 2026-10-18): a SKU or ASIN must match exactly. Free text is split into a
- * device — the longest known device named in it, matched whole ("iPhone 17 Pro" never takes in
- * "iPhone 17 Pro Max" or "iPhone 11 Pro") — and the rest, which must equal a model name exactly or,
- * failing that, appear as whole words (English) / as written (Korean) in the product's names.
+ * Category words (사용자 지시 2026-10-18) that narrow either command: "case" → 대분류 …케이스;
+ * "screen protector" / "SP" / "CP" / 필름 / 글라스 → 대분류 …보호필름 (camera protectors included);
+ * "SDA" → 담당부서코드 A003, the Smart Device Acc. team (every SKU in the SDA review sheet is A003).
+ */
+var CATEGORY_WORDS = [
+  { key: 'case', label: '케이스', words: ['case', 'cases', 'cover', '케이스', '커버'], test: function (p) { return /케이스$/.test(p.category); } },
+  { key: 'sp', label: '보호필름 (SP·CP)', words: ['screen protector', 'screen protectors', 'camera protector', 'lens protector', 'protector', 'protectors',
+      'screen', 'sp', 'cp', 'glass', 'film', '필름', '보호필름', '글라스', '강화유리', '액정필름', '카메라필름'], test: function (p) { return /보호필름$/.test(p.category); } },
+  { key: 'sda', label: 'SDA', words: ['sda', 'smart device acc', 'smart device accessories'], test: function (p) { return p.dept === 'A003'; } }
+];
+
+// Common spellings / Korean names folded into the English device words before matching
+var DEVICE_ALIASES = { iph: 'iphone', ip: 'iphone', ipone: 'iphone', iphon: 'iphone', '아이폰': 'iphone', '갤럭시': 'galaxy', '갤': 'galaxy',
+  '픽셀': 'pixel', '프로': 'pro', '맥스': 'max', '울트라': 'ultra', '플러스': 'plus', '에어': 'air', '폴드': 'fold', '플립': 'flip' };
+
+/**
+ * Splits a query into { device, cat, rest }: the longest known device it names (typo-tolerant, numbers
+ * exact), a category word, and the remaining words. "ipone 17 pro case" → iphone 17 pro / case / "".
+ */
+function parseProductQuery_(index, query) {
+  var words = splitWords_(query)
+    .map(function (w) { return DEVICE_ALIASES[w] || w; });
+  var cat = null;
+  CATEGORY_WORDS.forEach(function (c) {   // longest phrase first so "screen protector" beats "screen"
+    if (cat) return;
+    c.words.slice().sort(function (x, y) { return y.split(' ').length - x.split(' ').length; }).some(function (w) {
+      var ws = w.split(' ');
+      for (var i = 0; i + ws.length <= words.length; i++) {
+        if (ws.every(function (t, k) { return wordMatch_(words[i + k], t); })) { words.splice(i, ws.length); cat = c; return true; }
+      }
+      return false;
+    });
+  });
+  var best = null, at = -1;
+  var devs = knownDevices_(index);
+  Object.keys(devs).forEach(function (d) {
+    var ds = d.split(' ');
+    if (best && ds.length <= best.split(' ').length) return;   // longest device wins ("iphone 17 pro max" over "iphone 17 pro")
+    for (var i = 0; i + ds.length <= words.length; i++) {
+      if (ds.every(function (t, k) { return wordMatch_(words[i + k], t); })) {
+        // a following word that would make it a longer device ("max") means this isn't the device named
+        best = d; at = i; return;
+      }
+    }
+  });
+  if (best) {
+    var next = words[at + best.split(' ').length];
+    var longer = next && Object.keys(devs).some(function (d) { return d.indexOf(best + ' ') === 0 && wordMatch_(next, d.split(' ')[best.split(' ').length]); });
+    if (longer) { best = null; } else { words.splice(at, best.split(' ').length); }
+  }
+  return { device: best ? devs[best] : null, cat: cat, rest: words.join(' ') };
+}
+
+/** Same word allowing small typos: numbers / ≤2 letters exact, 3–5 letters 1 edit, longer 2 edits. */
+function wordMatch_(a, b) {
+  if (a === b) return true;
+  if (!a || !b || /\d/.test(a) || /\d/.test(b) || /[^\x00-\x7f]/.test(a + b)) return false;
+  var n = Math.min(a.length, b.length);
+  var max = n <= 2 ? 0 : n <= 5 ? 1 : 2;
+  return max > 0 && Math.abs(a.length - b.length) <= max && editDistance_(a, b) <= max;
+}
+
+function editDistance_(a, b) {   // Damerau (adjacent swaps count as one edit, "ipohne")
+  var d = [];
+  for (var i = 0; i <= a.length; i++) { d[i] = [i]; }
+  for (var j = 1; j <= b.length; j++) d[0][j] = j;
+  for (i = 1; i <= a.length; i++) {
+    for (j = 1; j <= b.length; j++) {
+      var c = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + c);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+  }
+  return d[a.length][b.length];
+}
+
+/** { split form ("galaxy watch ultra 2") → device as in deviceSet_ ("galaxy watch ultra2") } */
+function knownDevices_(index) {
+  if (index._devices) return index._devices;
+  var seen = {};
+  index.forEach(function (p) { deviceSet_(p.device).forEach(function (d) { seen[splitWords_(d).join(' ')] = d; }); });
+  return (index._devices = seen);
+}
+
+/** Lower-cased words with letters and digits split ("iphone17pro" → iphone 17 pro) and aliases applied. */
+function splitWords_(s) {
+  return normText_(s).replace(/([a-z])(\d)/g, '$1 $2').replace(/(\d)([a-z]{2,})/g, '$1 $2').split(' ').filter(String)
+    .map(function (w) { return DEVICE_ALIASES[w] || w; });
+}
+
+/** Same words in the same order, each allowing a small typo ("ultra hybird" = "Ultra Hybrid"). */
+function sameWords_(a, b) {
+  var x = a.split(' '), y = normText_(b).split(' ');
+  return x.length === y.length && x.every(function (w, i) { return wordMatch_(w, y[i]); });
+}
+
+/**
+ * Exact matching (사용자 지시 2026-10-18): a SKU / ASIN / EAN must match exactly. Free text = a device
+ * (whole words, typo-tolerant — "iPhone 17 Pro" never takes in 17 Pro Max or 11 Pro), an optional
+ * category word, and the rest, which must equal a model name or match as (typo-tolerant) whole words.
  */
 function searchProducts_(index, query, stockOf) {
   var q = query.trim().toUpperCase();
   if (/^[A-Z]{3}\d{5}$/.test(q) || /^B0[A-Z0-9]{8}$/.test(q) || /^\d{12,13}$/.test(q)) {
     return index.filter(function (p) { return p.sku === q || p.asins.indexOf(q) >= 0 || p.ean === q || p.upc === q; });
   }
-  var dev = findDevice_(index, query);
-  var rest = normText_(dev ? removePhrase_(normText_(query), dev) : query);
-  var pool = dev ? index.filter(function (p) { return deviceSet_(p.device).indexOf(dev) >= 0; }) : index;
+  var pq = parseProductQuery_(index, query);
+  if (!pq.device && !pq.rest) return [];   // a category word alone is not a search
+  var pool = index.filter(function (p) {
+    return (!pq.device || deviceSet_(p.device).indexOf(pq.device) >= 0) && (!pq.cat || pq.cat.test(p));
+  });
   var hits = pool;
-  if (rest) {
-    var exactModel = pool.filter(function (p) { return normText_(p.model) === rest; });
+  if (pq.rest) {
+    var exactModel = pool.filter(function (p) { return sameWords_(pq.rest, p.model); });
     hits = exactModel.length ? exactModel : pool.filter(function (p) {
-      var en = normText_([p.model, p.nameEn, p.brand, p.color, p.category, p.sku].join(' '));
-      return rest.split(' ').every(function (t) {
-        return /[^\x00-\x7f]/.test(t) ? normText_(p.nameKo + ' ' + p.category).indexOf(t) >= 0 : (' ' + en + ' ').indexOf(' ' + t + ' ') >= 0;
+      var en = normText_([p.model, p.nameEn, p.brand, p.color, p.category, p.sku].join(' ')).split(' ');
+      var ko = normText_(p.nameKo + ' ' + p.category);
+      return pq.rest.split(' ').every(function (t) {
+        return /[^\x00-\x7f]/.test(t) ? ko.indexOf(t) >= 0 : en.some(function (w) { return wordMatch_(t, w); });
       });
     });
-  } else if (!dev) {
-    hits = [];
   }
   hits.forEach(function (p) { p._stock = stockOf(p); });
   hits.sort(function (a, b) {   // most FBA stock first, then 품목상태 A before B, then SKU
@@ -208,64 +309,52 @@ function searchProducts_(index, query, stockOf) {
 }
 
 /**
- * Same-device products. The device is the one named in the query ("/products-similar iPhone 17 Pro"),
- * else the device of the exactly matched product (any of its devices when 기종 lists several).
- * → { base, label, same[] } or { error }.
+ * Same-device products. The device is the one named in the query ("/products -similar ipone 17 pro case"),
+ * else the device(s) of the exactly matched product; a category word narrows either.
+ * → { base, label, cat, same[] } or { error }.
  */
 function similarProducts_(index, query, matches, stockOf) {
-  var devs, base = null, label;
   var q = query.trim().toUpperCase();
-  var dev = /^[A-Z]{3}\d{5}$|^B0[A-Z0-9]{8}$/.test(q) ? null : findDevice_(index, query);
-  if (dev && normText_(query) === dev) {
-    devs = [dev];
-    label = deviceLabel_(index, dev);
+  var isId = /^[A-Z]{3}\d{5}|^B0[A-Z0-9]{8}|^\d{12,13}/.test(q);
+  var pq = parseProductQuery_(index, isId ? query.replace(/^\S+/, '') : query);
+  var devs, base = null, label;
+  if (!isId && pq.device && !pq.rest) {
+    devs = [pq.device];
+    label = deviceLabel_(index, pq.device);
   } else {
+    if (isId) matches = searchProducts_(index, query.trim().split(/\s+/)[0], stockOf);
     base = matches.filter(function (p) { return isRealDevice_(p.device); })[0];
     if (!base) {
       if (matches.length) {   // found, but 기종 is Common/blank — a universal accessory has no device to match on
         return { error: '⚠️ "' + query + '" (' + matches[0].sku + ') 는 기종이 "' + (matches[0].device || '미지정') + '" 인 공용 제품이라 같은 기종 제품을 찾을 수 없습니다. /products 로 조회해 주세요.' };
       }
-      return { error: '⚠️ "' + query + '" 와 정확히 일치하는 제품이 없습니다. SKU, ASIN 또는 기종명(예: iPhone 17 Pro)으로 입력해 주세요.' };
+      return { error: '⚠️ "' + query + '" 에서 제품이나 기종을 찾지 못했습니다. SKU, ASIN 또는 기종명(예: iPhone 17 Pro, 뒤에 case / screen protector / SDA)으로 입력해 주세요.' };
     }
     devs = deviceSet_(base.device);
     label = base.device;
   }
   var same = index.filter(function (p) {
-    return (!base || p.sku !== base.sku) && deviceSet_(p.device).some(function (d) { return devs.indexOf(d) >= 0; });
+    return (!base || p.sku !== base.sku) && (!pq.cat || pq.cat.test(p)) &&
+           deviceSet_(p.device).some(function (d) { return devs.indexOf(d) >= 0; });
   });
   same.forEach(function (p) { p._stock = stockOf(p); });
   same.sort(function (a, b) {   // in stock first, then by category / model so a case's siblings sit together
     return (b._stock > 0) - (a._stock > 0) || (a.status === 'B') - (b.status === 'B') ||
            a.category.localeCompare(b.category) || b._stock - a._stock || a.model.localeCompare(b.model) || a.sku.localeCompare(b.sku);
   });
-  return { base: base, label: label, same: same };
-}
-
-/** Longest known device (normalised, from every 기종 in the index) that the query names as whole words. */
-function findDevice_(index, query) {
-  var q = ' ' + normText_(query) + ' ', best = null;
-  index.forEach(function (p) {
-    deviceSet_(p.device).forEach(function (d) {
-      if ((!best || d.length > best.length) && q.indexOf(' ' + d + ' ') >= 0) best = d;
-    });
-  });
-  return best;
+  return { base: base, label: label, cat: pq.cat, same: same };
 }
 
 /** The 기종 text as written for a normalised device, e.g. "iphone 17 pro" → "iPhone 17 Pro". */
 function deviceLabel_(index, dev) {
   for (var i = 0; i < index.length; i++) {
-    var parts = String(index[i].device || '').replace(/#/g, '').split('/');
     var set = deviceSet_(index[i].device);
-    var k = set.indexOf(dev);
-    if (k === 0) return parts[0].trim();
-    if (k > 0 && set.length === 1) return parts[0].trim();
+    if (set.length === 1 && set[0] === dev) return String(index[i].device).replace(/#|\/$/g, '').trim();
   }
   return dev.replace(/\b\w/g, function (c) { return c.toUpperCase(); });
 }
 
 function normText_(s) { return String(s || '').toLowerCase().replace(/[#,()\[\]"]/g, ' ').replace(/\s+/g, ' ').trim(); }
-function removePhrase_(text, phrase) { return (' ' + text + ' ').replace(' ' + phrase + ' ', ' '); }
 
 function isRealDevice_(d) {
   d = String(d || '').trim();
