@@ -20,7 +20,7 @@ struct BalanceWidgetView: View {
     var body: some View {
         switch family {
         case .accessoryInline:
-            Text("잔액 \(snap.money(snap.balance))")
+            Text("\(widgetMockPrefix)잔액 \(snap.money(snap.balance))")
         case .accessoryCircular:
             ZStack {
                 AccessoryWidgetBackground()
@@ -63,7 +63,7 @@ struct BalanceWidgetView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: "building.columns.fill").font(.system(size: 12, weight: .semibold)).foregroundStyle(.blue)
-                Text(snap.bank).font(.custom("Pretendard-SemiBold", size: 12)).foregroundStyle(.secondary).lineLimit(1)
+                Text(snap.bank + widgetMockSuffix).font(.custom("Pretendard-SemiBold", size: 12)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 0)
             Text(snap.accountName).font(.custom("Pretendard-Regular", size: 12)).foregroundStyle(.secondary).lineLimit(1)
@@ -87,3 +87,12 @@ struct BalanceWidgetView: View {
         return String(format: "%.0f", v)
     }
 }
+
+/// App Store build: widgets carry the same "모의" mark as the app, so a home-screen balance can't pass for a real bank.
+#if STORE
+let widgetMockPrefix = "모의 "
+let widgetMockSuffix = " · 모의"
+#else
+let widgetMockPrefix = ""
+let widgetMockSuffix = ""
+#endif

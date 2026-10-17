@@ -42,6 +42,7 @@ targets:
         NSFaceIDUsageDescription: 앱 잠금을 해제하기 위해 Face ID를 사용합니다.
         UIAppFonts: [Pretendard-Regular.otf, Pretendard-Medium.otf, Pretendard-SemiBold.otf, Pretendard-Bold.otf, Pretendard-ExtraBold.otf]
         ITSAppUsesNonExemptEncryption: false
+        LSApplicationCategoryType: public.app-category.simulation-games   # listed as Games > Simulation
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kevinkim.vaultly

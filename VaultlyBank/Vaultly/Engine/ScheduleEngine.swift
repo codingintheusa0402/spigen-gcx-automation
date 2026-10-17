@@ -51,8 +51,9 @@ enum Ledger {
                       memo: String, category: TransactionCategory, tag: String? = nil, data: inout BankData) -> Transaction? {
         guard let idx = data.accounts.firstIndex(where: { $0.id == accountID }) else { return nil }
         data.accounts[idx].balance += amount
-        let tx = Transaction(accountID: accountID, date: date, amount: amount, counterparty: counterparty,
-                             memo: memo, category: category, balanceAfter: data.accounts[idx].balance, tag: tag)
+        // App Store build: real brand names become fictional ones here, the one place every transaction is made
+        let tx = Transaction(accountID: accountID, date: date, amount: amount, counterparty: StoreNames.fix(counterparty),
+                             memo: StoreNames.fix(memo), category: category, balanceAfter: data.accounts[idx].balance, tag: tag)
         data.transactions.append(tx)
         return tx
     }

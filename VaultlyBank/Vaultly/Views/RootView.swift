@@ -16,6 +16,7 @@ struct RootView: View {
                 ScheduleView().tabItem { Label("예약 알림", systemImage: "bell.badge") }
                 SettingsView().tabItem { Label("설정", systemImage: "gearshape.fill") }
             }
+            if AppVariant.isStore { MockWatermark() }
             if let banner = store.banner {
                 BannerView(message: banner)
                     .transition(.move(edge: .top).combined(with: .opacity))
@@ -107,7 +108,7 @@ struct OnboardingView: View {
             Spacer()
             Image(systemName: "building.columns.circle.fill").font(.app(size: 72)).foregroundStyle(store.theme.accent)
             Text("Vaultly").font(.app(.largeTitle, .bold))
-            Text("가상 자산으로 즐기는 뱅킹 시뮬레이터")
+            Text(AppVariant.isStore ? "가상 자산으로 즐기는 인생 시뮬레이션 게임" : "가상 자산으로 즐기는 뱅킹 시뮬레이터")
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 10) {
                 Label("모든 계좌와 거래는 가상이며 기기에만 저장됩니다.", systemImage: "iphone")

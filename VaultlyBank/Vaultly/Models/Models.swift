@@ -232,15 +232,16 @@ struct Brand: Equatable {
     let card: String
     let capital: String
 
-    static let defaultCard = "신한카드"
-    static let defaultCapital = "OK캐피탈"
+    static let defaultCard = AppVariant.isStore ? "미니멀카드" : "신한카드"
+    static let defaultCapital = AppVariant.isStore ? "미니멀캐피탈" : "OK캐피탈"
 
     init(settings: BankSettings) {
         let theme = Theme.named(settings.themeID)
-        bank = settings.bankName.isEmpty ? theme.bankName : settings.bankName
-        broker = settings.brokerName.isEmpty ? theme.brokerName : settings.brokerName
-        card = settings.cardName.isEmpty ? Brand.defaultCard : settings.cardName
-        capital = settings.capitalName.isEmpty ? Brand.defaultCapital : settings.capitalName
+        // App Store build: a typed real bank name (e.g. 신한은행) is shown as its fictional counterpart
+        bank = StoreNames.fix(settings.bankName.isEmpty ? theme.bankName : settings.bankName)
+        broker = StoreNames.fix(settings.brokerName.isEmpty ? theme.brokerName : settings.brokerName)
+        card = StoreNames.fix(settings.cardName.isEmpty ? Brand.defaultCard : settings.cardName)
+        capital = StoreNames.fix(settings.capitalName.isEmpty ? Brand.defaultCapital : settings.capitalName)
     }
 
     func resolve(_ text: String) -> String {

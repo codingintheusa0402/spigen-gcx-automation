@@ -45,6 +45,7 @@ struct HomeView: View {
                         VStack(alignment: .leading, spacing: 10) {
                             HStack(alignment: .firstTextBaseline) {
                                 Text("총자산").font(.app(.subheadline)).foregroundStyle(.secondary)
+                                MockChip()
                                 Spacer()
                             }
                             MoneyText(amount: store.totalAssets, font: .app(size: 30, .semibold))
@@ -189,6 +190,7 @@ struct HomeView: View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("\(store.settings.ownerName)님의 총자산").font(.app(.subheadline)).foregroundStyle(on.opacity(0.8))
+                MockChip()
                 Spacer()
                 Text(store.theme.tagline).font(.app(.caption2)).foregroundStyle(on.opacity(0.6))
             }

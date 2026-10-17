@@ -28,12 +28,14 @@ enum NotificationService {
             center.removePendingNotificationRequests(withIdentifiers: pending.map(\.identifier).filter { $0.hasPrefix(questPrefix) })
             guard let (q, fire) = upcoming, fire.timeIntervalSinceNow > (pendingAlreadyShown ? 0 : 20) else { return }
             let content = UNMutableNotificationContent()
-            content.title = "새로운 선택 · \(q.category.title)"
+            // App Store build: framed as a game prompt, not a bank alert
+            content.title = AppVariant.isStore ? "[인생 게임] 새로운 선택 · \(q.category.title)" : "새로운 선택 · \(q.category.title)"
             content.body = q.title + "\n" + q.options.enumerated().map { "\($0.offset + 1). \($0.element.title)" }.joined(separator: "  ")
             content.sound = .default
             content.categoryIdentifier = questCategory
             content.userInfo = ["questID": q.id]
-            content.interruptionLevel = .timeSensitive
+            // Time-Sensitive breaks through Focus — fine for the personal build, not for a game in the store build
+            content.interruptionLevel = AppVariant.isStore ? .active : .timeSensitive
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, fire.timeIntervalSinceNow), repeats: false)
             center.add(UNNotificationRequest(identifier: questPrefix + q.id, content: content, trigger: trigger))
         }
@@ -47,6 +49,10 @@ enum NotificationService {
     static func bankLine(bank: String, date: Date, incoming: Bool, amount: Decimal, counterparty: String, balance: Decimal, currency: String) -> String {
         let f = DateFormatter(); f.dateFormat = "MM/dd HH:mm"
         let bal = Money.format(balance, code: currency)
+        // App Store build: fictional names only, and every money push is visibly marked as a mock
+        if AppVariant.isStore {
+            return "[모의 · \(StoreNames.fix(bank))] \(f.string(from: date)) \(incoming ? "입금" : "출금") \(Money.format(amount, code: currency)) \(StoreNames.fix(counterparty)) 잔액 \(bal) (가상)"
+        }
         return "[\(bank)] \(f.string(from: date)) \(incoming ? "입금" : "출금") \(Money.format(amount, code: currency)) \(counterparty) 잔액 \(bal)"
     }
 
@@ -60,11 +66,11 @@ enum NotificationService {
                 let account = accounts.first { $0.id == ev.accountID }
                 let incoming = ev.isIncoming && !ev.isInternal
                 let projected = (account?.balance ?? 0) + (incoming ? abs(ev.amount) : -abs(ev.amount))
-                content.title = ev.isInternal ? "자동이체" : (incoming ? "입금" : "출금")
+                content.title = (AppVariant.isStore ? "[모의] " : "") + (ev.isInternal ? "자동이체" : (incoming ? "입금" : "출금"))
                 content.body = bankLine(bank: bank, date: ev.nextFireDate, incoming: incoming, amount: abs(ev.amount),
                                         counterparty: ev.counterparty, balance: projected, currency: currency)
                 content.sound = .default
-                content.interruptionLevel = .timeSensitive
+                content.interruptionLevel = AppVariant.isStore ? .active : .timeSensitive
 
                 var comps: DateComponents
                 let cal = Calendar.current

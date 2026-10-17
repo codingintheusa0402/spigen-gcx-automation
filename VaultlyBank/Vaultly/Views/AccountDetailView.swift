@@ -18,9 +18,12 @@ struct AccountDetailView: View {
                     if let terms = account.terms { productInfo(account, terms) }
                     if account.kind == .checking, store.theme.style != .toss {
                         HStack(spacing: 12) {
-                            Button { newBalance = account.balance; editBalance = true } label: {
-                                Label("잔액 설정", systemImage: "slider.horizontal.3").frame(maxWidth: .infinity)
-                            }.buttonStyle(.borderedProminent)
+                            // App Store build: balances change only through play, never by typing a number
+                            if !AppVariant.isStore {
+                                Button { newBalance = account.balance; editBalance = true } label: {
+                                    Label("잔액 설정", systemImage: "slider.horizontal.3").frame(maxWidth: .infinity)
+                                }.buttonStyle(.borderedProminent)
+                            }
                             NavigationLink { TransferForm(presetFrom: account.id) } label: {
                                 Label("송금", systemImage: "paperplane").frame(maxWidth: .infinity)
                             }.buttonStyle(.bordered)
@@ -50,11 +53,13 @@ struct AccountDetailView: View {
             .safeAreaInset(edge: .bottom) {
                 if store.theme.style == .toss, account.kind == .checking {
                     HStack(spacing: 12) {
-                        Button { newBalance = account.balance; editBalance = true } label: {
-                            Text("채우기").font(.app(.body, .bold)).frame(maxWidth: .infinity).padding(.vertical, 14)
+                        if !AppVariant.isStore {
+                            Button { newBalance = account.balance; editBalance = true } label: {
+                                Text("채우기").font(.app(.body, .bold)).frame(maxWidth: .infinity).padding(.vertical, 14)
+                            }
+                            .background(store.theme.accent.opacity(0.18), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .foregroundStyle(store.theme.accent)
                         }
-                        .background(store.theme.accent.opacity(0.18), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .foregroundStyle(store.theme.accent)
                         NavigationLink { TransferForm(presetFrom: account.id) } label: {
                             Text("보내기").font(.app(.body, .bold)).frame(maxWidth: .infinity).padding(.vertical, 14)
                         }

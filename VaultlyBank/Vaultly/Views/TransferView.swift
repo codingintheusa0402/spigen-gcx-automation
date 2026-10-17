@@ -19,7 +19,10 @@ struct TransferForm: View {
     @State private var done = false
     @State private var failed = false
 
-    private var banks: [String] { [store.brand.bank, "카카오뱅크", "토스뱅크", "케이뱅크", "KB국민은행", "신한은행", "우리은행", "하나은행", "NH농협은행", "IBK기업은행"] }
+    private var banks: [String] {
+        if AppVariant.isStore { return [store.brand.bank] + StoreNames.banks.filter { $0 != store.brand.bank } }
+        return [store.brand.bank, "카카오뱅크", "토스뱅크", "케이뱅크", "KB국민은행", "신한은행", "우리은행", "하나은행", "NH농협은행", "IBK기업은행"]
+    }
 
     var body: some View {
         Group {

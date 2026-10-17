@@ -85,7 +85,9 @@ struct SettingsView: View {
                     Toggle(isOn: Binding(get: { store.portfolio.simulatePrices }, set: { v in store.updatePortfolio { $0.simulatePrices = v; $0.lastTick = Date() } })) {
                         Label("시세 자동 변동", systemImage: "waveform.path.ecg")
                     }
-                    Button { editCash = true } label: { Label("예수금 · 환율 설정", systemImage: "dollarsign.circle") }
+                    if !AppVariant.isStore {
+                        Button { editCash = true } label: { Label("예수금 · 환율 설정", systemImage: "dollarsign.circle") }
+                    }
                     Picker(selection: Binding(get: { store.settings.interestTaxRate }, set: { v in store.update { $0.interestTaxRate = v } })) {
                         Text("15.4% (일반)").tag(0.154); Text("9.5% (세금우대)").tag(0.095); Text("비과세").tag(0.0)
                     } label: { Label("이자소득세", systemImage: "percent") }

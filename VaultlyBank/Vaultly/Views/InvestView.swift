@@ -17,7 +17,9 @@ struct InvestView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     if store.theme.style == .toss {
                         TossHeader(title: store.brand.broker, subtitle: AnyView(tickerInline)) {
-                            Button { adding = true } label: { Image(systemName: "plus").font(.app(.title3)).foregroundStyle(.primary) }
+                            if !AppVariant.isStore {
+                                Button { adding = true } label: { Image(systemName: "plus").font(.app(.title3)).foregroundStyle(.primary) }
+                            }
                         }
                         HStack(spacing: 8) {
                             ZStack {
@@ -27,7 +29,9 @@ struct InvestView: View {
                             Text("기본계좌").font(.app(.body, .bold))
                             Image(systemName: "chevron.up.chevron.down").font(.app(.caption2)).foregroundStyle(.secondary)
                             Spacer()
-                            NavigationLink { CashEditorSheet() } label: { Text("계좌 보기").font(.app(.subheadline)).foregroundStyle(.secondary) }
+                            if !AppVariant.isStore {
+                                NavigationLink { CashEditorSheet() } label: { Text("계좌 보기").font(.app(.subheadline)).foregroundStyle(.secondary) }
+                            }
                         }
                     } else {
                         ticker
@@ -48,7 +52,7 @@ struct InvestView: View {
             .navigationDestination(for: Holding.self) { HoldingDetailView(holdingID: $0.id) }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { adding = true } label: { Image(systemName: "plus") }
+                    if !AppVariant.isStore { Button { adding = true } label: { Image(systemName: "plus") } }
                 }
             }
             .sheet(isPresented: $adding) { AddHoldingSheet() }
@@ -245,8 +249,10 @@ struct HoldingDetailView: View {
                         Button { orderBuy = false; orderPrice = h.price; showOrder = true } label: { Text("판매하기").frame(maxWidth: .infinity).font(.app(.body, .bold)) }
                             .buttonStyle(.borderedProminent).tint(.blue)
                     }
-                    Button { newPrice = h.price; setPrice = true } label: { Label("현재가 직접 설정", systemImage: "slider.horizontal.3").frame(maxWidth: .infinity) }
-                        .buttonStyle(.bordered)
+                    if !AppVariant.isStore {
+                        Button { newPrice = h.price; setPrice = true } label: { Label("현재가 직접 설정", systemImage: "slider.horizontal.3").frame(maxWidth: .infinity) }
+                            .buttonStyle(.bordered)
+                    }
                     let trades = store.portfolio.trades.filter { $0.holdingID == holdingID }.sorted { $0.date > $1.date }
                     if !trades.isEmpty {
                         Card {

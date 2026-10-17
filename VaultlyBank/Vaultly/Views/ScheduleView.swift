@@ -19,10 +19,10 @@ struct ScheduleView: View {
                 let events = store.data.events.sorted { $0.nextFireDate < $1.nextFireDate }
                 if events.isEmpty {
                     ContentUnavailableView("예약된 알림이 없습니다", systemImage: "bell.slash",
-                                           description: Text("+ 버튼으로 입금 알림을 예약해 보세요."))
+                                           description: Text(AppVariant.isStore ? "시나리오와 인생 선택에서 생긴 입금·출금 예정이 여기에 표시됩니다." : "+ 버튼으로 입금 알림을 예약해 보세요."))
                 }
                 ForEach(events) { ev in
-                    Button { editing = ev } label: { EventRow(event: ev) }
+                    Button { if !AppVariant.isStore { editing = ev } } label: { EventRow(event: ev) }
                         .buttonStyle(.plain)
                         .swipeActions {
                             Button(role: .destructive) { store.deleteEvent(ev.id) } label: { Label("삭제", systemImage: "trash") }
@@ -34,7 +34,8 @@ struct ScheduleView: View {
             }
             .navigationTitle("예약 알림")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { Button { creating = true } label: { Image(systemName: "plus") } }
+                // App Store build: no hand-made deposits — scheduled money only comes from scenarios and choices
+                ToolbarItem(placement: .topBarTrailing) { if !AppVariant.isStore { Button { creating = true } label: { Image(systemName: "plus") } } }
             }
             .sheet(isPresented: $creating) { EventEditor(event: nil) }
             .sheet(item: $editing) { EventEditor(event: $0) }

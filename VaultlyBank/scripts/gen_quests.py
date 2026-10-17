@@ -505,4 +505,8 @@ for x in Q:
     L.append(f'              options: [\n{opts}\n            ]),')
 L += ["    ]", "}", ""]
 open("Vaultly/Models/QuestLibrary.swift", "w", encoding="utf-8").write("\n".join(L))
+# App Store variant: add the #if STORE copy with fictional brand names (scripts/store_names.py)
+import importlib.util as _u
+_s = _u.spec_from_file_location("store_names", "scripts/store_names.py"); _m = _u.module_from_spec(_s); _s.loader.exec_module(_m)
+_m.dualize_quests()
 print("written")

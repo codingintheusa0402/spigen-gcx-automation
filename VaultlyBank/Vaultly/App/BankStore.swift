@@ -185,6 +185,7 @@ final class BankStore: ObservableObject {
     }
 
     func setBalance(_ balance: Decimal, of id: UUID) {
+        guard !AppVariant.isStore else { return }   // store build: balances move only through play
         var d = data; Ledger.setBalance(balance, of: id, date: now, data: &d); data = d
     }
 
@@ -576,13 +577,17 @@ final class BankStore: ObservableObject {
         var p = data.portfolio; change(&p); data.portfolio = p
     }
 
-    func addHolding(_ h: Holding) { updatePortfolio { $0.holdings.append(h) } }
+    func addHolding(_ h: Holding) {
+        guard !AppVariant.isStore else { return }   // store build: holdings come only from buying with in-game cash
+        updatePortfolio { $0.holdings.append(h) }
+    }
 
     func removeHolding(_ id: UUID) {
         updatePortfolio { $0.holdings.removeAll { $0.id == id }; $0.trades.removeAll { $0.holdingID == id } }
     }
 
     func setPrice(_ price: Decimal, of id: UUID) {
+        guard !AppVariant.isStore else { return }
         updatePortfolio { p in
             if let i = p.holdings.firstIndex(where: { $0.id == id }) { p.holdings[i].price = price }
         }

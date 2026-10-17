@@ -194,3 +194,44 @@ extension View {
             .preferredColorScheme(scheme)
     }
 }
+
+/// App Store build: a faint, tiled "모의 · 가상 자산" mark over every screen, so a screenshot of a balance
+/// can never pass for a real bank (App Review 1.1.6). Never shown in the personal build.
+struct MockWatermark: View {
+    var body: some View {
+        GeometryReader { geo in
+            let rows = max(4, Int(geo.size.height / 140))
+            VStack(spacing: 0) {
+                ForEach(0..<rows, id: \.self) { _ in
+                    HStack(spacing: 0) {
+                        ForEach(0..<3, id: \.self) { _ in
+                            Text("모의 · 가상 자산")
+                                .font(.app(size: 15, .bold))
+                                .foregroundStyle(Color.primary.opacity(0.07))
+                                .rotationEffect(.degrees(-24))
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                    }
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// App Store build: small "모의" chip shown next to big balance figures.
+struct MockChip: View {
+    var body: some View {
+        if AppVariant.isStore {
+            Text("모의")
+                .font(.app(size: 11, .bold))
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .foregroundStyle(.orange)
+                .background(Color.orange.opacity(0.15), in: Capsule())
+                .accessibilityLabel("모의 금액")
+        }
+    }
+}
