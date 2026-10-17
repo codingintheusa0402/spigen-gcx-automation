@@ -555,14 +555,21 @@ def expired_help(region: str, why: str = '') -> str:
             f'{region} selected and sign in again in the Live View tab (or paste a fresh {region} cookie export).')
 
 
+UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+      '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
+
+
 async def launch(headless=True):
     pw = await async_playwright().start()
     browser = await pw.chromium.launch(headless=headless, args=['--disable-blink-features=AutomationControlled'])
-    ctx = await browser.new_context(locale='en-US', viewport=login.VIEW,
-                                    user_agent=('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                                                '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'))
+    ctx = await browser.new_context(locale='en-US', viewport=login.VIEW, user_agent=UA)
 
     class _B:   # closes the browser AND the playwright driver together
+        async def new_context(self):
+            # Each Seller Central region is a separate Amazon identity: US and Europe both sign in through
+            # .amazon.com cookies, so sharing one cookie jar would let one region's login overwrite the other's.
+            return await browser.new_context(locale='en-US', viewport=login.VIEW, user_agent=UA)
+
         async def close(self):
             await browser.close()
             await pw.stop()
@@ -609,7 +616,7 @@ async def main() -> None:
             return
 
         # ── Scrape mode: sessions from the paste fields first, else the ones saved by Login mode ──
-        cookies, missing, source = [], [], {}
+        cookies, missing, source = {}, [], {}
         use_saved = inp.get('useSavedSessions', True)
         for region in list(by_region):
             raw = inp.get(f'session{region}') or ''
@@ -629,11 +636,13 @@ async def main() -> None:
                 missing.append(region)
                 continue
             Actor.log.info(f'[{region}] session ({source[region]}): {fingerprint(parsed)}')
-            cookies += parsed
+            cookies[region] = parsed
         if inp.get('fetchImages') and inp.get('storefrontSession'):
             store = parse_session(inp['storefrontSession'], 'www.amazon.com')
             Actor.log.info(f'[storefront] session loaded: {fingerprint(store)}')
-            cookies += store
+            storefront = store
+        else:
+            storefront = []
         if not cookies:
             # Nothing to authenticate with (e.g. a first look at the actor, or Apify's automated daily test run
             # on the prefilled input) — explain the setup instead of failing.
@@ -651,12 +660,15 @@ async def main() -> None:
             health.update({m: {'status': 'NO_SESSION', 'message': f'No session for {region}: run Login mode or paste one'}
                            for m in ms})
 
-        browser, ctx = await launch()
+        browser, first_ctx = await launch()
+        ctxs = {}
         try:
-            await ctx.add_cookies(cookies)
+            for i, region in enumerate(by_region):   # one isolated cookie jar per region (see _B.new_context)
+                ctxs[region] = first_ctx if i == 0 else await browser.new_context()
+                await ctxs[region].add_cookies(cookies[region] + storefront)
             # ── Session check first: an expired region stops with a clear message, healthy ones continue ──
             for region in list(by_region):
-                why = await preflight(ctx, region)
+                why = await preflight(ctxs[region], region)
                 if why:
                     ms = by_region.pop(region)
                     status = 'BLOCKED' if why.startswith('blocked') else 'SESSION_EXPIRED' if 'sign-in' in why else 'ERROR'
@@ -676,19 +688,21 @@ async def main() -> None:
                 return
             Actor.log.info('Sessions are checked at the start of every run. When one expires, run Login mode '
                            'for that region again (takes a minute).')
-            s = Scraper(inp, ctx)
+            s = Scraper(inp, None)
+            fresh = {}
             for region, ms in by_region.items():   # one region at a time — polite, and kinder to the session
+                s.ctx = ctxs[region]
                 await s.run_region(region, ms)
+                fresh[region] = await ctxs[region].cookies()
             health.update(s.health)
             # Keep sessions alive: Amazon rotates cookies while you browse — save the fresh ones for next time
-            fresh = await ctx.cookies()
             if inp.get('saveSessions', True):
                 for region in by_region:
                     if all(health.get(m, {}).get('status') == 'OK' for m in by_region[region]):
-                        n = await session_store.save(inp, region, fresh, 'refreshed')
+                        n = await session_store.save(inp, region, fresh[region], 'refreshed')
                         Actor.log.info(f'[{region}] refreshed session saved for next runs ({n} cookies)')
             if inp.get('returnRefreshedSessions'):
-                await Actor.set_value('REFRESHED_SESSIONS', {r: session_store.region_cookies(fresh, r) for r in by_region})
+                await Actor.set_value('REFRESHED_SESSIONS', {r: session_store.region_cookies(fresh[r], r) for r in by_region})
                 Actor.log.info('Refreshed sessions also saved to this run\'s key-value store record REFRESHED_SESSIONS.')
         finally:
             await browser.close()

@@ -183,6 +183,10 @@ async def run(inp: dict, regions: dict[str, str], launch_browser) -> dict:
         for region, host in regions.items():
             rb.skip = False
             rb.state['region'] = region
+            if results:   # each region signs in in its own cookie jar (US and EU both use .amazon.com cookies)
+                ctx = await browser.new_context()
+                rb.ctx = ctx
+                ctx.on('page', rb._on_page)
             rb.page = await ctx.new_page()
             await Actor.set_status_message(f'👉 Open the Live View tab and sign in to Seller Central {region}')
             rb.say(f'Sign in to Seller Central {region}…')
