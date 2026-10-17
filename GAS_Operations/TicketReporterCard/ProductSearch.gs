@@ -260,7 +260,8 @@ function parseProductQuery_(index, query) {
   var cats = CATEGORY_WORDS.filter(function (c) { return take(c.words); });
   var brand = null;
   BRAND_WORDS.some(function (b) { if (take(b.words)) { brand = b.key; return true; } return false; });
-  return { device: device, cats: cats, brand: brand, words: words };
+  var all = take(['all', '전체', '모든', '모두']);
+  return { device: device, cats: cats, brand: brand, all: all, words: words };
 }
 
 /** Same word allowing small typos: numbers / ≤2 letters exact, 3–5 letters 1 edit, longer 2 edits. */
@@ -355,6 +356,12 @@ function similarProducts_(index, query, stockOf) {
     }
     devs = mostSpecific_(base.devs);   // a 42 mm watch case's siblings are 42 mm or size-free, never 46 mm
     label = String(base.device).replace(/#/g, '').replace(/\/+$/, '');
+    // substitutes are the same kind of product unless asked otherwise (사용자 지시 2026-10-18: an out-of-stock
+    // case → other cases for that device); "all" / "전체" lists every category
+    if (!pq.cats.length && !pq.all) {
+      var kind = CATEGORY_WORDS.filter(function (c) { return ['case', 'sp', 'band', 'charger', 'cable', 'battery', 'mount', 'audio', 'wallet'].indexOf(c.key) >= 0 && c.test(base); })[0];
+      if (kind) { pq.cats = [kind]; var sameKind = true; }
+    }
   }
   var filt = { device: null, cats: pq.cats, brand: pq.brand };
   var same = index.filter(function (p) {
@@ -365,5 +372,5 @@ function similarProducts_(index, query, stockOf) {
     return (b._stock > 0) - (a._stock > 0) || (a.status === 'B') - (b.status === 'B') ||
            a.category.localeCompare(b.category) || b._stock - a._stock || a.model.localeCompare(b.model) || a.sku.localeCompare(b.sku);
   });
-  return { base: base, label: label, cats: pq.cats, brand: pq.brand, same: same };
+  return { base: base, label: label, cats: pq.cats, brand: pq.brand, sameKind: !!sameKind, same: same };
 }

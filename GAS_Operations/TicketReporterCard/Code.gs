@@ -69,15 +69,22 @@ function onMessage(event) {
     return handleBtwQuestion_(trimmed.replace(/^\/btw\s*/i, ''), event);
   }
 
-  // `/products <검색어>` / `/products-similar <검색어>` — SKU master + ASIN master + SP-API FBA
-  // inventory lookup card (사용자 지시 2026-10-17, see Products.gs). Checked before the thread
-  // mapping and the ticket-number regex: a SKU/ASIN query is never a ticket reference, even
-  // when typed inside a mapped report thread. "-similar" first, since /products\b matches it too.
-  if (/^\/products\s*-{1,2}\s*similar\b/i.test(trimmed)) {   // /products-similar, /products -similar, /products --similar
-    return handleProductsCommand_(trimmed.replace(/^\/products\s*-{1,2}\s*similar\s*/i, ''), true);
-  }
-  if (/^\/products\b/i.test(trimmed)) {
-    return handleProductsCommand_(trimmed.replace(/^\/products\s*/i, ''), false);
+  // `/products <검색어>` / `/products-similar <검색어>` — SKU master + ASIN master + Seller Central lookup card
+  // (사용자 지시 2026-10-17/18, see Products.gs). The command may sit on ANY line: a confirmer's thread
+  // reply is typically "1. 예상 답변 진행 / 비고: 1. 재고 입고 예정 없음 … / /products-similar ACS…" —
+  // the command line gets the substitute card, and the rest still goes through the thread-note path
+  // below (internal note on Zendesk / TCT log memo), both answered in one reply. "-similar" accepts
+  // "/products-similar", "/products -similar", "/products --similar".
+  var prodLine = trimmed.match(/^[ \t]*\/products(?:\s*-{1,2}\s*similar)?\b.*$/im);
+  if (prodLine) {
+    var isSimilar = /^\s*\/products\s*-{1,2}\s*similar/i.test(prodLine[0]);
+    var prodReply = handleProductsCommand_(prodLine[0].replace(/^\s*\/products(?:\s*-{1,2}\s*similar)?\s*/i, ''), isSimilar);
+    var noteText = (trimmed.slice(0, prodLine.index) + trimmed.slice(prodLine.index + prodLine[0].length)).replace(/\n{3,}/g, '\n\n').trim();
+    var pThread = threadName_(event);
+    var pMapped = noteText && pThread ? lookupTicketByThread_(pThread) : null;
+    if (!pMapped) return prodReply;
+    var noteReply = /^\d+$/.test(pMapped) ? postThreadReplyAsNote_(pMapped, noteText, event) : updateTctLogRow_(pMapped, noteText, event);
+    return mergeReplies_(noteReply, prodReply);
   }
 
   // Thread-reply direct-post path: a reply inside a thread the monitor already mapped to a
@@ -119,6 +126,16 @@ function onMessage(event) {
   // so confirmer can read the report and act on it in one card.
   var isShortTrigger = /^티켓\s*\d{6,}$/.test(trimmed);
   return chatCreate_({ cardsV2: [buildCard_(m[1], isShortTrigger ? null : trimmed, null)] });
+}
+
+/** One reply carrying both add-on messages: texts joined, cards listed in order. */
+function mergeReplies_(first, second) {
+  var msg = function (r) { return (r && r.hostAppDataAction && r.hostAppDataAction.chatDataAction.createMessageAction.message) || {}; };
+  var a = msg(first), b = msg(second);
+  var out = { cardsV2: (a.cardsV2 || []).concat(b.cardsV2 || []) };
+  var text = [a.text, b.text].filter(Boolean).join('\n');
+  if (text) out.text = text;
+  return chatCreate_(out);
 }
 
 function messageText_(event) {

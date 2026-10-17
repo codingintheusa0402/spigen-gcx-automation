@@ -98,7 +98,8 @@ function handleProductsCommand_(query, similar) {
     list = (sim.base ? [sim.base] : []).concat(sim.same.slice(0, SIMILAR_MAX - (sim.base ? 1 : 0)));
     var shown = list.length - (sim.base ? 1 : 0);
     title = '📱 ' + sim.label + ' 호환 ' + (sim.cats.length ? sim.cats.map(function (c) { return c.label; }).join(' · ') : '제품') + (sim.brand ? ' · ' + sim.brand : '');
-    subtitle = (sim.base ? '기준 ' + sim.base.sku + ' · ' : '') + '같은 기종 ' + total + '건' + (total > shown ? ' · 재고 있는 순 상위 ' + shown + '건' : '');
+    subtitle = (sim.base ? '기준 ' + sim.base.sku + ' · ' : '') + (sim.sameKind ? '같은 종류 · ' : '') + '같은 기종 ' + total + '건' +
+      (total > shown ? ' · 재고 있는 순 상위 ' + shown + '건' : '') + (sim.sameKind ? ' (전체 카테고리: 뒤에 all)' : '');
   }
 
   if (!list.length) {
