@@ -32,3 +32,9 @@ _scratch*/
 # Claude Code skills/commands live in ClaudeConfig/ (symlinked from ~/.claude); account-synced skills stay local
 ClaudeConfig/skills/synced/
 Scrapers/ASIN_Rating_Daily/state_*.json
+
+# Apify monetization actors: personal projects, each in its own private repo (codingintheusa0402/<folder>),
+# never pushed to HQ_GCX. The folders stay here on disk with their own .git.
+Scrapers/apify-asin-rating-scraper/
+Scrapers/apify-sc-review-scraper/
+Scrapers/apify-publisher-profile/

@@ -1,2 +1,0 @@
-apify>=2.3,<5
-playwright>=1.47
