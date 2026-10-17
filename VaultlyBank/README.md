@@ -76,3 +76,11 @@ Vaultly/
   Views/      SwiftUI 화면
 VaultlyWidget/  WidgetKit 확장 (잔액·챌린지 위젯, Live Activity)
 ```
+
+## Quality gate (every change, before every push)
+`bash scripts/qa.sh` regenerates the project and the fictional-name table, then builds and tests **both** builds on
+the iOS Simulator:
+- **Personal (`Vaultly`):** unit tests (engines, quests, mini games, money rules) plus every UI walkthrough: onboarding, all tabs, quests, challenges, goals, and every 알바 mini game at 거지 and 중산층.
+- **App Store (`Vaultly-Store`, STORE flag):** the same UI walkthroughs on the store build.
+
+All screenshots are exported to `build/qa/<run>/<scheme>/`, and a summary is written to `build/qa/latest/REPORT.md` (pass/fail counts and failures). Install the guard once per clone with `bash scripts/install_qa_hook.sh`. After that, any push containing Vaultly changes runs the gate first and is **refused if it fails**. It's also refused if the remote isn't the personal `codingintheusa0402` account, so Vaultly never reaches HQ_GCX. New features ship with UI tests for their screens, so the walkthrough always covers the whole app.

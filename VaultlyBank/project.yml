@@ -119,8 +119,12 @@ schemes:
       targets:
         Vaultly: all
         VaultlyWidget: all
+        VaultlyUITests: [test]
     run:
       config: Store
       storeKitConfiguration: Vaultly/Vaultly.storekit
+    test:
+      config: Store              # the App Store build itself, walked through by the UI tests (scripts/qa.sh)
+      targets: [VaultlyUITests]
     archive:
       config: Store
