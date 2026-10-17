@@ -55,8 +55,10 @@ struct CharacterManifest: Decodable {
     let skins: [String]
     let hairColors: [String]
     let customZ: [String: Int]
+    /// File prefix of this art set: "co" = Vaultly's original art (default), "ch" = LPC-based set.
+    let prefix: String
 
-    enum CodingKeys: String, CodingKey { case anims, layers, tiers, activities, skins, hairColors, custom }
+    enum CodingKeys: String, CodingKey { case anims, layers, tiers, activities, skins, hairColors, custom, prefix }
     init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
         anims = try c.decode([String: Anim].self, forKey: .anims)
@@ -69,6 +71,7 @@ struct CharacterManifest: Decodable {
         var z: [String: Int] = [:]
         for k in cu.allKeys { if let v = try? cu.decode(Custom.self, forKey: k) { z[k.stringValue] = v.z } }
         customZ = z
+        prefix = (try? c.decode(String.self, forKey: .prefix)) ?? "ch"
     }
 
     static func load(_ data: Data) throws -> CharacterManifest { try JSONDecoder().decode(CharacterManifest.self, from: data) }
@@ -79,8 +82,8 @@ struct CharacterLayer: Equatable, Hashable {
     let item: String      // "body", "tshirt", "custom_helmet" …
     let color: String     // "" for custom pieces
     let z: Int
-    func file(body: String, anim: String) -> String {
-        item.hasPrefix("custom_") ? "ch_\(item)_\(body)_\(anim)" : "ch_\(item)_\(body)_\(color)_\(anim)"
+    func file(body: String, anim: String, prefix: String = "ch") -> String {
+        item.hasPrefix("custom_") ? "\(prefix)_\(item)_\(body)_\(anim)" : "\(prefix)_\(item)_\(body)_\(color)_\(anim)"
     }
 }
 

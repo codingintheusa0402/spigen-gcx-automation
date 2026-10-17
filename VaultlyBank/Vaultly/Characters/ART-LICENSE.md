@@ -4,3 +4,6 @@
 - **`ch_custom_*` and `ch_prop_*`:** original Vaultly art drawn from scratch (delivery helmet, stethoscope, badge, scooter, desk, counter, box, bowl, cup ramen, bed, Zzz). Only head positions were measured from LPC sheets to place the helmet.
 
 Rebuild with `python3 scripts/build_characters.py --lpc <LPC clone>`.
+
+## Vaultly original set (`co_*`, `characters_original.json`) — the app's default
+Drawn entirely by code in `scripts/draw_original_characters.py`: a posed skeleton, then body, hair, clothes and accessories made from simple shapes, with Vaultly's own palettes, outlines and shading. No LPC pixels were traced, copied or edited. The only shared thing is the frame convention (64×64 cells; rows up/left/down/right), so both sets work in the same renderer. © Vaultly, all rights reserved.

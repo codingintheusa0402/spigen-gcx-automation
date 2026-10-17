@@ -9,7 +9,9 @@ final class CharacterAssets {
     private var frames: [String: CGImage] = [:]
 
     private init() {
-        manifest = Bundle.main.url(forResource: "characters", withExtension: "json")
+        // Vaultly's own art set is the default; the LPC-based set is used only if the original manifest is missing
+        manifest = (Bundle.main.url(forResource: "characters_original", withExtension: "json")
+                    ?? Bundle.main.url(forResource: "characters", withExtension: "json"))
             .flatMap { try? Data(contentsOf: $0) }
             .flatMap { try? CharacterManifest.load($0) }
     }
@@ -56,7 +58,7 @@ struct CharacterSpriteView: View {
                         pixel(a.prop(p)).offset(x: 16 * scale, y: (p == "bed" ? 22 : 20) * scale)
                     }
                     ForEach(look.layers(for: act.anim, in: m), id: \.self) { l in
-                        pixel(a.frame(l.file(body: look.body, anim: act.anim), row: row, col: col)).offset(x: 16 * scale, y: 4 * scale)
+                        pixel(a.frame(l.file(body: look.body, anim: act.anim, prefix: m.prefix), row: row, col: col)).offset(x: 16 * scale, y: 4 * scale)
                     }
                     ForEach(props.filter { $0 != "bed" && $0 != "scooter" }, id: \.self) { p in
                         pixel(a.prop(p)).offset(x: 16 * scale, y: (p == "desk" || p == "counter" ? 14 : 10) * scale)

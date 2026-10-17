@@ -11,13 +11,20 @@ import Foundation
 final class CharacterTests: XCTestCase {
     static let charDir: URL = URL(fileURLWithPath: #filePath).resolvingSymlinksInPath().deletingLastPathComponent()
         .deletingLastPathComponent().appendingPathComponent("Vaultly/Characters")
-    lazy var m: CharacterManifest = try! CharacterManifest.load(Data(contentsOf: Self.charDir.appendingPathComponent("characters.json")))
+    /// Both art sets: Vaultly's original (default in the app) and the LPC-based one.
+    static func load(_ name: String) -> CharacterManifest { try! CharacterManifest.load(Data(contentsOf: charDir.appendingPathComponent(name))) }
+    lazy var original: CharacterManifest = Self.load("characters_original.json")
+    lazy var lpc: CharacterManifest = Self.load("characters.json")
+    var m: CharacterManifest { original }
+    var sets: [CharacterManifest] { [original, lpc] }
     let tiers = ["broke", "working", "middle", "rich", "tycoon"]
 
     func exists(_ name: String) -> Bool { FileManager.default.fileExists(atPath: Self.charDir.appendingPathComponent(name + ".png").path) }
 
     func testEveryLookIsDrawableAndDressed() {
         var checked = 0
+        for m in sets {
+        XCTAssertTrue(["co", "ch"].contains(m.prefix))
         for tier in tiers {
             for seed in UInt64(1)...150 {
                 for act in [nil] + m.activities.keys.sorted() {
@@ -29,15 +36,17 @@ final class CharacterTests: XCTestCase {
                     let anim = act.flatMap { m.activities[$0]?.anim } ?? "walk"
                     let drawn = look.layers(for: anim, in: m)
                     XCTAssertTrue(drawn.contains { m.layers[$0.item]?.slot == "torso" }, "shirt must have \(anim) frames (\(tier) \(seed))")
-                    for l in drawn { XCTAssertTrue(exists(l.file(body: look.body, anim: anim)), l.file(body: look.body, anim: anim)) }
+                    for l in drawn { XCTAssertTrue(exists(l.file(body: look.body, anim: anim, prefix: m.prefix)), l.file(body: look.body, anim: anim, prefix: m.prefix)) }
                     checked += 1
                 }
             }
+        }
         }
         XCTAssertGreaterThan(checked, 5000)
     }
 
     func testUniformsAndPropsForWork() {
+      for m in sets {
         let store = CharacterLook.make(m, tier: "working", seed: 3, activity: "store")
         XCTAssertTrue(store.layers.contains { ["vest", "apron"].contains($0.item) }, "store staff wear the vest/apron")
         XCTAssertTrue(store.layers.contains { $0.item == "custom_badge" })
@@ -46,8 +55,18 @@ final class CharacterTests: XCTestCase {
         XCTAssertFalse(rider.layers.contains { m.layers[$0.item]?.slot == "hair" }, "hair is under the helmet")
         for p in m.activities.values.flatMap({ $0.props ?? [] }) { XCTAssertTrue(exists("ch_prop_\(p)"), p) }
         for piece in ["helmet", "stethoscope", "badge"] {
-            for body in ["male", "female"] { for a in m.anims.keys { XCTAssertTrue(exists("ch_custom_\(piece)_\(body)_\(a)")) } }
+            for body in ["male", "female"] { for a in m.anims.keys { XCTAssertTrue(exists("\(m.prefix)_custom_\(piece)_\(body)_\(a)")) } }
         }
+      }
+    }
+
+    func testOriginalSetHasEatAndWorkAnimations() {
+        XCTAssertEqual(original.prefix, "co")
+        for a in ["walk", "idle", "sit", "eat", "work"] { XCTAssertNotNil(original.anims[a], a) }
+        XCTAssertEqual(original.activities["office"]?.anim, "work")
+        XCTAssertEqual(original.activities["eat"]?.anim, "eat")
+        let doc = CharacterLook.make(original, tier: "middle", seed: 2, activity: "hospital")
+        XCTAssertTrue(doc.layers.contains { $0.item == "coat" }, "doctor's coat for every body in the original set")
     }
 
     func testLooksVaryAndRotateWeekly() {
