@@ -67,6 +67,8 @@ function renderHeader() {
     <span class="hpill">idle <i>${c('idle')}</i></span>
     ${c('waiting') + c('quiet') ? `<span class="hpill" style="border-color:#6b5a1a">attention <i>${c('waiting') + c('quiet')}</i></span>` : ''}
     <span class="hpill" ${errs ? 'style="border-color:#6b2a2a"' : ''}>API errors 1h <i>${errs}</i></span>
+    ${snap.peer && snap.peer.online && snap.peer.build && snap.build && snap.peer.build !== snap.build
+      ? `<span class="hpill" style="border-color:#6b5a1a" title="This Mac runs build ${esc(snap.build)}, ${esc(snap.peer.label)} runs ${esc(snap.peer.build)}. Install the same GCX Mesh on both and restart it.">versions differ</span>` : ''}
     ${memPill(snap.peer ? 'This Mac' : 'RAM', snap.mem)}${snap.peer && snap.peer.mem ? memPill(snap.peer.label, snap.peer.mem) : ''}`;
 }
 

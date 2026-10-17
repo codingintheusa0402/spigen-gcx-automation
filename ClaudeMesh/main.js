@@ -10,7 +10,21 @@ const { createPhoneServer } = require('./phone-server');
 const { createPeer } = require('./peer');             // the GCX server: one mesh on the iPhone whichever machine serves it
 const { createCore, cleanEnv, loginShell } = require('./core');
 const ptyBus = new EventEmitter(); ptyBus.setMaxListeners(50);   // pty output fan-out (desktop + phone terminals)
-const panes = require('./tmux-panes')({ ptyBus });           // Claude sessions in tmux panes (the mini keeps them there)
+const panes = require('./tmux-panes')({ ptyBus });
+// a fingerprint of this build's own code, so the two Macs can tell when they run different versions
+// (same source = same fingerprint, whichever machine built it)
+const BUILD = (() => {
+  const h = require('crypto').createHash('sha1');
+  const walk = d => { for (const f of fs.readdirSync(path.join(__dirname, d)).sort()) {
+    const r = d ? d + '/' + f : f;
+    if (r === 'node_modules' || r.startsWith('.')) continue;
+    let st; try { st = fs.statSync(path.join(__dirname, r)); } catch { continue; }
+    if (st.isDirectory()) { if (!d && !['renderer', 'phone'].includes(f)) continue; walk(r); }
+    else if (/\.(js|html|css)$/.test(f)) { h.update(r); h.update(fs.readFileSync(path.join(__dirname, r))); }
+  } };
+  try { walk(''); } catch { }
+  return h.digest('hex').slice(0, 8);
+})();           // Claude sessions in tmux panes (the mini keeps them there)
 let lastSnap = null, phone = null;
 
 const HOME = os.homedir();
@@ -461,7 +475,7 @@ async function loop() {
       const snap = collector.snapshot(ptyMap);
       snap.agents = core.agents(); refreshAgents();
       snap.usage = core.usage(); refreshUsage();
-      snap.mem = hostMem;
+      snap.mem = hostMem; snap.build = BUILD;
       snap.ptys = [...ptys].map(([id, p]) => ({ id, pid: p.proc.pid, title: p.title, kind: p.kind, cwd: p.cwd }));
       panes.refresh();
       const byTty = new Map(panes.list().map(p => [p.tty, p]));

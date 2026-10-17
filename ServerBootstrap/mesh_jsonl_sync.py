@@ -26,24 +26,32 @@ H = os.environ.get('MESH_SYNC_HOST', 'gcx-macmini')
 REMOTE = os.environ.get('MESH_SYNC_REMOTE', '~/.gcx-mesh/mesh_jsonl_sync.py')   # mesh_sync_mac.sh copies this file there
 
 
-def to_local(rel):   # rel uses the neutral prefix "K"
-    return os.path.join(ROOT, LOCAL_P + rel[1:])
+OLD_P = '-home-kevinkim'                 # the old Windows laptop's folders: synced under the same name on both Macs
+
+
+def to_local(rel):   # rel starts with "K" (this machine's home prefix, renamed per side) or "H" (OLD_P, kept as is)
+    return os.path.join(ROOT, (OLD_P if rel[0] == 'H' else LOCAL_P) + rel[1:])
 
 
 def walk():
     out = {}
     for d in os.listdir(ROOT):
         full = os.path.join(ROOT, d)
-        rest = d[len(LOCAL_P):]
         # -Users-kevin must not swallow -Users-kevinkim…: the prefix has to end at a path separator
-        if not d.startswith(LOCAL_P) or (rest and rest[0] != '-') or os.path.islink(full) or not os.path.isdir(full):
+        for tag, pre in (('K', LOCAL_P), ('H', OLD_P)):
+            rest = d[len(pre):]
+            if d.startswith(pre) and (not rest or rest[0] == '-'):
+                break
+        else:
+            continue
+        if os.path.islink(full) or not os.path.isdir(full):
             continue
         for dp, dns, fns in os.walk(full):
             dns[:] = [x for x in dns if x != 'memory']
             for f in fns:
                 if f.endswith('.jsonl'):
                     p = os.path.join(dp, f)
-                    out['K' + os.path.relpath(p, ROOT)[len(LOCAL_P):]] = os.path.getsize(p)
+                    out[tag + os.path.relpath(p, ROOT)[len(pre):]] = os.path.getsize(p)
     return out
 
 
