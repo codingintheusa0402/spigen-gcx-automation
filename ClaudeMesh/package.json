@@ -54,6 +54,7 @@
       "core.js",
       "phone-server.js",
       "peer.js",
+      "tmux-panes.js",
       "schedules.js",
       "gasConstants.js",
       "gas.js",
