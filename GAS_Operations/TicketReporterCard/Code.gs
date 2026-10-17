@@ -73,8 +73,8 @@ function onMessage(event) {
   // inventory lookup card (사용자 지시 2026-10-17, see Products.gs). Checked before the thread
   // mapping and the ticket-number regex: a SKU/ASIN query is never a ticket reference, even
   // when typed inside a mapped report thread. "-similar" first, since /products\b matches it too.
-  if (/^\/products-similar\b/i.test(trimmed)) {
-    return handleProductsCommand_(trimmed.replace(/^\/products-similar\s*/i, ''), true);
+  if (/^\/products\s*-{1,2}\s*similar\b/i.test(trimmed)) {   // /products-similar, /products -similar, /products --similar
+    return handleProductsCommand_(trimmed.replace(/^\/products\s*-{1,2}\s*similar\s*/i, ''), true);
   }
   if (/^\/products\b/i.test(trimmed)) {
     return handleProductsCommand_(trimmed.replace(/^\/products\s*/i, ''), false);

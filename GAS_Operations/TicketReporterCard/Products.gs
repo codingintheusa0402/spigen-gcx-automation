@@ -84,26 +84,13 @@ function handleProductsCommand_(query, similar) {
     title = '🔎 ' + query;
     subtitle = '마스터 일치 ' + total + '건' + (total > list.length ? ' · 상위 ' + list.length + '건 표시 (재고순)' : '');
   } else {
-    var base = matches.filter(function (p) { return isRealDevice_(p.device); })[0];
-    if (!base) {
-      if (matches.length) {   // found, but 기종 is Common/blank — a universal accessory has no device to match on
-        return chatCreate_({ text: '⚠️ "' + query + '" (' + matches[0].sku + ') 는 기종이 "' + (matches[0].device || '미지정') + '" 인 공용 제품이라 같은 기종 제품을 찾을 수 없습니다. /products 로 조회해 주세요.' });
-      }
-      return chatCreate_({ text: '⚠️ "' + query + '" 와 일치하는 제품이 SKU master / ASIN master 에 없습니다.' });
-    }
-    var devs = deviceSet_(base.device);
-    var same = index.filter(function (p) {
-      return p.sku !== base.sku && deviceSet_(p.device).some(function (d) { return devs.indexOf(d) >= 0; });
-    });
-    same.forEach(function (p) { p._stock = stockOf(p); });
-    same.sort(function (a, b) {   // in stock first, then by category / model so a case's siblings sit together
-      return (b._stock > 0) - (a._stock > 0) || (a.status === 'B') - (b.status === 'B') ||
-             a.category.localeCompare(b.category) || b._stock - a._stock || a.model.localeCompare(b.model) || a.sku.localeCompare(b.sku);
-    });
-    total = same.length;
-    list = [base].concat(same.slice(0, SIMILAR_MAX - 1));
-    title = '📱 ' + base.device + ' 호환 제품';
-    subtitle = '기준 ' + base.sku + ' · 같은 기종 ' + total + '건' + (total > list.length - 1 ? ' · 재고 있는 순 상위 ' + (list.length - 1) + '건' : '');
+    var sim = similarProducts_(index, query, matches, stockOf);
+    if (sim.error) return chatCreate_({ text: sim.error });
+    total = sim.same.length;
+    list = (sim.base ? [sim.base] : []).concat(sim.same.slice(0, SIMILAR_MAX - (sim.base ? 1 : 0)));
+    var shown = list.length - (sim.base ? 1 : 0);
+    title = '📱 ' + sim.label + ' 호환 제품';
+    subtitle = (sim.base ? '기준 ' + sim.base.sku + ' · ' : '') + '같은 기종 ' + total + '건' + (total > shown ? ' · 재고 있는 순 상위 ' + shown + '건' : '');
   }
 
   if (!list.length) {
@@ -187,23 +174,98 @@ function readColumns_(spreadsheetId, headers) {
   return out;
 }
 
-/** SKU / ASIN exact match first; otherwise every keyword must appear somewhere in the product's text. */
+/**
+ * Exact matching (사용자 지시 2026-10-18): a SKU or ASIN must match exactly. Free text is split into a
+ * device — the longest known device named in it, matched whole ("iPhone 17 Pro" never takes in
+ * "iPhone 17 Pro Max" or "iPhone 11 Pro") — and the rest, which must equal a model name exactly or,
+ * failing that, appear as whole words (English) / as written (Korean) in the product's names.
+ */
 function searchProducts_(index, query, stockOf) {
   var q = query.trim().toUpperCase();
-  var exact = index.filter(function (p) { return p.sku === q || p.asins.indexOf(q) >= 0; });
-  if (exact.length) return exact;
-
-  var terms = query.toLowerCase().split(/\s+/).filter(String);
-  var hits = index.filter(function (p) {
-    var hay = [p.sku, p.asins.join(' '), p.model, p.nameKo, p.nameEn, p.brand, p.device, p.color, p.category].join(' ').toLowerCase();
-    return terms.every(function (t) { return hay.indexOf(t) >= 0; });
-  });
+  if (/^[A-Z]{3}\d{5}$/.test(q) || /^B0[A-Z0-9]{8}$/.test(q) || /^\d{12,13}$/.test(q)) {
+    return index.filter(function (p) { return p.sku === q || p.asins.indexOf(q) >= 0 || p.ean === q || p.upc === q; });
+  }
+  var dev = findDevice_(index, query);
+  var rest = normText_(dev ? removePhrase_(normText_(query), dev) : query);
+  var pool = dev ? index.filter(function (p) { return deviceSet_(p.device).indexOf(dev) >= 0; }) : index;
+  var hits = pool;
+  if (rest) {
+    var exactModel = pool.filter(function (p) { return normText_(p.model) === rest; });
+    hits = exactModel.length ? exactModel : pool.filter(function (p) {
+      var en = normText_([p.model, p.nameEn, p.brand, p.color, p.category, p.sku].join(' '));
+      return rest.split(' ').every(function (t) {
+        return /[^\x00-\x7f]/.test(t) ? normText_(p.nameKo + ' ' + p.category).indexOf(t) >= 0 : (' ' + en + ' ').indexOf(' ' + t + ' ') >= 0;
+      });
+    });
+  } else if (!dev) {
+    hits = [];
+  }
   hits.forEach(function (p) { p._stock = stockOf(p); });
   hits.sort(function (a, b) {   // most FBA stock first, then 품목상태 A before B, then SKU
     return b._stock - a._stock || (a.status === 'B') - (b.status === 'B') || a.sku.localeCompare(b.sku);
   });
   return hits;
 }
+
+/**
+ * Same-device products. The device is the one named in the query ("/products-similar iPhone 17 Pro"),
+ * else the device of the exactly matched product (any of its devices when 기종 lists several).
+ * → { base, label, same[] } or { error }.
+ */
+function similarProducts_(index, query, matches, stockOf) {
+  var devs, base = null, label;
+  var q = query.trim().toUpperCase();
+  var dev = /^[A-Z]{3}\d{5}$|^B0[A-Z0-9]{8}$/.test(q) ? null : findDevice_(index, query);
+  if (dev && normText_(query) === dev) {
+    devs = [dev];
+    label = deviceLabel_(index, dev);
+  } else {
+    base = matches.filter(function (p) { return isRealDevice_(p.device); })[0];
+    if (!base) {
+      if (matches.length) {   // found, but 기종 is Common/blank — a universal accessory has no device to match on
+        return { error: '⚠️ "' + query + '" (' + matches[0].sku + ') 는 기종이 "' + (matches[0].device || '미지정') + '" 인 공용 제품이라 같은 기종 제품을 찾을 수 없습니다. /products 로 조회해 주세요.' };
+      }
+      return { error: '⚠️ "' + query + '" 와 정확히 일치하는 제품이 없습니다. SKU, ASIN 또는 기종명(예: iPhone 17 Pro)으로 입력해 주세요.' };
+    }
+    devs = deviceSet_(base.device);
+    label = base.device;
+  }
+  var same = index.filter(function (p) {
+    return (!base || p.sku !== base.sku) && deviceSet_(p.device).some(function (d) { return devs.indexOf(d) >= 0; });
+  });
+  same.forEach(function (p) { p._stock = stockOf(p); });
+  same.sort(function (a, b) {   // in stock first, then by category / model so a case's siblings sit together
+    return (b._stock > 0) - (a._stock > 0) || (a.status === 'B') - (b.status === 'B') ||
+           a.category.localeCompare(b.category) || b._stock - a._stock || a.model.localeCompare(b.model) || a.sku.localeCompare(b.sku);
+  });
+  return { base: base, label: label, same: same };
+}
+
+/** Longest known device (normalised, from every 기종 in the index) that the query names as whole words. */
+function findDevice_(index, query) {
+  var q = ' ' + normText_(query) + ' ', best = null;
+  index.forEach(function (p) {
+    deviceSet_(p.device).forEach(function (d) {
+      if ((!best || d.length > best.length) && q.indexOf(' ' + d + ' ') >= 0) best = d;
+    });
+  });
+  return best;
+}
+
+/** The 기종 text as written for a normalised device, e.g. "iphone 17 pro" → "iPhone 17 Pro". */
+function deviceLabel_(index, dev) {
+  for (var i = 0; i < index.length; i++) {
+    var parts = String(index[i].device || '').replace(/#/g, '').split('/');
+    var set = deviceSet_(index[i].device);
+    var k = set.indexOf(dev);
+    if (k === 0) return parts[0].trim();
+    if (k > 0 && set.length === 1) return parts[0].trim();
+  }
+  return dev.replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+}
+
+function normText_(s) { return String(s || '').toLowerCase().replace(/[#,()\[\]"]/g, ' ').replace(/\s+/g, ' ').trim(); }
+function removePhrase_(text, phrase) { return (' ' + text + ' ').replace(' ' + phrase + ' ', ' '); }
 
 function isRealDevice_(d) {
   d = String(d || '').trim();
