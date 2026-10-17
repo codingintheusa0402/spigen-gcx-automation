@@ -1,0 +1,3138 @@
+{
+ "anims": {
+  "idle": {
+   "frames": 2,
+   "rows": 4,
+   "size": 64
+  },
+  "walk": {
+   "frames": 9,
+   "rows": 4,
+   "size": 64
+  },
+  "sit": {
+   "frames": 3,
+   "rows": 4,
+   "size": 64
+  },
+  "hurt": {
+   "frames": 6,
+   "rows": 1,
+   "size": 64
+  }
+ },
+ "layers": {
+  "body": {
+   "z": 10,
+   "slot": "body",
+   "bodies": {
+    "male": {
+     "light": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "amber": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "olive": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "taupe": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "bronze": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "light": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "amber": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "olive": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "taupe": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "bronze": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "head_m": {
+   "z": 100,
+   "slot": "head",
+   "bodies": {
+    "male": {
+     "light": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "amber": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "olive": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "taupe": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "bronze": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "light": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "amber": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "olive": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "taupe": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "bronze": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "head_f": {
+   "z": 100,
+   "slot": "head",
+   "bodies": {
+    "male": {
+     "light": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "amber": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "olive": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "taupe": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "bronze": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "light": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "amber": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "olive": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "taupe": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "bronze": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "head_m_gaunt": {
+   "z": 100,
+   "slot": "head",
+   "bodies": {
+    "male": {
+     "light": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "amber": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "olive": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "taupe": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "bronze": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "light": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "amber": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "olive": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "taupe": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "bronze": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "head_m_plump": {
+   "z": 100,
+   "slot": "head",
+   "bodies": {
+    "male": {
+     "light": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "amber": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "olive": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "taupe": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "bronze": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "light": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "amber": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "olive": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "taupe": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "bronze": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "hair_plain": {
+   "z": 120,
+   "slot": "hair",
+   "bodies": {
+    "male": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "hair_parted": {
+   "z": 120,
+   "slot": "hair",
+   "bodies": {
+    "male": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "hair_messy1": {
+   "z": 120,
+   "slot": "hair",
+   "bodies": {
+    "male": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "hair_buzzcut": {
+   "z": 120,
+   "slot": "hair",
+   "bodies": {
+    "male": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "hair_unkempt": {
+   "z": 120,
+   "slot": "hair",
+   "bodies": {
+    "male": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "hair_bedhead": {
+   "z": 120,
+   "slot": "hair",
+   "bodies": {
+    "male": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "hair_pixie": {
+   "z": 120,
+   "slot": "hair",
+   "bodies": {
+    "male": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "hair_bangs": {
+   "z": 120,
+   "slot": "hair",
+   "bodies": {
+    "male": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "hair_long_straight": {
+   "z": 120,
+   "slot": "hair",
+   "bodies": {
+    "male": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "hair_swoop": {
+   "z": 120,
+   "slot": "hair",
+   "bodies": {
+    "male": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "hair_balding": {
+   "z": 120,
+   "slot": "hair",
+   "bodies": {
+    "male": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "hair_page": {
+   "z": 120,
+   "slot": "hair",
+   "bodies": {
+    "male": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "raven": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "chestnut": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "dark_gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "light_brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "tshirt": {
+   "z": 35,
+   "slot": "torso",
+   "bodies": {
+    "male": {
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "charcoal": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "tan": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "white": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "navy": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "blue": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "forest": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "maroon": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "sky": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "charcoal": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "tan": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "white": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "navy": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "blue": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "forest": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "maroon": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "sky": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "tshirt_vneck": {
+   "z": 35,
+   "slot": "torso",
+   "bodies": {
+    "male": {
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "white": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "slate": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "rose": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "white": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "slate": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "rose": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "polo": {
+   "z": 35,
+   "slot": "torso",
+   "bodies": {
+    "male": {
+     "navy": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "white": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "forest": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "sky": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "maroon": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "navy": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "white": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "forest": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "sky": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "maroon": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "cardigan": {
+   "z": 35,
+   "slot": "torso",
+   "bodies": {
+    "male": {
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "navy": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "tan": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "maroon": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "forest": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "navy": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "tan": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "maroon": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "forest": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "shirt": {
+   "z": 35,
+   "slot": "torso",
+   "bodies": {
+    "male": {
+     "white": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "sky": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "slate": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "lavender": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "pink": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "white": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "sky": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "slate": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "lavender": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "pink": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "suit_jacket": {
+   "z": 55,
+   "slot": "jacket",
+   "bodies": {
+    "male": {
+     "black": [
+      "walk",
+      "hurt",
+      "idle"
+     ],
+     "charcoal": [
+      "walk",
+      "hurt",
+      "idle"
+     ],
+     "navy": [
+      "walk",
+      "hurt",
+      "idle"
+     ],
+     "gray": [
+      "walk",
+      "hurt",
+      "idle"
+     ]
+    }
+   }
+  },
+  "trench": {
+   "z": 55,
+   "slot": "jacket",
+   "bodies": {
+    "male": {
+     "white": [
+      "walk",
+      "hurt",
+      "idle"
+     ],
+     "gray": [
+      "walk",
+      "hurt",
+      "idle"
+     ],
+     "dark_gray": [
+      "walk",
+      "hurt",
+      "idle"
+     ]
+    }
+   }
+  },
+  "vest": {
+   "z": 45,
+   "slot": "jacket",
+   "bodies": {
+    "male": {
+     "green": [
+      "idle",
+      "walk",
+      "hurt"
+     ],
+     "blue": [
+      "idle",
+      "walk",
+      "hurt"
+     ],
+     "black": [
+      "idle",
+      "walk",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "apron": {
+   "z": 40,
+   "slot": "jacket",
+   "bodies": {
+    "male": {
+     "brown": [
+      "walk",
+      "hurt",
+      "idle"
+     ],
+     "black": [
+      "walk",
+      "hurt",
+      "idle"
+     ],
+     "green": [
+      "walk",
+      "hurt",
+      "idle"
+     ]
+    },
+    "female": {
+     "brown": [
+      "walk",
+      "hurt",
+      "idle"
+     ],
+     "black": [
+      "walk",
+      "hurt",
+      "idle"
+     ],
+     "green": [
+      "walk",
+      "hurt",
+      "idle"
+     ]
+    }
+   }
+  },
+  "necktie": {
+   "z": 90,
+   "slot": "neck",
+   "bodies": {
+    "male": {
+     "red": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "maroon": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "navy": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "blue": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "red": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "maroon": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "navy": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "blue": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "bowtie": {
+   "z": 90,
+   "slot": "neck",
+   "bodies": {
+    "male": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "maroon": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "navy": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "maroon": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "navy": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "pants": {
+   "z": 20,
+   "slot": "legs",
+   "bodies": {
+    "male": {
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "slate": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "navy": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "charcoal": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "blue": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "tan": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "slate": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "navy": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "charcoal": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "blue": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "tan": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "formal_pants": {
+   "z": 20,
+   "slot": "legs",
+   "bodies": {
+    "male": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "charcoal": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "navy": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "charcoal": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "navy": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "cuffed": {
+   "z": 20,
+   "slot": "legs",
+   "bodies": {
+    "male": {
+     "blue": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "navy": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "tan": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "blue": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "navy": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "tan": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "shorts": {
+   "z": 20,
+   "slot": "legs",
+   "bodies": {
+    "male": {
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "navy": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "navy": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "skirt": {
+   "z": 20,
+   "slot": "legs",
+   "bodies": {
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "hurt"
+     ],
+     "navy": [
+      "idle",
+      "walk",
+      "hurt"
+     ],
+     "gray": [
+      "idle",
+      "walk",
+      "hurt"
+     ],
+     "maroon": [
+      "idle",
+      "walk",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "shoes": {
+   "z": 15,
+   "slot": "feet",
+   "bodies": {
+    "male": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "shoes2": {
+   "z": 15,
+   "slot": "feet",
+   "bodies": {
+    "male": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "white": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "white": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "boots": {
+   "z": 25,
+   "slot": "feet",
+   "bodies": {
+    "male": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "slippers": {
+   "z": 15,
+   "slot": "feet",
+   "bodies": {
+    "male": {
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "blue": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "gray": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "blue": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "sandals": {
+   "z": 15,
+   "slot": "feet",
+   "bodies": {
+    "male": {
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "glasses": {
+   "z": 115,
+   "slot": "face",
+   "bodies": {
+    "male": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "brown": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "round_glasses": {
+   "z": 115,
+   "slot": "face",
+   "bodies": {
+    "male": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gold": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ],
+     "gold": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  },
+  "sunglasses": {
+   "z": 115,
+   "slot": "face",
+   "bodies": {
+    "male": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    },
+    "female": {
+     "black": [
+      "idle",
+      "walk",
+      "sit",
+      "hurt"
+     ]
+    }
+   }
+  }
+ },
+ "tiers": {
+  "broke": {
+   "head": [
+    "head_m_gaunt",
+    "head_m",
+    "head_f"
+   ],
+   "hair": [
+    "hair_unkempt",
+    "hair_bedhead",
+    "hair_messy1",
+    "hair_buzzcut",
+    "hair_long_straight"
+   ],
+   "torso": [
+    "tshirt",
+    "tshirt_vneck"
+   ],
+   "torso_colors": [
+    "gray",
+    "charcoal",
+    "slate",
+    "navy",
+    "white"
+   ],
+   "legs": [
+    "pants",
+    "shorts"
+   ],
+   "legs_colors": [
+    "gray",
+    "brown",
+    "slate"
+   ],
+   "feet": [
+    "slippers",
+    "sandals"
+   ],
+   "jacket": [
+    null
+   ],
+   "neck": [
+    null
+   ],
+   "face": [
+    null
+   ]
+  },
+  "working": {
+   "head": [
+    "head_m",
+    "head_f",
+    "head_m_plump"
+   ],
+   "hair": [
+    "hair_plain",
+    "hair_messy1",
+    "hair_buzzcut",
+    "hair_bangs",
+    "hair_page",
+    "hair_pixie"
+   ],
+   "torso": [
+    "tshirt",
+    "polo",
+    "cardigan",
+    "shirt"
+   ],
+   "legs": [
+    "pants",
+    "cuffed"
+   ],
+   "feet": [
+    "shoes",
+    "boots",
+    "shoes2"
+   ],
+   "jacket": [
+    null
+   ],
+   "neck": [
+    null
+   ],
+   "face": [
+    null,
+    null,
+    "glasses"
+   ]
+  },
+  "middle": {
+   "head": [
+    "head_m",
+    "head_f"
+   ],
+   "hair": [
+    "hair_parted",
+    "hair_plain",
+    "hair_swoop",
+    "hair_page",
+    "hair_pixie",
+    "hair_long_straight"
+   ],
+   "torso": [
+    "shirt",
+    "cardigan",
+    "polo"
+   ],
+   "legs": [
+    "formal_pants",
+    "cuffed"
+   ],
+   "feet": [
+    "shoes2",
+    "shoes"
+   ],
+   "jacket": [
+    null,
+    null
+   ],
+   "neck": [
+    null,
+    "necktie"
+   ],
+   "face": [
+    null,
+    "glasses",
+    "round_glasses"
+   ]
+  },
+  "rich": {
+   "head": [
+    "head_m",
+    "head_f",
+    "head_m_plump"
+   ],
+   "hair": [
+    "hair_parted",
+    "hair_swoop",
+    "hair_long_straight",
+    "hair_page"
+   ],
+   "torso": [
+    "shirt"
+   ],
+   "torso_colors": [
+    "white",
+    "sky",
+    "pink",
+    "lavender"
+   ],
+   "legs": [
+    "formal_pants"
+   ],
+   "legs_colors": [
+    "black",
+    "charcoal",
+    "navy"
+   ],
+   "feet": [
+    "shoes2",
+    "shoes"
+   ],
+   "jacket": [
+    "suit_jacket"
+   ],
+   "neck": [
+    "necktie",
+    "bowtie"
+   ],
+   "face": [
+    null,
+    "round_glasses",
+    "sunglasses"
+   ]
+  },
+  "tycoon": {
+   "head": [
+    "head_m",
+    "head_f"
+   ],
+   "hair": [
+    "hair_parted",
+    "hair_swoop",
+    "hair_balding",
+    "hair_long_straight"
+   ],
+   "torso": [
+    "shirt"
+   ],
+   "torso_colors": [
+    "white"
+   ],
+   "legs": [
+    "formal_pants"
+   ],
+   "legs_colors": [
+    "black",
+    "charcoal"
+   ],
+   "feet": [
+    "shoes2"
+   ],
+   "feet_colors": [
+    "black"
+   ],
+   "jacket": [
+    "suit_jacket"
+   ],
+   "jacket_colors": [
+    "black",
+    "charcoal"
+   ],
+   "neck": [
+    "necktie",
+    "bowtie"
+   ],
+   "face": [
+    null,
+    "sunglasses"
+   ]
+  }
+ },
+ "activities": {
+  "sleep": {
+   "anim": "hurt",
+   "frame": 5,
+   "props": [
+    "bed",
+    "zzz"
+   ]
+  },
+  "commute": {
+   "anim": "walk",
+   "row": 3
+  },
+  "rest": {
+   "anim": "idle",
+   "row": 2
+  },
+  "office": {
+   "anim": "sit",
+   "row": 2,
+   "props": [
+    "desk"
+   ],
+   "outfit": {}
+  },
+  "store": {
+   "anim": "idle",
+   "row": 2,
+   "props": [
+    "counter"
+   ],
+   "outfit": {
+    "torso": [
+     "tshirt",
+     "white"
+    ],
+    "jacket": [
+     [
+      "vest",
+      "green"
+     ],
+     [
+      "apron",
+      "green"
+     ]
+    ]
+   },
+   "badge": true
+  },
+  "cafe": {
+   "anim": "idle",
+   "row": 2,
+   "props": [
+    "counter"
+   ],
+   "outfit": {
+    "jacket": [
+     [
+      "apron",
+      "brown"
+     ],
+     [
+      "apron",
+      "black"
+     ]
+    ]
+   }
+  },
+  "hospital": {
+   "anim": "idle",
+   "row": 2,
+   "outfit": {
+    "torso": [
+     "shirt",
+     "white"
+    ],
+    "jacket": [
+     "trench",
+     "white"
+    ]
+   },
+   "stethoscope": true
+  },
+  "lab": {
+   "anim": "sit",
+   "row": 2,
+   "props": [
+    "desk"
+   ],
+   "outfit": {
+    "torso": [
+     "shirt",
+     "white"
+    ],
+    "jacket": [
+     "trench",
+     "white"
+    ]
+   }
+  },
+  "manual": {
+   "anim": "walk",
+   "row": 3,
+   "props": [
+    "box"
+   ]
+  },
+  "delivery": {
+   "anim": "sit",
+   "row": 3,
+   "props": [
+    "scooter"
+   ],
+   "helmet": true
+  },
+  "eat": {
+   "anim": "sit",
+   "row": 2,
+   "props": [
+    "bowl"
+   ]
+  },
+  "eat_store": {
+   "anim": "idle",
+   "row": 2,
+   "props": [
+    "cupramen"
+   ]
+  }
+ },
+ "skins": [
+  "light",
+  "amber",
+  "olive",
+  "taupe",
+  "bronze",
+  "brown"
+ ],
+ "hairColors": [
+  "black",
+  "raven",
+  "dark_brown",
+  "chestnut",
+  "dark_gray",
+  "gray",
+  "light_brown"
+ ],
+ "custom": {
+  "helmet": {
+   "z": 120
+  },
+  "stethoscope": {
+   "z": 101
+  },
+  "badge": {
+   "z": 96
+  },
+  "props": [
+   "bed",
+   "zzz",
+   "desk",
+   "counter",
+   "box",
+   "scooter",
+   "bowl",
+   "cupramen"
+  ]
+ }
+}

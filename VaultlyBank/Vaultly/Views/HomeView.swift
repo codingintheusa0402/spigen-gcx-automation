@@ -60,6 +60,7 @@ struct HomeView: View {
                         }
                     }
                     lifeRow
+                    CharacterCard()
                     if let q = store.pendingQuest { QuestCard(quest: q) }
                     quickTiles
                     goalsCard
@@ -136,6 +137,7 @@ struct HomeView: View {
                 VStack(spacing: 20) {
                     totalCard
                     lifeRow
+                    CharacterCard()
                     if let q = store.pendingQuest { QuestCard(quest: q) }
                     quickTiles
                     goalsCard

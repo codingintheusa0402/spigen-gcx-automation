@@ -106,6 +106,8 @@ struct SettingsView: View {
                     NavigationLink { InfoPage(title: "공지사항", items: InfoPage.notices) } label: { Label("공지사항", systemImage: "megaphone") }
                     NavigationLink { InfoPage(title: "자주 묻는 질문", items: InfoPage.faq) } label: { Label("자주 묻는 질문", systemImage: "questionmark.circle") }
                     NavigationLink { InfoPage(title: "이용안내 · 개인정보", items: InfoPage.terms) } label: { Label("이용안내 · 개인정보", systemImage: "doc.text") }
+                    NavigationLink { CharacterCreditsView() } label: { Label("픽셀 아트 크레딧", systemImage: "paintpalette") }
+                        .accessibilityIdentifier("settings-credits")
                     HStack {
                         Label("앱 버전", systemImage: "info.circle")
                         Spacer()
