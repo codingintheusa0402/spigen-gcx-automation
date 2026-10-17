@@ -461,7 +461,8 @@ function spapiRequest_(region, method, path, query, body) {
   var url = 'https://' + SPAPI_REGIONS[region].host + path + (query ? '?' + query : '');
   for (var attempt = 0; ; attempt++) {
     var res = UrlFetchApp.fetch(url, opts), code = res.getResponseCode();
-    if ((code === 429 || code >= 500) && attempt < 3) { Utilities.sleep(2000 * (attempt + 1)); continue; }
+    // reports endpoints refill ~1 call/min after a burst, so wait that out there; elsewhere back off briefly
+    if ((code === 429 || code >= 500) && attempt < 3) { Utilities.sleep(path.indexOf('/reports/') >= 0 ? 61000 : 2000 * (attempt + 1)); continue; }
     if (code >= 300) throw new Error('SP-API ' + method.toUpperCase() + ' ' + path + ' → ' + code + ' ' + res.getContentText().slice(0, 200));
     return JSON.parse(res.getContentText());
   }
