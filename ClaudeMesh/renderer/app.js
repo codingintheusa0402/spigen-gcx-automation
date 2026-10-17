@@ -400,6 +400,11 @@ let lastUse = 0;
 const peerCanResize = () => !!(snap.peer && snap.peer.online && (snap.peer.caps || []).includes('resize'));
 function windowUsed(e) {
   if (!e.isTrusted || document.body.dataset.size === 'mini') return;   // real input only; the compact window never takes the size
+  // never while copying: ⌘-shortcuts and bare modifier keys don't count, a click counts only once released without
+  // selecting, and nothing is resized while text is selected (a resize clears the selection and Claude Code redraws)
+  if (e.type === 'keydown' && (e.metaKey || ['Meta', 'Shift', 'Alt', 'Control', 'CapsLock'].includes(e.key))) return;
+  for (const [, t] of terms) if (t.term.hasSelection()) return;
+  if (e.type === 'mouseup' && (getSelection() || '').toString()) return;
   if (Date.now() - lastUse < 700) return; lastUse = Date.now();
   for (const [id, t] of terms) {
     if (!termVisible(t)) continue;
@@ -409,7 +414,7 @@ function windowUsed(e) {
   }
 }
 // (not window focus: bringing the app to the front — e.g. `open` over ssh — is not using it)
-['keydown', 'mousedown', 'wheel'].forEach(ev => addEventListener(ev, windowUsed, true));
+['keydown', 'mouseup', 'wheel'].forEach(ev => addEventListener(ev, windowUsed, true));
 // the other machine took the size of one of our terminals
 window.api.peerTerm.onRemoteSize((id, c, r) => { const t = terms.get(id); if (!t || t.peer) return; t.remote = true; t.cols = c; t.rows = r; fitScaled(t); });
 // the exact current screen (+ recent scrollback) of one of our terminals, for a phone or the peer opening it
