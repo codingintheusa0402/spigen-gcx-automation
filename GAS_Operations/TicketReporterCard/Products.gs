@@ -233,9 +233,11 @@ function foldInventoryReport_(by, cfg, rows) {
     var key = m ? m[1] : (asin ? 'ASIN:' + asin : null);
     if (!key) continue;
     var country = cfg.country || row[iCountry];
-    var o = by[key] = by[key] || { c: {}, a: [] };
-    o.c[country] = (o.c[country] || 0) + (Number(row[iQty]) || 0);
+    var o = by[key] = by[key] || { c: {}, a: [], ac: {} };
+    var qty = Number(row[iQty]) || 0;
+    o.c[country] = (o.c[country] || 0) + qty;
     if (/^B0[A-Z0-9]{8}$/.test(asin) && o.a.indexOf(asin) < 0) o.a.push(asin);
+    if (/^B0[A-Z0-9]{8}$/.test(asin) && qty > 0 && !o.ac[country]) o.ac[country] = asin;   // the ASIN that country's stock sells under
   }
 }
 
@@ -324,7 +326,7 @@ function refreshListingsSnapshot_() {
       catch (e) { Logger.log('%s listings request skipped (next run retries): %s', m[1], e.message); }
     }
   });
-  var ids = 'v2:' + latest.map(function (l) { return l.rep.reportId; }).sort().join(',');   // v2: legacy SKU keys
+  var ids = 'v3:' + latest.map(function (l) { return l.rep.reportId; }).sort().join(',');   // v2: legacy SKU keys, v3: per-country ASIN
   var props = PropertiesService.getScriptProperties();
   if (!latest.length || ids === props.getProperty(LISTINGS_IDS_PROP)) {
     Logger.log('listings: nothing new (%s markets with a finished report)', latest.length);
@@ -359,9 +361,10 @@ function foldListingsReport_(by, code, text) {
     var m = sku.match(SKU_KEY_RE);
     var key = m ? m[1] : (/^B0[A-Z0-9]{8}$/.test(asin) ? 'ASIN:' + asin : null);
     if (!key) continue;
-    var o = by[key] = by[key] || { a: [], on: '', off: '' };
+    var o = by[key] = by[key] || { a: [], on: '', off: '', ac: {} };
     if (/^B0[A-Z0-9]{8}$/.test(asin) && o.a.indexOf(asin) < 0) o.a.push(asin);
     var active = String(c[iStatus] || '').trim() === 'Active';
+    if (active && /^B0[A-Z0-9]{8}$/.test(asin) && !o.ac[code]) o.ac[code] = asin;   // the ASIN that country's live listing uses
     var on = o.on ? o.on.split(' ') : [], off = o.off ? o.off.split(' ') : [];
     if (active && on.indexOf(code) < 0) { on.push(code); off = off.filter(function (x) { return x !== code; }); }
     if (!active && on.indexOf(code) < 0 && off.indexOf(code) < 0) off.push(code);
